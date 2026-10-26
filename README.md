@@ -2,7 +2,7 @@
 
 A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.6.0** is based on **workbook Version 3** and presents its objective-based RF tools through a science-forward mission-control interface.
 
-**Live calculator:** [iliketolie.github.io/friis-rf-calculator](https://iliketolie.github.io/friis-rf-calculator/)
+**Live calculator:** [iliketolie.github.io/Project-Sirius](https://iliketolie.github.io/Project-Sirius/)
 
 ## Web calculator features
 

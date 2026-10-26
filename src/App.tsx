@@ -21,7 +21,7 @@ const MapWorkspace = lazy(() => import('./components/map/MapWorkspace').then((m)
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 const STORAGE_KEY = 'friis-rf-planner-v3-state';
-const REPO_URL = 'https://github.com/iLikeToLie/friis-rf-calculator';
+const REPO_URL = 'https://github.com/iLikeToLie/Project-Sirius';
 const WORKBOOK_URL = `${REPO_URL}/raw/main/Friis_RF_Link_and_Interference_Calculator_v3.xlsx`;
 type View = 'calculator' | 'workspace' | 'distance' | 'gain' | 'placement' | 'guide';
 
