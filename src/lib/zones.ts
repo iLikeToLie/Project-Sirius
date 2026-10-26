@@ -20,6 +20,8 @@ export interface ZoneResult {
   /** Per grid node, row-major like ScalarGrid. */
   classes: Uint8Array;
   interference: Uint8Array;
+  /** Received power per grid node in dBm (terrain coverage only); NaN where unknown or out of range. */
+  powerDbm?: Float32Array;
   outlines: { sensitivity: Segment[]; required: Segment[]; interference: Segment[] };
 }
 

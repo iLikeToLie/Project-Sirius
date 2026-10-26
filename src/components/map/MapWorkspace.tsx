@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
 import { activePair, applyInputEdit, zoneReceiver } from '../../lib/activeLink';
 import { coverageZones } from '../../lib/coverage';
+import { signalRange } from '../../lib/signalColour';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
@@ -81,7 +82,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     const sw = toLocalM(view.southWest);
     const ne = toLocalM(view.northEast);
     const txLocal = toLocalM(zoneTx);
-    const pixelsPerCell = dragging ? 14 : 5;
+    const pixelsPerCell = dragging ? 14 : 3;
     const cols = Math.max(16, Math.ceil(view.width / pixelsPerCell));
     const rows = Math.max(10, Math.ceil(view.height / pixelsPerCell));
     const cellM = Math.max((ne.xM - sw.xM) / cols, (ne.yM - sw.yM) / rows);
@@ -119,7 +120,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     if (!terrain || !zoneRequest || !zoneTx || !zone) return null;
     const req = zoneRequest.request, g = req.ground;
     const maxView = Math.max(...[[g.x0, g.y0], [g.x0 + g.cols * g.dx, g.y0 + g.rows * g.dy]].map(([x,y]) => Math.hypot(x - req.tx.xM, y - req.tx.yM)));
-    const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM));
+    const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM * 2));
     return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairInputs(state.inputs, zoneTx, zone.rx, 1), maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: g } };
   }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs]);
   const free = useZoneWorker(!terrain ? zoneRequest?.request ?? null : null, `${terrain}|${zoneRequest?.key}`);
@@ -147,10 +148,11 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     return {
       result: zoneResult,
       objective, showAll,
+      range: zoneResult.powerDbm && zone ? signalRange(zone.rx, objective, showAll) : undefined,
       corners: [at(bounds.minX, bounds.maxY), at(bounds.maxX, bounds.maxY), at(bounds.maxX, bounds.minY), at(bounds.minX, bounds.minY)] as [LatLon, LatLon, LatLon, LatLon],
       outlines: { sensitivity: lines(zoneResult.outlines.sensitivity), required: lines(zoneResult.outlines.required), interference: lines(zoneResult.outlines.interference) },
     };
-  }, [zoneResult, objective, showAll]);
+  }, [zoneResult, objective, showAll, zone]);
 
   const byId = new Map(sensors.map((s) => [s.id, s]));
   const links: MapLink[] = pairs
@@ -194,7 +196,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
 
-      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} />
+      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} range={zones?.range} />
       <SensorListCard
         sensors={sensors} pairs={pairs} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}

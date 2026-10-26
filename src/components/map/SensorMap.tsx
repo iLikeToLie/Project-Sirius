@@ -3,6 +3,7 @@ import maplibregl, { type GeoJSONSource, type ImageSource, type Map as MapLibreM
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ELEVATION_TILE_URL } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE } from '../../lib/geo';
+import { signalColour } from '../../lib/signalColour';
 import { ZONE, type ZoneResult } from '../../lib/zones';
 import type { Sensor } from '../../types';
 import { SignalOverlay } from './SignalOverlay';
@@ -21,6 +22,8 @@ export interface MapZones {
   corners: [LatLon, LatLon, LatLon, LatLon];
   objective?: LinkObjective;
   showAll?: boolean;
+  /** dBm span of the signal gradient; set for terrain coverage. */
+  range?: { lo: number; hi: number };
   outlines: { sensitivity: LatLon[][]; required: LatLon[][]; interference: LatLon[][] };
 }
 export interface MapView { southWest: LatLon; northEast: LatLon; center: LatLon; width: number; height: number; zoom: number }
@@ -35,7 +38,7 @@ const lineFeatures = (lines: LatLon[][], props: Record<string, unknown>) => line
 }));
 
 /** Paints zone classes into an image, north row first (grid row 0 is the south edge). */
-function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false): string {
+function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }): string {
   const width = result.cols + 1;
   const height = result.rows + 1;
   const canvas = document.createElement('canvas');
@@ -49,7 +52,8 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
       const node = j * width + i;
       const pixel = ((result.rows - j) * width + i) * 4;
       const cls = result.classes[node];
-      const colour = cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0];
+      const gradient = range && result.powerDbm && cls !== ZONE.unknown ? signalColour(result.powerDbm[node], range.lo, range.hi) : null;
+      const colour = gradient ?? (cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0]);
       image.data.set(colour, pixel);
     }
   }
@@ -235,7 +239,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, fre
     const outlines = map.getSource('zone-outlines') as GeoJSONSource | undefined;
     outlines?.setData({
       type: 'FeatureCollection',
-      features: zones ? (['sensitivity', 'required', 'interference'] as const).flatMap((id) => lineFeatures(zones.outlines[id], { id, faint: !zones.showAll && zones.objective === 'avoidance' && id !== 'interference' })) : [],
+      features: zones && !zones.range ? (['sensitivity', 'required', 'interference'] as const).flatMap((id) => lineFeatures(zones.outlines[id], { id, faint: !zones.showAll && zones.objective === 'avoidance' && id !== 'interference' })) : [],
     });
     const existing = map.getSource('zones') as ImageSource | undefined;
     const queue = zoneImage.current;
@@ -246,7 +250,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, fre
       return;
     }
     const coordinates = zones.corners.map((p) => [p.lon, p.lat]) as [[number, number], [number, number], [number, number], [number, number]];
-    const url = paintZones(zones.result, zones.objective, zones.showAll);
+    const url = paintZones(zones.result, zones.objective, zones.showAll, zones.range);
     if (existing) {
       if (queue.loading) queue.next = { url, coordinates };
       else { queue.loading = true; existing.updateImage({ url, coordinates }); }

@@ -72,7 +72,7 @@ export function coverageZones(out: CoverageResult, req: Omit<CoverageRequest, 'j
     classes[k] = out.unknown[index] || !Number.isFinite(p) ? 255 : p >= req.inputs.sensitivityDbm + req.inputs.fadeMarginTargetDb ? 2 : p >= req.inputs.sensitivityDbm ? 1 : 0;
     interference[k] = !out.unknown[index] && p >= req.inputs.interferenceThresholdDbm ? 1 : 0;
   }
-  return { jobId: out.jobId, bounds: { minX: x0, maxX: x0 + cols * dx, minY: y0, maxY: y0 + rows * dy }, cols, rows, cellSizeM: Math.max(dx, dy), classes, interference, outlines: {
+  return { jobId: out.jobId, bounds: { minX: x0, maxX: x0 + cols * dx, minY: y0, maxY: y0 + rows * dy }, cols, rows, cellSizeM: Math.max(dx, dy), classes, interference, powerDbm: Float32Array.from(powers), outlines: {
     sensitivity: isolineSegments({ ...raster, values: powers }, req.inputs.sensitivityDbm),
     required: isolineSegments({ ...raster, values: powers }, req.inputs.sensitivityDbm + req.inputs.fadeMarginTargetDb),
     interference: isolineSegments({ ...raster, values: powers }, req.inputs.interferenceThresholdDbm),

@@ -704,3 +704,8 @@ tbody tr:hover { background: var(--surface-elevated); }
 .link-budget-drawer:focus-within { outline: none; }
 @media (max-width: 900px) { .drawer-body { grid-template-columns: 1fr; } }
 .selected-sensor-card { max-height: calc(100% - 330px); overflow-y: auto; }
+
+.signal-scale { display: grid; gap: 3px; min-width: 200px; }
+.signal-scale i { display: block; height: 10px; border-radius: 3px; border: 1px solid var(--hairline); }
+.signal-scale span { display: flex; justify-content: space-between; font-size: 10px; color: var(--mute); }
+.signal-scale em { font-style: normal; }
