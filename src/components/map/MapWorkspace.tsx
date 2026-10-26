@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
-import { activePair, zoneReceiver } from '../../lib/activeLink';
+import { activePair, applyInputEdit, zoneReceiver } from '../../lib/activeLink';
 import { coverageZones } from '../../lib/coverage';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
@@ -11,6 +11,7 @@ import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
 import { statusTone } from '../ui';
 import { CoverageLegend } from './CoverageLegend';
+import { LinkBudgetDrawer } from './LinkBudgetDrawer';
 import { LinkSettingsCard } from './LinkSettingsCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
 import { SensorListCard } from './SensorListCard';
@@ -47,6 +48,13 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const updateSensor = (id: string, patch: Partial<Sensor>) => setMap((m) => ({ ...m, sensors: m.sensors.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const select = (id: string) => setMap((m) => ({ ...m, selectedId: id }));
   const setShared = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => setState((current) => ({ ...current, inputs: { ...current.inputs, [key]: value } }));
+
+  const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
+    const edited = applyInputEdit(state, key, value, groundAt);
+    if (!edited.ok) return edited.reason;
+    setState(edited.state);
+    return undefined;
+  };
 
   const addAtCentre = () => setMap((m) => {
     const centre = view?.center ?? m.sensors[0] ?? { lat: 1.3521, lon: 103.8198 };
@@ -191,6 +199,8 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
         sensors={sensors} pairs={pairs} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
+
+      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} />
 
       {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} />}
 
