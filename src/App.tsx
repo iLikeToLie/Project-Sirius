@@ -9,6 +9,7 @@ import {
 import { Line } from 'react-chartjs-2';
 import { freshDefaultState } from './data/defaults';
 import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSweep } from './lib/rf';
+import { normalizeState } from './lib/state';
 import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningStatus } from './types';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -17,20 +18,6 @@ const STORAGE_KEY = 'friis-rf-planner-v3-state';
 const REPO_URL = 'https://github.com/iLikeToLie/friis-rf-calculator';
 const WORKBOOK_URL = `${REPO_URL}/raw/main/Friis_RF_Link_and_Interference_Calculator_v3.xlsx`;
 type View = 'calculator' | 'distance' | 'gain' | 'placement' | 'guide';
-
-function normalizeState(saved?: Partial<AppState>): AppState {
-  const defaults = freshDefaultState();
-  if (!saved) return defaults;
-  return {
-    ...defaults,
-    ...saved,
-    linkObjective: saved.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
-    inputs: { ...defaults.inputs, ...saved.inputs },
-    distanceSweep: { ...defaults.distanceSweep, ...saved.distanceSweep },
-    gainSweep: { ...defaults.gainSweep, ...saved.gainSweep },
-    placements: Array.isArray(saved.placements) ? saved.placements : defaults.placements,
-  };
-}
 
 function loadState(): AppState {
   try {

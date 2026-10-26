@@ -54,10 +54,32 @@ export interface PlacementScenario {
   otherLossDb: number;
 }
 
+export interface AntennaPlacement {
+  xM: number;
+  yM: number;
+  aglM: number;
+}
+
+export interface TerrainSettings {
+  enabled: boolean;
+  model: 'synthetic-v1';
+  offsetM: number;
+  reliefScale: number;
+  contourIntervalM: number;
+}
+
+export interface LinkWorkspace {
+  tx: AntennaPlacement;
+  rx: AntennaPlacement;
+  terrain: TerrainSettings;
+}
+
 export interface AppState {
+  schemaVersion: 2;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;
   gainSweep: GainSweepSettings;
   placements: PlacementScenario[];
+  workspace: LinkWorkspace;
 }

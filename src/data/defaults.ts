@@ -1,4 +1,4 @@
-import type { AppState, PlacementScenario } from '../types';
+import type { AppState, LinkWorkspace, PlacementScenario, TerrainSettings } from '../types';
 
 const placementRows: Omit<PlacementScenario, 'id'>[] = [
   { name: 'Rooftop direct LOS', distanceM: 250, txGainDbi: 14, rxGainDbi: 15, txLossDb: 1.2, rxLossDb: 0.8, polarizationLossDb: 0.2, obstructionLossDb: 0.5, otherLossDb: 0.3 },
@@ -13,7 +13,21 @@ const placementRows: Omit<PlacementScenario, 'id'>[] = [
   { name: 'Valley test point', distanceM: 20000, txGainDbi: 2, rxGainDbi: 2, txLossDb: 3, rxLossDb: 3, polarizationLossDb: 3, obstructionLossDb: 15, otherLossDb: 4 },
 ];
 
+export const DEFAULT_TERRAIN: TerrainSettings = { enabled: false, model: 'synthetic-v1', offsetM: 0, reliefScale: 1, contourIntervalM: 25 };
+export const DEFAULT_ANTENNA_AGL_M = 10;
+
+/** Places Tx and Rx symmetrically on the X axis so flat-ground 3D separation equals distanceM exactly. */
+export function workspaceForDistance(distanceM: number): LinkWorkspace {
+  const half = Number.isFinite(distanceM) && distanceM > 0 ? distanceM / 2 : 250;
+  return {
+    tx: { xM: half, yM: 0, aglM: DEFAULT_ANTENNA_AGL_M },
+    rx: { xM: -half, yM: 0, aglM: DEFAULT_ANTENNA_AGL_M },
+    terrain: { ...DEFAULT_TERRAIN },
+  };
+}
+
 export const DEFAULT_STATE: AppState = {
+  schemaVersion: 2,
   linkObjective: 'desired',
   inputs: {
     scenarioName: 'Campus Backhaul A',
@@ -36,6 +50,7 @@ export const DEFAULT_STATE: AppState = {
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },
   gainSweep: { gainToSweep: 'tx', minGainDbi: 0, maxGainDbi: 30, stepDb: 1, distancesM: [250, 500, 2000] },
   placements: placementRows.map((row, index) => ({ ...row, id: `placement-${index + 1}` })),
+  workspace: workspaceForDistance(500),
 };
 
 export const freshDefaultState = (): AppState => JSON.parse(JSON.stringify(DEFAULT_STATE)) as AppState;
