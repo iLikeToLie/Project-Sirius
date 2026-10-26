@@ -2,7 +2,7 @@ import type { LinkInputs, MapScenario, Sensor } from '../types';
 import type { GroundAt } from './elevation';
 import { toLatLon, toLocalM } from './geo';
 import { solveTxAlongBearing } from './linkGeometry';
-import { groundOf, pairInputs, resolveIntendedTx, separationM } from './sensors';
+import { groundOf, pairInputs, pairPropagation, resolveIntendedTx, separationM } from './sensors';
 
 /** The part of the app state the active link reads and writes. */
 export interface LinkState { inputs: LinkInputs; map: MapScenario }
@@ -21,7 +21,7 @@ const servedBy = (map: MapScenario, txId: string, groundAt: GroundAt) => receive
 export function activePair(map: MapScenario, groundAt: GroundAt): Pair | null {
   const selected = map.sensors.find((s) => s.id === map.selectedId);
   if (selected?.role === 'rx') {
-    const tx = resolveIntendedTx(map, selected, groundAt);
+    const tx = resolveIntendedTx(map, selected, groundAt) ?? nearest(selected, map.sensors.filter(s => s.role === 'tx'), map, groundAt);
     return tx ? { tx, rx: selected } : null;
   }
   if (selected?.role === 'tx') {
@@ -39,6 +39,8 @@ export function activePair(map: MapScenario, groundAt: GroundAt): Pair | null {
 export function zoneReceiver(map: MapScenario, txId: string, groundAt: GroundAt): { rx: Sensor; reason: 'linked' | 'nearest' } | null {
   const tx = map.sensors.find((s) => s.id === txId);
   if (!tx) return null;
+  const selected = receivers(map).find(rx => rx.id === map.selectedId);
+  if (selected) return { rx: selected, reason: resolveIntendedTx(map, selected, groundAt)?.id === txId ? 'linked' : 'nearest' };
   const linked = servedBy(map, txId, groundAt);
   const picked = linked.find((rx) => rx.id === map.zonesForRxId);
   if (picked) return { rx: picked, reason: 'linked' };
@@ -51,7 +53,8 @@ export function zoneReceiver(map: MapScenario, txId: string, groundAt: GroundAt)
 export function activeInputs(state: LinkState, groundAt: GroundAt): LinkInputs {
   const pair = activePair(state.map, groundAt);
   if (!pair) return state.inputs;
-  return pairInputs(state.inputs, pair.tx, pair.rx, separationM(pair.tx, pair.rx, groundAt, state.map.useTerrainElevation));
+  const inputs = pairInputs(state.inputs, pair.tx, pair.rx, separationM(pair.tx, pair.rx, groundAt, state.map.useTerrainElevation));
+  return { ...inputs, otherLossDb: inputs.otherLossDb + pairPropagation(state.map, pair.tx, pair.rx, inputs.frequencyGhz, groundAt).lossDb };
 }
 
 /** False when terrain is on and either end of the active link has no ground elevation yet. */

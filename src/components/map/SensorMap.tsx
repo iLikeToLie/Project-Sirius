@@ -5,11 +5,13 @@ import { ELEVATION_TILE_URL } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE } from '../../lib/geo';
 import { ZONE, type ZoneResult } from '../../lib/zones';
 import type { Sensor } from '../../types';
+import { SignalOverlay } from './SignalOverlay';
+import type { LinkObjective } from '../../types';
 import { SG_BOUNDS } from './SelectedSensorCard';
 
 export const ONEMAP_TILE_URL = 'https://www.onemap.gov.sg/maps/tiles/Grey/{z}/{x}/{y}.png';
 const ONEMAP_ATTRIBUTION = '©OneMap Singapore ODL v1.0';
-const ELEVATION_ATTRIBUTION = 'Elevation: Terrain Tiles on AWS (Mapzen; SRTM, GMTED, ETOPO1)';
+const ELEVATION_ATTRIBUTION = '©JAXA, ALOS World 3D-30m (AW3D30)';
 const PAD = 0.05;
 
 export interface MapLink { from: LatLon; to: LatLon; kind: 'intended' | 'interference'; tone: string; emphasis: boolean }
@@ -17,6 +19,8 @@ export interface MapZones {
   result: ZoneResult;
   /** Grid corners: north-west, north-east, south-east, south-west. */
   corners: [LatLon, LatLon, LatLon, LatLon];
+  objective?: LinkObjective;
+  showAll?: boolean;
   outlines: { sensitivity: LatLon[][]; required: LatLon[][]; interference: LatLon[][] };
 }
 export interface MapView { southWest: LatLon; northEast: LatLon; center: LatLon; width: number; height: number; zoom: number }
@@ -31,7 +35,7 @@ const lineFeatures = (lines: LatLon[][], props: Record<string, unknown>) => line
 }));
 
 /** Paints zone classes into an image, north row first (grid row 0 is the south edge). */
-function paintZones(result: ZoneResult): string {
+function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false): string {
   const width = result.cols + 1;
   const height = result.rows + 1;
   const canvas = document.createElement('canvas');
@@ -45,7 +49,7 @@ function paintZones(result: ZoneResult): string {
       const node = j * width + i;
       const pixel = ((result.rows - j) * width + i) * 4;
       const cls = result.classes[node];
-      const colour = result.interference[node] ? [...red, 54] : cls === ZONE.acceptable ? [...green, 58] : cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0];
+      const colour = cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0];
       image.data.set(colour, pixel);
     }
   }
@@ -53,12 +57,14 @@ function paintZones(result: ZoneResult): string {
   return canvas.toDataURL();
 }
 
-export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
+export function SensorMap({ sensors, selectedId, tones, links, zones, rings, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
   sensors: Sensor[];
   selectedId: string | null;
   tones: Record<string, string>;
   links: MapLink[];
   zones: MapZones | null;
+  rings: { id: string; points: LatLon[]; label: string }[];
+  frequencyGhz: number;
   handleRef: React.MutableRefObject<SensorMapHandle | null>;
   onSelect: (id: string) => void;
   onDrag: (id: string, at: LatLon) => void;
@@ -98,7 +104,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
         version: 8,
         sources: {
           onemap: { type: 'raster', tiles: [ONEMAP_TILE_URL], tileSize: 256, minzoom: 11, maxzoom: 19, bounds: [SG_BOUNDS.minLon, SG_BOUNDS.minLat, SG_BOUNDS.maxLon, SG_BOUNDS.maxLat], attribution: ONEMAP_ATTRIBUTION },
-          dem: { type: 'raster-dem', tiles: [ELEVATION_TILE_URL], encoding: 'terrarium', tileSize: 256, maxzoom: 15, attribution: ELEVATION_ATTRIBUTION },
+          dem: { type: 'raster-dem', tiles: [ELEVATION_TILE_URL], encoding: 'terrarium', tileSize: 256, maxzoom: 14, bounds: [103.596, 1.1443, 104.4309, 1.4835], attribution: ELEVATION_ATTRIBUTION },
         },
         layers: [
           { id: 'background', type: 'background', paint: { 'background-color': token('--canvas') } },
@@ -126,7 +132,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
       map.addSource('zone-outlines', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('links', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'zone-outlines', type: 'line', source: 'zone-outlines', layout: line, paint: {
-        'line-width': 1.5, 'line-dasharray': [3, 2], 'line-opacity': 0.9,
+        'line-width': 1.5, 'line-opacity': ['case', ['get', 'faint'], 0.25, 0.9],
         'line-color': ['match', ['get', 'id'], 'sensitivity', token('--blue'), 'required', token('--green'), token('--red')],
       } });
       map.addLayer({ id: 'links-intended', type: 'line', source: 'links', filter: ['==', ['get', 'kind'], 'intended'], layout: line, paint: {
@@ -138,6 +144,9 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
         'line-width': ['case', ['get', 'emphasis'], 2, 1.25], 'line-dasharray': [2, 2], 'line-color': token('--red'),
         'line-opacity': ['case', ['get', 'emphasis'], 0.95, 0.45],
       } });
+      map.addSource('range-rings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: 'range-rings', type: 'line', source: 'range-rings', paint: { 'line-width': 1.5, 'line-dasharray': [4, 3], 'line-color': ['match', ['get', 'id'], 'required', token('--green'), 'interference', token('--red'), token('--blue')] } });
+      map.addSource('range-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       setLoaded(true);
       reportView();
     });
@@ -226,7 +235,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
     const outlines = map.getSource('zone-outlines') as GeoJSONSource | undefined;
     outlines?.setData({
       type: 'FeatureCollection',
-      features: zones ? (['sensitivity', 'required', 'interference'] as const).flatMap((id) => lineFeatures(zones.outlines[id], { id })) : [],
+      features: zones ? (['sensitivity', 'required', 'interference'] as const).flatMap((id) => lineFeatures(zones.outlines[id], { id, faint: !zones.showAll && zones.objective === 'avoidance' && id !== 'interference' })) : [],
     });
     const existing = map.getSource('zones') as ImageSource | undefined;
     const queue = zoneImage.current;
@@ -237,7 +246,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
       return;
     }
     const coordinates = zones.corners.map((p) => [p.lon, p.lat]) as [[number, number], [number, number], [number, number], [number, number]];
-    const url = paintZones(zones.result);
+    const url = paintZones(zones.result, zones.objective, zones.showAll);
     if (existing) {
       if (queue.loading) queue.next = { url, coordinates };
       else { queue.loading = true; existing.updateImage({ url, coordinates }); }
@@ -248,5 +257,15 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
     }
   }, [zones, loaded]);
 
-  return <div ref={containerRef} className="map-canvas" />;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!loaded || !map) return;
+    (map.getSource('range-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.flatMap(r => lineFeatures([r.points], { id: r.id })) });
+    const labels = rings.map(r => {
+      const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label;
+      return new maplibregl.Marker({ element: el }).setLngLat([r.points[0].lon, r.points[0].lat]).addTo(map);
+    });
+    return () => labels.forEach(m => m.remove());
+  }, [rings, loaded]);
+  return <><div ref={containerRef} className="map-canvas" />{loaded && mapRef.current && <SignalOverlay map={mapRef.current} links={links} frequencyGhz={frequencyGhz} />}</>;
 }

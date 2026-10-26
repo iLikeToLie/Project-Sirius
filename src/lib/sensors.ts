@@ -1,6 +1,7 @@
 import type { LinkInputs, MapScenario, Sensor, SensorRole } from '../types';
 import type { GroundAt } from './elevation';
 import { type LatLon, toLocalM } from './geo';
+import { buildProfile, bullingtonLossDb, type Clearance } from './propagation';
 import { calculateLink, type LinkResult } from './rf';
 
 export const MAX_SENSORS = 6;
@@ -34,6 +35,7 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     fadeMarginTargetDb: defaults.fadeMarginTargetDb,
     interferenceThresholdDbm: defaults.interferenceThresholdDbm,
     intendedTxId: 'auto',
+    objective: 'default',
   };
 }
 
@@ -71,7 +73,10 @@ export function separationM(a: Sensor, b: Sensor, groundAt: GroundAt, useTerrain
   return Math.hypot(pb.xM - pa.xM, pb.yM - pa.yM, zb - za);
 }
 
+export const effectiveObjective = (map: MapScenario, rx: Sensor) => rx.objective === 'default' ? map.defaultObjective : rx.objective;
+
 export function resolveIntendedTx(scenario: MapScenario, rx: Sensor, groundAt: GroundAt): Sensor | null {
+  if (effectiveObjective(scenario, rx) === 'avoidance') return null;
   const transmitters = scenario.sensors.filter((s) => s.role === 'tx');
   const named = transmitters.find((s) => s.id === rx.intendedTxId);
   if (named) return named;
@@ -101,7 +106,15 @@ export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM
   };
 }
 
-export interface PairResult { txId: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean }
+export interface PairResult { txId: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; clearance: Clearance | 'unknown' }
+
+export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, frequencyGhz: number, groundAt: GroundAt): { lossDb: number; clearance: Clearance | 'unknown' } {
+  if (map.propagationModel !== 'terrain') return { lossDb: 0, clearance: 'unknown' };
+  const sampler = map.useTerrainElevation ? groundAt : () => 0;
+  const profile = buildProfile(tx, rx, sampler);
+  if (!profile) return { lossDb: NaN, clearance: 'unknown' };
+  return bullingtonLossDb(profile, profile.groundM[0] + tx.aglM, profile.groundM[profile.groundM.length - 1] + rx.aglM, frequencyGhz);
+}
 
 /** Every Tx→Rx pair: the receiver's intended pair as desired communication, the rest as interference. */
 export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundAt: GroundAt): PairResult[] {
@@ -112,13 +125,18 @@ export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundA
     for (const tx of scenario.sensors.filter((s) => s.role === 'tx')) {
       const distanceM = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
       const intended = tx.id === intendedId;
+      const propagation = pairPropagation(scenario, tx, rx, shared.frequencyGhz, groundAt);
+      const inputs = pairInputs(shared, tx, rx, distanceM);
+      inputs.otherLossDb += propagation.lossDb;
       pairs.push({
         txId: tx.id,
         rxId: rx.id,
         intended,
         distanceM,
-        result: calculateLink(pairInputs(shared, tx, rx, distanceM), intended ? 'desired' : 'avoidance'),
-        elevationKnown: known(tx) && known(rx),
+        result: calculateLink(inputs, intended ? 'desired' : 'avoidance'),
+        elevationKnown: known(tx) && known(rx) && Number.isFinite(propagation.lossDb),
+        propagationLossDb: propagation.lossDb,
+        clearance: propagation.clearance,
       });
     }
   }

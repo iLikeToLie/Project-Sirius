@@ -4,13 +4,13 @@ import type { MapScenario, Sensor, SensorRole } from '../types';
 import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
 import {
-  addSensor, changeRole, createSensor, evaluatePairs, MAX_SENSORS, receiverSummary, removeSensor, resolveIntendedTx, setRole,
+  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, receiverSummary, removeSensor, resolveIntendedTx, setRole,
 } from './sensors';
 
 const flat: GroundAt = () => 0;
 const defaults = DEFAULT_STATE.inputs;
 const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSensor(sensors, createSensor(sensors, role, offsetLatLon(SG_REFERENCE, dx, dy), defaults));
-const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', useTerrainElevation });
+const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation });
 const LINK = ['Acceptable link', 'Weak link', 'No link'];
 const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
 
@@ -134,5 +134,30 @@ describe('sensor model', () => {
     expect(summary.link?.txId).toBe(sensors[2].id);
     expect(summary.interferersAbove).toBe(2);
     expect(summary.worstInterferer?.txId).toBe(sensors[1].id); // T2 is 50 m away, T1 100 m
+  });
+});
+
+describe('terrain and objectives', () => {
+  const sensors = place(place(place([], 'tx', 0), 'rx', 2000), 'rx', 2100);
+  const m = () => ({ ...scenario(sensors, true), propagationModel: 'terrain' as const, defaultObjective: 'desired' as const });
+  it('resolves default and override without changing another receiver', () => {
+    const before = evaluatePairs(m(), defaults, flat);
+    const changed = { ...m(), sensors: sensors.map((s, i) => i === 1 ? { ...s, objective: 'avoidance' as const } : s), selectedId: sensors[1].id };
+    expect(resolveIntendedTx(changed, changed.sensors[1], flat)).toBeNull();
+    expect(evaluatePairs(changed, defaults, flat)[0].intended).toBe(false);
+    expect(evaluatePairs(changed, defaults, flat)[1]).toEqual(before[1]);
+    expect(effectiveObjective({ ...m(), defaultObjective: 'avoidance' }, { ...sensors[1], objective: 'default' })).toBe('avoidance');
+  });
+  it('subtracts diffraction exactly once', () => {
+    const ridge: GroundAt = p => p.lon > SG_REFERENCE.lon + .008 && p.lon < SG_REFERENCE.lon + .010 ? 60 : 0;
+    const terrain = evaluatePairs(m(), defaults, ridge)[0];
+    const free = evaluatePairs({ ...m(), propagationModel: 'free-space' }, defaults, ridge)[0];
+    expect(terrain.clearance).toBe('obstructed'); expect(terrain.propagationLossDb).toBeGreaterThan(6);
+    expect(free.result.receivedPowerDbm - terrain.result.receivedPowerDbm).toBeCloseTo(terrain.propagationLossDb, 10);
+  });
+  it('does not confidently classify a path with missing intermediate tiles', () => {
+    const [pair] = evaluatePairs(m(), defaults, p => p.lon > SG_REFERENCE.lon + .008 && p.lon < SG_REFERENCE.lon + .010 ? null : 0);
+    expect(pair.elevationKnown).toBe(false); expect(pair.propagationLossDb).toBeNaN();
+    expect(pair.clearance).toBe('unknown'); expect(pair.result.status).toBe('Invalid input');
   });
 });

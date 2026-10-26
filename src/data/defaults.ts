@@ -38,6 +38,7 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     fadeMarginTargetDb: inputs.fadeMarginTargetDb,
     interferenceThresholdDbm: inputs.interferenceThresholdDbm,
     intendedTxId: 'auto' as const,
+    objective: 'default' as const,
   };
   return {
     sensors: [
@@ -47,6 +48,8 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     selectedId: null,
     zonesForRxId: 'auto',
     useTerrainElevation,
+    defaultObjective: 'desired',
+    propagationModel: 'terrain',
   };
 }
 
@@ -72,7 +75,7 @@ const DEFAULT_INPUTS: LinkInputs = {
 const defaultPlacements = workspaceForDistance(500);
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   linkObjective: 'desired',
   inputs: DEFAULT_INPUTS,
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },

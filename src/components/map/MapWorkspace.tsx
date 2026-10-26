@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
-import { zoneReceiver } from '../../lib/activeLink';
+import { activePair, zoneReceiver } from '../../lib/activeLink';
+import { coverageZones } from '../../lib/coverage';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
-import { type LatLon, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { addSensor, changeRole, createSensor, evaluatePairs, groundOf, pairInputs, receiverSummary, removeSensor, resolveIntendedTx } from '../../lib/sensors';
+import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
+import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor, resolveIntendedTx } from '../../lib/sensors';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
-import { useZoneWorker } from '../useFieldWorker';
+import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
 import { statusTone } from '../ui';
+import { CoverageLegend } from './CoverageLegend';
 import { LinkSettingsCard } from './LinkSettingsCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
 import { SensorListCard } from './SensorListCard';
@@ -28,6 +30,8 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const [view, setView] = useState<MapView | null>(null);
   const [draft, setDraft] = useState<Record<string, LatLon>>({});
   const [showSettings, setShowSettings] = useState(false);
+  const [hidePanels, setHidePanels] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const { map } = state;
   const groundAt: GroundAt = elevation.groundAt;
   const dragging = Object.keys(draft).length > 0;
@@ -59,7 +63,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   });
 
   // Zones belong to the selected transmitter, or the selected receiver's intended transmitter.
-  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? resolveIntendedTx(liveMap, selected, groundAt) : null), [selected, liveMap, groundAt]);
+  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? resolveIntendedTx(liveMap, selected, groundAt) ?? activePair(liveMap, groundAt)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt]);
   const zone = useMemo(() => (zoneTx ? zoneReceiver(liveMap, zoneTx.id, groundAt) : null), [zoneTx, liveMap, groundAt]);
   const linkedRxIds = zoneTx ? pairs.filter((p) => p.txId === zoneTx.id && p.intended).map((p) => p.rxId) : [];
 
@@ -102,7 +106,31 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     if (zoneRequest && view && map.useTerrainElevation) elevation.ensureBox(view.southWest, view.northEast, zoneRequest.z);
   }, [zoneRequest?.key]);
 
-  const { result: zoneResult, refining } = useZoneWorker(zoneRequest?.request ?? null, zoneRequest?.key ?? '');
+  const terrain = map.propagationModel === 'terrain';
+  const coverageRequest = useMemo(() => {
+    if (!terrain || !zoneRequest || !zoneTx || !zone) return null;
+    const req = zoneRequest.request, g = req.ground;
+    const maxView = Math.max(...[[g.x0, g.y0], [g.x0 + g.cols * g.dx, g.y0 + g.rows * g.dy]].map(([x,y]) => Math.hypot(x - req.tx.xM, y - req.tx.yM)));
+    const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM));
+    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairInputs(state.inputs, zoneTx, zone.rx, 1), maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: g } };
+  }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs]);
+  const free = useZoneWorker(!terrain ? zoneRequest?.request ?? null : null, `${terrain}|${zoneRequest?.key}`);
+  const coverage = useCoverageWorker(coverageRequest, `${terrain}|${zoneRequest?.key}`);
+  const zoneResult = useMemo(() => terrain ? coverage.result && coverageRequest && zoneRequest ? coverageZones(coverage.result, coverageRequest, zoneRequest.request.ground) : null : free.result, [terrain, coverage.result, coverageRequest, zoneRequest, free.result]);
+  const refining = terrain ? coverage.refining : free.refining;
+  const objective = zone ? effectiveObjective(liveMap, zone.rx) : map.defaultObjective;
+  const rings = useMemo(() => zoneTx && zoneRequest ? (['sensitivity', 'required', 'interference'] as const).flatMap(id => {
+    const range = zoneRequest.request.slant[`${id}M`];
+    if (!Number.isFinite(range)) return [];
+    return [{ id, label: `${id} ${range >= 1000 ? (range / 1000).toFixed(2) + ' km' : range.toFixed(0) + ' m'}`, points: Array.from({ length: 129 }, (_, i) => offsetLatLon(zoneTx, Math.sin(i * 2 * Math.PI / 128) * range, Math.cos(i * 2 * Math.PI / 128) * range)) }];
+  }) : [], [zoneTx, zoneRequest]);
+  useEffect(() => {
+    if (!map.useTerrainElevation || !terrain) return;
+    for (const p of pairs) {
+      const a = sensors.find(s => s.id === p.txId)!, b = sensors.find(s => s.id === p.rxId)!;
+      elevation.ensureBox({ lat: Math.min(a.lat, b.lat), lon: Math.min(a.lon, b.lon) }, { lat: Math.max(a.lat, b.lat), lon: Math.max(a.lon, b.lon) }, 14);
+    }
+  }, [sensors, terrain, map.useTerrainElevation, elevation.ensureBox]);
   const zones = useMemo(() => {
     if (!zoneResult) return null;
     const { bounds } = zoneResult;
@@ -110,10 +138,11 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     const lines = (segments: [number, number, number, number][]) => segments.map(([x1, y1, x2, y2]) => [at(x1, y1), at(x2, y2)]);
     return {
       result: zoneResult,
+      objective, showAll,
       corners: [at(bounds.minX, bounds.maxY), at(bounds.maxX, bounds.maxY), at(bounds.maxX, bounds.minY), at(bounds.minX, bounds.minY)] as [LatLon, LatLon, LatLon, LatLon],
       outlines: { sensitivity: lines(zoneResult.outlines.sensitivity), required: lines(zoneResult.outlines.required), interference: lines(zoneResult.outlines.interference) },
     };
-  }, [zoneResult]);
+  }, [zoneResult, objective, showAll]);
 
   const byId = new Map(sensors.map((s) => [s.id, s]));
   const links: MapLink[] = pairs
@@ -131,9 +160,9 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   }));
 
   return (
-    <div className="map-workspace">
+    <div className={`map-workspace${dragging ? ' dragging-sensor' : ''}${hidePanels ? ' panels-hidden' : ''}`}>
       <SensorMap
-        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} handleRef={handle}
+        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
         onSelect={select}
         onDrag={(id, at) => setDraft((d) => ({ ...d, [id]: at }))}
         onDragEnd={(id, at) => { updateSensor(id, at); setDraft((d) => { const { [id]: _done, ...rest } = d; return rest; }); }}
@@ -146,14 +175,18 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
         <button type="button" className="ghost icon-only" aria-label="Zoom in" onClick={() => handle.current?.zoomBy(1)}><Plus size={15} /></button>
         <button type="button" className="ghost icon-only" aria-label="Zoom out" onClick={() => handle.current?.zoomBy(-1)}><Minus size={15} /></button>
         <button type="button" className={`ghost ${showSettings ? 'is-on' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={15} /> Link settings</button>
+        <div className="segmented objective-default" role="group" aria-label="Default objective"><span>Default objective</span>{(['desired', 'avoidance'] as const).map(o => <button key={o} type="button" aria-pressed={map.defaultObjective === o} className={map.defaultObjective === o ? 'active' : ''} onClick={() => setMap(m => ({ ...m, defaultObjective: o }))}>{o === 'desired' ? 'Desired' : 'Avoidance'}</button>)}</div>
+        <label className="model-control">Model <select value={map.propagationModel} onChange={e => setMap(m => ({ ...m, propagationModel: e.target.value as MapScenario['propagationModel'] }))}><option value="terrain">Terrain diffraction</option><option value="free-space">Free space</option></select></label>
+        <button type="button" className="ghost" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? 'Show panels' : 'Hide panels'}</button>
         <label className="switch">
           <input type="checkbox" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
           <span>Use terrain elevation</span>
         </label>
-        {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: affected sensors use 0 m ground and are flagged.</span>}
-        {refining && <span className="refining" role="status">Refining zones…</span>}
+        {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
+        {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
 
+      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} />
       <SensorListCard
         sensors={sensors} pairs={pairs} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}

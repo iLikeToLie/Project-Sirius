@@ -8,7 +8,7 @@ import { addSensor, createSensor } from './sensors';
 
 const flat: GroundAt = () => 0;
 const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSensor(sensors, createSensor(sensors, role, offsetLatLon(SG_REFERENCE, dx, dy), DEFAULT_STATE.inputs));
-const map = (sensors: Sensor[], extra: Partial<MapScenario> = {}): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', useTerrainElevation: false, ...extra });
+const map = (sensors: Sensor[], extra: Partial<MapScenario> = {}): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation: false, ...extra });
 const state = (m: MapScenario): LinkState => ({ inputs: { ...DEFAULT_STATE.inputs }, map: m });
 
 // T1 at 0, T2 at 3000, R1 at 500 (→T1), R2 at 2600 (→T2), R3 at 900 (→T1)
@@ -81,4 +81,17 @@ describe('active link', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/at least 290/);
   });
+});
+
+it('uses selected avoidance receiver for zones and exposes its comparison pair', () => {
+  const m = map(sensors.map(s => s.id === R3.id ? { ...s, objective: 'avoidance' as const } : s), { selectedId: R3.id });
+  expect(zoneReceiver(m, T1.id, flat)?.rx.id).toBe(R3.id);
+  expect(activePair(m, flat)?.rx.id).toBe(R3.id);
+});
+it('active inputs include the same terrain loss as pair evaluation', async () => {
+  const { evaluatePairs } = await import('./sensors');
+  const m = map(sensors, { selectedId: R1.id, propagationModel: 'terrain', useTerrainElevation: true });
+  const ridge: GroundAt = p => p.lon > SG_REFERENCE.lon + .001 && p.lon < SG_REFERENCE.lon + .003 ? 30 : 0;
+  const pair = evaluatePairs(m, DEFAULT_STATE.inputs, ridge).find(p => p.rxId === R1.id && p.intended)!;
+  expect(activeInputs(state(m), ridge).otherLossDb).toBeCloseTo(DEFAULT_STATE.inputs.otherLossDb + pair.propagationLossDb, 10);
 });
