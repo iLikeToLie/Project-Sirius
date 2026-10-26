@@ -52,7 +52,7 @@ Last updated 26 October 2026. Everything needed to continue this work on another
 - Terrain loss is added to `otherLossDb` so `rf.ts` stays unchanged.
 - The Link-budget drawer shows the shared Other loss as typed; diffraction is listed separately and included in total losses.
 - The drawer is collapsed by default and edits write back through `applyInputEdit`, like the Calculator.
-- New map scenarios use the `terrain` model; migrated ones use `free-space`.
+- All map scenarios, new and migrated, use the `terrain` model (changed on 2026-10-27 at the user's request; migrated 1.4.0 scenarios still have terrain elevation off).
 
 ## Known minor issues (deferred, from the 1.5.0 final review)
 

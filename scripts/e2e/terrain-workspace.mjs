@@ -54,6 +54,7 @@ try {
   await page.locator('.sensor-marker.role-rx').click();
   const card = page.locator('.selected-sensor-card');
   await card.getByRole('tab', { name: 'Link', exact: true }).click();
+  assert.equal(await card.getByLabel('Latitude').isVisible(), false, 'other tab panels are hidden');
   await page.getByRole('group', { name: 'Default objective' }).getByRole('button', { name: 'Avoidance', exact: true }).click();
   assert.equal(await card.getByLabel(/^Intended transmitter/).count(), 0, 'avoidance has no intended link');
   assert.match(await card.locator('.sensor-results').innerText(), /Avoidance/);

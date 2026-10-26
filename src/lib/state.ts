@@ -47,7 +47,7 @@ function migrateWorkspace(ws: LinkWorkspace, inputs: LinkInputs): MapScenario {
   const rxTotal = antennaElevationM(ws.terrain, ws.rx);
   const lift = -Math.min(0, txTotal, rxTotal);
   const at = (p: AntennaPlacement, total: number) => ({ ...p, aglM: total + lift });
-  return { ...mapForPlacements(inputs, at(ws.tx, txTotal), at(ws.rx, rxTotal), false), propagationModel: 'free-space' };
+  return { ...mapForPlacements(inputs, at(ws.tx, txTotal), at(ws.rx, rxTotal), false), propagationModel: 'terrain' };
 }
 
 // ---- Schema 3 ----
@@ -81,7 +81,7 @@ function readMap(value: unknown): MapScenario | undefined {
     selectedId: typeof value.selectedId === 'string' && ids.has(value.selectedId) ? value.selectedId : null,
     zonesForRxId: typeof value.zonesForRxId === 'string' && ids.has(value.zonesForRxId) ? value.zonesForRxId : 'auto',
     useTerrainElevation: value.useTerrainElevation,
-    propagationModel: value.propagationModel as MapScenario['propagationModel'] ?? 'free-space',
+    propagationModel: value.propagationModel as MapScenario['propagationModel'] ?? 'terrain',
     defaultObjective: value.defaultObjective as MapScenario['defaultObjective'] ?? 'desired',
   };
 }

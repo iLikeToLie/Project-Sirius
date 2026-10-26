@@ -317,8 +317,9 @@ Key changes:
   settings popover, panels fade while dragging, Hide panels toggle.
 - Link-budget drawer: every Calculator input and result, the Rx meter and a
   path-profile chart for the active link.
-- Scenario schema version 4. 1.5.0 scenarios open with the free-space model,
-  so their results are unchanged.
+- Scenario schema version 4. 1.5.0 and earlier scenarios open with the terrain
+  model (1.4.0 scenarios keep terrain elevation off, so their results are
+  unchanged); switch Model to Free space to reproduce 1.5.0 numbers.
 
 Calculation scope:
 The Version 3 Friis engine is unchanged. One Bullington equivalent edge per

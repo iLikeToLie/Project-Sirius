@@ -74,10 +74,11 @@ describe('scenario state', () => {
   });
 });
 
-it('migrates v3 with free-space results unchanged', () => {
+it('migrates v3 onto the terrain model with the default objective', () => {
   const old = freshDefaultState();
   const { propagationModel: _p, defaultObjective: _d, ...map } = old.map;
   const next = normalizeState({ ...old, schemaVersion: 3, map });
-  expect(next.map.propagationModel).toBe('free-space'); expect(next.map.defaultObjective).toBe('desired');
+  expect(next.map.propagationModel).toBe('terrain'); expect(next.map.defaultObjective).toBe('desired');
+  // Over flat ground the terrain model adds no diffraction, so the loss budget is unchanged.
   expect(activeInputs(next, () => 0).otherLossDb).toBe(old.inputs.otherLossDb);
 });

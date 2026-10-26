@@ -18,7 +18,7 @@ A browser-based RF link-budget and interference-screening tool using the Friis f
 - Distance sweep with received-power, sensitivity, and interference-threshold curves.
 - Antenna-gain sweep with a Tx/Rx selector and three editable comparison distances.
 - Ten-row placement comparison with editable gains, distances, losses, rankings, and statuses.
-- Automatic device-local saving plus JSON scenario import/export. Scenarios from 1.5.0 and earlier open with the free-space model, and 1.4.0 and earlier as two map sensors with terrain elevation off, with unchanged results.
+- Automatic device-local saving plus JSON scenario import/export. Scenarios from 1.5.0 and earlier open with the terrain model; 1.4.0 and earlier open as two map sensors with terrain elevation off, so over flat ground their results are unchanged.
 - Responsive layout for desktop, tablet, and mobile browsers.
 - Mission-control interface with monospaced editorial typography, deep-space surfaces, solar-amber emphasis, compact instrument controls, and accessible status colours.
 - Automated tests against known Version 3 workbook results.

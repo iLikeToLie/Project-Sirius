@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { formatNumber } from '../../lib/rf';
 import { effectiveObjective, groundOf, type PairResult, receiverSummary } from '../../lib/sensors';
 import type { GroundAt } from '../../lib/elevation';
@@ -36,18 +37,17 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
     <section className={`map-card selected-sensor-card${collapsed ? ' collapsed' : ''}`} aria-label={`Selected sensor ${sensor.name}`}>
       <div className="map-card-heading">
         <input className="sensor-name-input" aria-label="Sensor name" value={sensor.name} onChange={(event) => onChange({ name: event.target.value })} />
-        <div className="segmented" role="group" aria-label="Sensor role">
-          {(['tx', 'rx'] as const).map((role) => (
-            <button key={role} type="button" className={sensor.role === role ? 'active' : ''} aria-pressed={sensor.role === role} onClick={() => onRoleChange(role)}>
-              {role === 'tx' ? 'Transmitter' : 'Receiver'}
-            </button>
-          ))}
-        </div>
+        <button type="button" className="icon-button" aria-label={collapsed ? 'Expand sensor' : 'Collapse sensor'} title={collapsed ? 'Expand' : 'Collapse'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}</button>
       </div>
-
-      <button type="button" className="ghost" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? 'Expand sensor' : 'Collapse sensor'}</button>
+      <div className="segmented role-toggle" role="group" aria-label="Sensor role">
+        {(['tx', 'rx'] as const).map((role) => (
+          <button key={role} type="button" className={sensor.role === role ? 'active' : ''} aria-pressed={sensor.role === role} onClick={() => onRoleChange(role)}>
+            {role === 'tx' ? 'Transmitter' : 'Receiver'}
+          </button>
+        ))}
+      </div>
       {!collapsed && <>
-      <div className="segmented" role="tablist" aria-label="Sensor details">{['Sensor', 'Link', 'Coverage'].map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>)}</div>
+      <div className="tabs" role="tablist" aria-label="Sensor details">{['Sensor', 'Link', 'Coverage'].map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>)}</div>
       <div hidden={tab !== 'Sensor'}>
       <div className="form-grid two">
         <CommitField label="Latitude" unit="°" value={sensor.lat} onCommit={(v) => num('lat', v, (x) => (x < SG_BOUNDS.minLat || x > SG_BOUNDS.maxLat ? 'Keep within the Singapore map area.' : undefined))} />
@@ -71,12 +71,12 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
 
       </div>
       <div hidden={tab !== 'Link'}>
-      {sensor.role === 'rx' && <label className="field"><span>Objective</span><select value={sensor.objective} onChange={e => onChange({ objective: e.target.value as Sensor['objective'] })}><option value="default">Workspace default ({map.defaultObjective})</option><option value="desired">Desired</option><option value="avoidance">Avoidance</option></select></label>}
+      {sensor.role === 'rx' && <label className="field"><span>Objective</span><select value={sensor.objective} onChange={e => onChange({ objective: e.target.value as Sensor['objective'] })}><option value="default">Default ({map.defaultObjective === 'desired' ? 'Desired' : 'Avoidance'})</option><option value="desired">Desired</option><option value="avoidance">Avoidance</option></select></label>}
       {sensor.role === 'rx' && effectiveObjective(map, sensor) === 'desired' && (
         <label className="field">
           <span>Intended transmitter</span>
           <select value={sensor.intendedTxId} onChange={(event) => onChange({ intendedTxId: event.target.value })}>
-            <option value="auto">{nearestTx ? `Auto (nearest: ${nearestTx})` : 'Auto (nearest)'}</option>
+            <option value="auto">{nearestTx ? `Nearest (${nearestTx})` : 'Nearest'}</option>
             {transmitters.map((tx) => <option key={tx.id} value={tx.id}>{tx.name}</option>)}
           </select>
         </label>

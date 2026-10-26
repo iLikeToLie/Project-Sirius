@@ -55,3 +55,13 @@ it('draws received-power contours and never bridges unknown terrain', async () =
   const missing = coverageZones(out, req, raster);
   for (const lines of Object.values(missing.outlines)) expect(lines).toEqual([]);
 });
+it('exposes received power per grid node, NaN where unknown', async () => {
+  const { coverageZones } = await import('./coverage');
+  const req = { ...request(), radials: 4, maxRangeM: 300, stepM: 100 };
+  const out = computeCoverage(req);
+  const raster = sampleGrid({ minX: -100, maxX: 100, minY: -100, maxY: 100 }, 2, 2, () => 0);
+  out.unknown.fill(0); out.powerDbm.fill(-60);
+  expect(Array.from(coverageZones(out, req, raster).powerDbm!)).toEqual(Array(9).fill(-60));
+  out.unknown.fill(1);
+  expect(Array.from(coverageZones(out, req, raster).powerDbm!).every(Number.isNaN)).toBe(true);
+});

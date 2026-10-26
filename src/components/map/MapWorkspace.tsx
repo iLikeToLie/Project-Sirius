@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
+import { Eye, EyeOff, Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
 import { activePair, applyInputEdit, zoneReceiver } from '../../lib/activeLink';
 import { coverageZones } from '../../lib/coverage';
+import { signalRange } from '../../lib/signalColour';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
@@ -33,6 +34,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const [showSettings, setShowSettings] = useState(false);
   const [hidePanels, setHidePanels] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const { map } = state;
   const groundAt: GroundAt = elevation.groundAt;
   const dragging = Object.keys(draft).length > 0;
@@ -41,6 +43,13 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const liveMap: MapScenario = useMemo(() => ({ ...map, sensors }), [map, sensors]);
   const pairs = useMemo(() => evaluatePairs(liveMap, state.inputs, groundAt), [liveMap, state.inputs, groundAt]);
   const selected = sensors.find((s) => s.id === map.selectedId) ?? null;
+
+  useEffect(() => {
+    if (!showSettings) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setShowSettings(false); };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [showSettings]);
 
   useEffect(() => { if (map.useTerrainElevation) elevation.ensure(sensors); }, [sensors, map.useTerrainElevation, elevation.ensure]);
 
@@ -81,7 +90,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     const sw = toLocalM(view.southWest);
     const ne = toLocalM(view.northEast);
     const txLocal = toLocalM(zoneTx);
-    const pixelsPerCell = dragging ? 14 : 5;
+    const pixelsPerCell = dragging ? 14 : 3;
     const cols = Math.max(16, Math.ceil(view.width / pixelsPerCell));
     const rows = Math.max(10, Math.ceil(view.height / pixelsPerCell));
     const cellM = Math.max((ne.xM - sw.xM) / cols, (ne.yM - sw.yM) / rows);
@@ -119,7 +128,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     if (!terrain || !zoneRequest || !zoneTx || !zone) return null;
     const req = zoneRequest.request, g = req.ground;
     const maxView = Math.max(...[[g.x0, g.y0], [g.x0 + g.cols * g.dx, g.y0 + g.rows * g.dy]].map(([x,y]) => Math.hypot(x - req.tx.xM, y - req.tx.yM)));
-    const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM));
+    const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM * 2));
     return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairInputs(state.inputs, zoneTx, zone.rx, 1), maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: g } };
   }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs]);
   const free = useZoneWorker(!terrain ? zoneRequest?.request ?? null : null, `${terrain}|${zoneRequest?.key}`);
@@ -147,10 +156,11 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     return {
       result: zoneResult,
       objective, showAll,
+      range: zoneResult.powerDbm && zone ? signalRange(zone.rx, objective, showAll) : undefined,
       corners: [at(bounds.minX, bounds.maxY), at(bounds.maxX, bounds.maxY), at(bounds.maxX, bounds.minY), at(bounds.minX, bounds.minY)] as [LatLon, LatLon, LatLon, LatLon],
       outlines: { sensitivity: lines(zoneResult.outlines.sensitivity), required: lines(zoneResult.outlines.required), interference: lines(zoneResult.outlines.interference) },
     };
-  }, [zoneResult, objective, showAll]);
+  }, [zoneResult, objective, showAll, zone]);
 
   const byId = new Map(sensors.map((s) => [s.id, s]));
   const links: MapLink[] = pairs
@@ -168,7 +178,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   }));
 
   return (
-    <div className={`map-workspace${dragging ? ' dragging-sensor' : ''}${hidePanels ? ' panels-hidden' : ''}`}>
+    <div className={`map-workspace${dragging ? ' dragging-sensor' : ''}${hidePanels ? ' panels-hidden' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
       <SensorMap
         sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
         onSelect={select}
@@ -179,28 +189,35 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
       />
 
       <div className="map-toolbar" role="toolbar" aria-label="Map">
-        <button type="button" className="ghost" onClick={() => handle.current?.fitSensors()}><Maximize2 size={15} /> Fit all sensors</button>
-        <button type="button" className="ghost icon-only" aria-label="Zoom in" onClick={() => handle.current?.zoomBy(1)}><Plus size={15} /></button>
-        <button type="button" className="ghost icon-only" aria-label="Zoom out" onClick={() => handle.current?.zoomBy(-1)}><Minus size={15} /></button>
-        <button type="button" className={`ghost ${showSettings ? 'is-on' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={15} /> Link settings</button>
-        <div className="segmented objective-default" role="group" aria-label="Default objective"><span>Default objective</span>{(['desired', 'avoidance'] as const).map(o => <button key={o} type="button" aria-pressed={map.defaultObjective === o} className={map.defaultObjective === o ? 'active' : ''} onClick={() => setMap(m => ({ ...m, defaultObjective: o }))}>{o === 'desired' ? 'Desired' : 'Avoidance'}</button>)}</div>
-        <label className="model-control">Model <select value={map.propagationModel} onChange={e => setMap(m => ({ ...m, propagationModel: e.target.value as MapScenario['propagationModel'] }))}><option value="terrain">Terrain diffraction</option><option value="free-space">Free space</option></select></label>
-        <button type="button" className="ghost" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? 'Show panels' : 'Hide panels'}</button>
-        <label className="switch">
-          <input type="checkbox" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
-          <span>Use terrain elevation</span>
+        <div className="tool-group">
+          <button type="button" className="tool icon-only" aria-label="Fit all sensors" title="Fit all sensors" onClick={() => handle.current?.fitSensors()}><Maximize2 size={15} /></button>
+          <button type="button" className="tool icon-only" aria-label="Zoom in" title="Zoom in" onClick={() => handle.current?.zoomBy(1)}><Plus size={15} /></button>
+          <button type="button" className="tool icon-only" aria-label="Zoom out" title="Zoom out" onClick={() => handle.current?.zoomBy(-1)}><Minus size={15} /></button>
+        </div>
+        <div className="tool-group" role="group" aria-label="Default objective">
+          <span className="tool-label">Objective</span>
+          {(['desired', 'avoidance'] as const).map(o => <button key={o} type="button" className={`tool${map.defaultObjective === o ? ' active' : ''}`} aria-pressed={map.defaultObjective === o} title={o === 'desired' ? 'Receivers should hear their intended transmitter' : 'Receivers should stay isolated from transmitters'} onClick={() => setMap(m => ({ ...m, defaultObjective: o }))}>{o === 'desired' ? 'Desired' : 'Avoidance'}</button>)}
+        </div>
+        <label className="tool-group select-group"><span className="tool-label">Model</span>
+          <select value={map.propagationModel} onChange={e => setMap(m => ({ ...m, propagationModel: e.target.value as MapScenario['propagationModel'] }))}><option value="terrain">Terrain diffraction</option><option value="free-space">Free space</option></select>
         </label>
+        <label className="tool-group switch-group" title="Use ground elevation from the terrain data; off assumes flat ground">
+          <input type="checkbox" aria-label="Use terrain elevation" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
+          <span>Terrain elevation</span>
+        </label>
+        <button type="button" className={`tool tool-group${showSettings ? ' active' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={14} /> Link settings</button>
+        <button type="button" className="tool tool-group" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? <Eye size={14} /> : <EyeOff size={14} />}{hidePanels ? 'Show panels' : 'Hide panels'}</button>
         {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
 
-      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} />
+      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} range={zones?.range} />
       <SensorListCard
         sensors={sensors} pairs={pairs} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
 
-      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} />
+      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} />
 
       {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} />}
 
