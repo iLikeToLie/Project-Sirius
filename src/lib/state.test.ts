@@ -32,6 +32,15 @@ describe('scenario state', () => {
     expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(separation3dM(workspace), 6);
   });
 
+  it('keeps a 1.4.0 scenario with negative elevations across reloads', () => {
+    const workspace: LinkWorkspace = { tx: { xM: 300, yM: 400, aglM: 12 }, rx: { xM: 0, yM: 0, aglM: 10 }, terrain: { ...DEFAULT_TERRAIN, enabled: true, offsetM: -100 } };
+    const first = normalizeState(v2(workspace) as unknown as Partial<AppState>);
+    const reloaded = normalizeState(JSON.parse(JSON.stringify(first)));
+    expect(reloaded.map.sensors.map((s) => s.id)).toEqual(first.map.sensors.map((s) => s.id));
+    expect(reloaded.map.sensors.every((s) => s.aglM >= 0)).toBe(true);
+    expect(activeInputs(reloaded, unknownGround).distanceM).toBeCloseTo(separation3dM(workspace), 6);
+  });
+
   it('migrates pre-1.4.0 scenarios through flat geometry', () => {
     const state = normalizeState(v1(1234.5) as unknown as Partial<AppState>);
     expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(1234.5, 6);

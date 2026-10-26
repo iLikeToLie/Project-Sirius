@@ -2,7 +2,7 @@ import type { LinkInputs, MapScenario, Sensor } from '../types';
 import type { GroundAt } from './elevation';
 import { toLatLon, toLocalM } from './geo';
 import { solveTxAlongBearing } from './linkGeometry';
-import { pairInputs, resolveIntendedTx, separationM } from './sensors';
+import { groundOf, pairInputs, resolveIntendedTx, separationM } from './sensors';
 
 /** The part of the app state the active link reads and writes. */
 export interface LinkState { inputs: LinkInputs; map: MapScenario }
@@ -52,6 +52,13 @@ export function activeInputs(state: LinkState, groundAt: GroundAt): LinkInputs {
   const pair = activePair(state.map, groundAt);
   if (!pair) return state.inputs;
   return pairInputs(state.inputs, pair.tx, pair.rx, separationM(pair.tx, pair.rx, groundAt, state.map.useTerrainElevation));
+}
+
+/** False when terrain is on and either end of the active link has no ground elevation yet. */
+export function activeElevationKnown(state: LinkState, groundAt: GroundAt): boolean {
+  const pair = activePair(state.map, groundAt);
+  if (!pair) return true;
+  return [pair.tx, pair.rx].every((s) => groundOf(s, groundAt, state.map.useTerrainElevation) !== null);
 }
 
 /** Calculator keys that belong to a sensor of the active pair (inverse of pairInputs). */

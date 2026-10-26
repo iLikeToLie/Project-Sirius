@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_STATE } from '../data/defaults';
 import type { MapScenario, Sensor, SensorRole } from '../types';
-import { activeInputs, activePair, applyInputEdit, zoneReceiver, type LinkState } from './activeLink';
+import { activeElevationKnown, activeInputs, activePair, applyInputEdit, zoneReceiver, type LinkState } from './activeLink';
 import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE, toLocalM } from './geo';
 import { addSensor, createSensor } from './sensors';
@@ -41,6 +41,13 @@ describe('active link', () => {
     expect(inputs.txId).toBe('T1');
     expect(inputs.rxId).toBe('R1');
     expect(inputs.distanceM).toBeCloseTo(500, 6);
+  });
+
+  it('reports whether the active link has known ground elevation', () => {
+    const s = state(map(sensors, { selectedId: R1.id, useTerrainElevation: true }));
+    expect(activeElevationKnown(s, () => null)).toBe(false);
+    expect(activeElevationKnown(s, () => 12)).toBe(true);
+    expect(activeElevationKnown({ ...s, map: { ...s.map, useTerrainElevation: false } }, () => null)).toBe(true);
   });
 
   it('falls back to the stored inputs without a pair', () => {

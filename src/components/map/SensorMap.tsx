@@ -108,6 +108,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
       },
     });
     map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
     const reportView = () => {
       const b = map.getBounds();
       const c = map.getCenter();
@@ -190,8 +191,9 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, handleRef,
         element.addEventListener('keydown', (event) => {
           const step = event.shiftKey ? 10 : 1;
           const delta = ({ ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] } as Record<string, number[]>)[event.key];
-          if (delta) { event.preventDefault(); callbacks.current.onNudge(id, delta[0], delta[1]); }
-          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); callbacks.current.onSelect(id); }
+          // The map's own keyboard handler listens on the same container; keep these keys from panning it.
+          if (delta) { event.preventDefault(); event.stopPropagation(); callbacks.current.onNudge(id, delta[0], delta[1]); }
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); callbacks.current.onSelect(id); }
         });
         marker.on('dragstart', () => { dragging.current = id; callbacks.current.onSelect(id); });
         marker.on('drag', () => { const p = marker.getLngLat(); callbacks.current.onDrag(id, { lat: p.lat, lon: p.lng }); });

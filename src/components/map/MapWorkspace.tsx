@@ -4,7 +4,7 @@ import { zoneReceiver } from '../../lib/activeLink';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { addSensor, createSensor, evaluatePairs, groundOf, pairInputs, receiverSummary, removeSensor, resolveIntendedTx, setRole } from '../../lib/sensors';
+import { addSensor, changeRole, createSensor, evaluatePairs, groundOf, pairInputs, receiverSummary, removeSensor, resolveIntendedTx } from '../../lib/sensors';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useZoneWorker } from '../useFieldWorker';
@@ -166,7 +166,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
           sensor={selected} map={liveMap} pairs={pairs} groundAt={groundAt}
           zoneInfo={zoneTx && zone ? { txName: zoneTx.name, rxName: zone.rx.name, reason: zone.reason, aglM: zone.rx.aglM, linkedRxIds } : null}
           onChange={(patch) => { updateSensor(selected.id, patch); return undefined; }}
-          onRoleChange={(role) => setMap((m) => ({ ...m, sensors: m.sensors.map((s) => (s.id === selected.id ? setRole(s, role, m.sensors) : s)) }))}
+          onRoleChange={(role) => setMap((m) => ({ ...m, sensors: changeRole(m.sensors, selected.id, role) }))}
           onZonesFor={(rxId) => setMap((m) => ({ ...m, zonesForRxId: rxId }))}
         />
       )}

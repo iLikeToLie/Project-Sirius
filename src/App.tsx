@@ -11,7 +11,7 @@ import { freshDefaultState } from './data/defaults';
 import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSweep } from './lib/rf';
 import { normalizeState, validateImport } from './lib/state';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
-import { activeInputs, applyInputEdit } from './lib/activeLink';
+import { activeElevationKnown, activeInputs, applyInputEdit } from './lib/activeLink';
 import { useElevationTiles } from './components/map/useElevationTiles';
 import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningStatus } from './types';
 
@@ -123,7 +123,7 @@ function App() {
         </header>
 
         <div className="content">
-          {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} />}
+          {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} elevationKnown={activeElevationKnown(state, groundAt)} />}
           {view === 'workspace' && <Suspense fallback={<p className="muted">Loading map…</p>}><MapWorkspace state={state} setState={setState} elevation={elevation} /></Suspense>}
           {view === 'distance' && <DistanceView state={viewState} setState={setState} />}
           {view === 'gain' && <GainView state={viewState} setState={setState} />}
@@ -135,7 +135,7 @@ function App() {
   );
 }
 
-function CalculatorView({ state, setState, setInput, editInput, result }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; setInput: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => void; editInput: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => string | undefined; result: ReturnType<typeof calculateLink> }) {
+function CalculatorView({ state, setState, setInput, editInput, result, elevationKnown }: { elevationKnown: boolean; state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; setInput: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => void; editInput: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => string | undefined; result: ReturnType<typeof calculateLink> }) {
   const setObjective = (linkObjective: LinkObjective) => setState((current) => ({ ...current, linkObjective }));
   return (
     <div className="calculator-layout">
@@ -157,7 +157,7 @@ function CalculatorView({ state, setState, setInput, editInput, result }: { stat
       <aside className="results-column">
         <section className={`result-hero result-tone-${statusTone(result.status)}`}><p className="eyebrow">PREDICTED RECEIVED POWER</p><div className="power-value">{formatNumber(result.receivedPowerDbm, 2)} <span>dBm</span></div><p>{state.inputs.txId || 'Transmitter'} → {state.inputs.rxId || 'Receiver'}</p><StatusBadge status={result.status} /></section>
         <div className="metric-grid"><Metric label="Link margin" value={formatNumber(result.linkMarginDb)} unit="dB" note="Power above sensitivity" /><Metric label="Interference margin" value={formatNumber(result.interferenceMarginDb)} unit="dB" note="Threshold minus received power" /><Metric label="Free-space path loss" value={formatNumber(result.fsplDb)} unit="dB" /><Metric label="Total system losses" value={formatNumber(result.totalLossDb)} unit="dB" /><Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" /><Metric label="Received power" value={result.receivedPowerMw < 0.001 ? result.receivedPowerMw.toExponential(3) : formatNumber(result.receivedPowerMw, 6)} unit="mW" /></div>
-        <div className="callout"><b>{state.linkObjective === 'desired' ? 'Desired communication mode' : 'Interference avoidance mode'}</b><p>{state.linkObjective === 'desired' ? 'Status is based on receiver sensitivity and the fade-margin target. The interference threshold remains visible for reference but does not penalize a strong intended signal.' : 'Status is based on the interference screening threshold. A positive interference margin means predicted power is below that limit.'}</p></div>
+        {!elevationKnown && <div className="callout" role="status"><b>Elevation unavailable</b><p>Ground elevation for this link has not loaded (or the elevation service is unreachable), so the 3D separation uses 0 m ground. Open the Link workspace to load it, or switch off Use terrain elevation.</p></div>}<div className="callout"><b>{state.linkObjective === 'desired' ? 'Desired communication mode' : 'Interference avoidance mode'}</b><p>{state.linkObjective === 'desired' ? 'Status is based on receiver sensitivity and the fade-margin target. The interference threshold remains visible for reference but does not penalize a strong intended signal.' : 'Status is based on the interference screening threshold. A positive interference margin means predicted power is below that limit.'}</p></div>
       </aside>
     </div>
   );

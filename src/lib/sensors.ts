@@ -45,6 +45,14 @@ export function setRole(sensor: Sensor, role: SensorRole, existing: Sensor[] = [
   return { ...sensor, role, name: nextName(existing.filter((s) => s.id !== sensor.id), role) };
 }
 
+/** Sets one sensor's role; receivers that named it as their transmitter go back to the nearest one. */
+export function changeRole(sensors: Sensor[], id: string, role: SensorRole): Sensor[] {
+  return sensors.map((s) => {
+    if (s.id === id) return setRole(s, role, sensors);
+    return role === 'rx' && s.intendedTxId === id ? { ...s, intendedTxId: 'auto' } : s;
+  });
+}
+
 /** Receivers that named the removed sensor as their transmitter go back to the nearest one. */
 export const removeSensor = (sensors: Sensor[], id: string) => sensors
   .filter((s) => s.id !== id)

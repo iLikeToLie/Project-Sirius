@@ -4,7 +4,7 @@ import type { MapScenario, Sensor, SensorRole } from '../types';
 import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
 import {
-  addSensor, createSensor, evaluatePairs, MAX_SENSORS, receiverSummary, removeSensor, resolveIntendedTx, setRole,
+  addSensor, changeRole, createSensor, evaluatePairs, MAX_SENSORS, receiverSummary, removeSensor, resolveIntendedTx, setRole,
 } from './sensors';
 
 const flat: GroundAt = () => 0;
@@ -45,6 +45,17 @@ describe('sensor model', () => {
     sensors = place(sensors, 'rx', 100);
     expect(setRole(sensors[1], 'tx', sensors).name).toBe('T2');
     expect(setRole({ ...sensors[1], name: 'Depot mast' }, 'tx', sensors).name).toBe('Depot mast');
+  });
+
+  it('reverts receivers to auto when their transmitter becomes a receiver', () => {
+    let sensors = place([], 'tx', 0);
+    sensors = place(sensors, 'tx', 50);
+    sensors = place(sensors, 'rx', 100);
+    sensors = sensors.map((s) => (s.role === 'rx' ? { ...s, intendedTxId: sensors[1].id } : s));
+    const after = changeRole(sensors, sensors[1].id, 'rx');
+    expect(after[1].role).toBe('rx');
+    expect(after[2].intendedTxId).toBe('auto');
+    expect(changeRole(after, sensors[1].id, 'tx')[2].intendedTxId).toBe('auto');
   });
 
   it('resolves auto to the nearest transmitter, ties by order', () => {

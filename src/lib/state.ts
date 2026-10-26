@@ -38,11 +38,16 @@ function readWorkspace(value: unknown, legacyDistanceM: number): LinkWorkspace {
 
 /**
  * A plan-view link becomes two map sensors with terrain elevation off. Each sensor's height above
- * ground takes its old total elevation, so the 3D separation and every result stay as saved.
+ * ground takes its old total elevation, so the 3D separation and every result stay as saved. If
+ * a total was below 0 (a negative 1.4.0 elevation offset), both shift up by the same amount:
+ * heights above ground stay valid and the vertical difference is unchanged.
  */
 function migrateWorkspace(ws: LinkWorkspace, inputs: LinkInputs): MapScenario {
-  const total = (p: AntennaPlacement) => ({ ...p, aglM: antennaElevationM(ws.terrain, p) });
-  return mapForPlacements(inputs, total(ws.tx), total(ws.rx), false);
+  const txTotal = antennaElevationM(ws.terrain, ws.tx);
+  const rxTotal = antennaElevationM(ws.terrain, ws.rx);
+  const lift = -Math.min(0, txTotal, rxTotal);
+  const at = (p: AntennaPlacement, total: number) => ({ ...p, aglM: total + lift });
+  return mapForPlacements(inputs, at(ws.tx, txTotal), at(ws.rx, rxTotal), false);
 }
 
 // ---- Schema 3 ----
