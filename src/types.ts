@@ -101,11 +101,11 @@ export interface MapScenario {
 }
 
 export interface AppState {
-  schemaVersion: 2;
+  schemaVersion: 3;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;
   gainSweep: GainSweepSettings;
   placements: PlacementScenario[];
-  workspace: LinkWorkspace;
+  map: MapScenario;
 }

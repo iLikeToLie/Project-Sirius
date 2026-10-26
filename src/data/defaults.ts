@@ -1,4 +1,5 @@
-import type { AppState, LinkWorkspace, PlacementScenario, TerrainSettings } from '../types';
+import { offsetLatLon, SG_REFERENCE } from '../lib/geo';
+import type { AppState, LinkInputs, LinkWorkspace, MapScenario, PlacementScenario, TerrainSettings } from '../types';
 
 const placementRows: Omit<PlacementScenario, 'id'>[] = [
   { name: 'Rooftop direct LOS', distanceM: 250, txGainDbi: 14, rxGainDbi: 15, txLossDb: 1.2, rxLossDb: 0.8, polarizationLossDb: 0.2, obstructionLossDb: 0.5, otherLossDb: 0.3 },
@@ -26,31 +27,58 @@ export function workspaceForDistance(distanceM: number): LinkWorkspace {
   };
 }
 
+/**
+ * Tx and Rx sensors at plan-view offsets (metres) from the Singapore reference point, carrying the
+ * calculator's values and names. Also used to migrate plan-view scenarios.
+ */
+export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: number; aglM: number }, rx: { xM: number; yM: number; aglM: number }, useTerrainElevation: boolean): MapScenario {
+  const common = {
+    powerDbm: inputs.transmitPowerDbm,
+    sensitivityDbm: inputs.sensitivityDbm,
+    fadeMarginTargetDb: inputs.fadeMarginTargetDb,
+    interferenceThresholdDbm: inputs.interferenceThresholdDbm,
+    intendedTxId: 'auto' as const,
+  };
+  return {
+    sensors: [
+      { ...common, id: 'sensor-1', name: inputs.txId || 'T1', role: 'tx', ...offsetLatLon(SG_REFERENCE, tx.xM, tx.yM), aglM: tx.aglM, gainDbi: inputs.txGainDbi, cableLossDb: inputs.txLossDb },
+      { ...common, id: 'sensor-2', name: inputs.rxId || 'R1', role: 'rx', ...offsetLatLon(SG_REFERENCE, rx.xM, rx.yM), aglM: rx.aglM, gainDbi: inputs.rxGainDbi, cableLossDb: inputs.rxLossDb },
+    ],
+    selectedId: null,
+    zonesForRxId: 'auto',
+    useTerrainElevation,
+  };
+}
+
+const DEFAULT_INPUTS: LinkInputs = {
+  scenarioName: 'Campus Backhaul A',
+  txId: 'Rooftop TX-01',
+  rxId: 'Building B RX-02',
+  transmitPowerDbm: 30,
+  txGainDbi: 12,
+  rxGainDbi: 15,
+  frequencyGhz: 5.8,
+  distanceM: 500,
+  txLossDb: 1.5,
+  rxLossDb: 1,
+  polarizationLossDb: 0.5,
+  obstructionLossDb: 3,
+  otherLossDb: 0.5,
+  sensitivityDbm: -85,
+  interferenceThresholdDbm: -65,
+  fadeMarginTargetDb: 15,
+};
+
+const defaultPlacements = workspaceForDistance(500);
+
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   linkObjective: 'desired',
-  inputs: {
-    scenarioName: 'Campus Backhaul A',
-    txId: 'Rooftop TX-01',
-    rxId: 'Building B RX-02',
-    transmitPowerDbm: 30,
-    txGainDbi: 12,
-    rxGainDbi: 15,
-    frequencyGhz: 5.8,
-    distanceM: 500,
-    txLossDb: 1.5,
-    rxLossDb: 1,
-    polarizationLossDb: 0.5,
-    obstructionLossDb: 3,
-    otherLossDb: 0.5,
-    sensitivityDbm: -85,
-    interferenceThresholdDbm: -65,
-    fadeMarginTargetDb: 15,
-  },
+  inputs: DEFAULT_INPUTS,
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },
   gainSweep: { gainToSweep: 'tx', minGainDbi: 0, maxGainDbi: 30, stepDb: 1, distancesM: [250, 500, 2000] },
   placements: placementRows.map((row, index) => ({ ...row, id: `placement-${index + 1}` })),
-  workspace: workspaceForDistance(500),
+  map: mapForPlacements(DEFAULT_INPUTS, defaultPlacements.tx, defaultPlacements.rx, true),
 };
 
 export const freshDefaultState = (): AppState => JSON.parse(JSON.stringify(DEFAULT_STATE)) as AppState;

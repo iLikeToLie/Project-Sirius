@@ -9,11 +9,10 @@ import {
 import { Line } from 'react-chartjs-2';
 import { freshDefaultState } from './data/defaults';
 import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSweep } from './lib/rf';
-import { normalizeState } from './lib/state';
-import { PlacementWorkspace } from './components/PlacementWorkspace';
+import { normalizeState, validateImport } from './lib/state';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
-import { solveTxForDistance } from './lib/linkGeometry';
-import { withWorkspace } from './lib/state';
+import { activeInputs, applyInputEdit } from './lib/activeLink';
+import type { GroundAt } from './lib/elevation';
 import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningStatus } from './types';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -26,7 +25,7 @@ type View = 'calculator' | 'workspace' | 'distance' | 'gain' | 'placement' | 'gu
 function loadState(): AppState {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? normalizeState(JSON.parse(saved) as Partial<AppState>) : freshDefaultState();
+    return saved ? normalizeState(JSON.parse(saved)) : freshDefaultState();
   } catch {
     return freshDefaultState();
   }
@@ -52,11 +51,21 @@ function App() {
   const [view, setView] = useState<View>('calculator');
   const [savedFlash, setSavedFlash] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
-  const result = useMemo(() => calculateLink(state.inputs, state.linkObjective), [state.inputs, state.linkObjective]);
+  // Elevation tiles arrive in the map task; until then ground is unknown.
+  const groundAt: GroundAt = useMemo(() => () => null, []);
+  // Every view reads the active link's inputs: the selected receiver and its intended transmitter.
+  const viewState = useMemo(() => ({ ...state, inputs: activeInputs(state, groundAt) }), [state, groundAt]);
+  const result = useMemo(() => calculateLink(viewState.inputs, state.linkObjective), [viewState.inputs, state.linkObjective]);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
 
-  const setInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => setState((current) => ({ ...current, inputs: { ...current.inputs, [key]: value } }));
+  const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
+    const edited = applyInputEdit(state, key, value, groundAt);
+    if (!edited.ok) return edited.reason;
+    setState(edited.state);
+    return undefined;
+  };
+  const setInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => { editInput(key, value); };
 
   const downloadJson = () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -73,16 +82,16 @@ function App() {
   const importJson = async (file?: File) => {
     if (!file) return;
     try {
-      const imported = JSON.parse(await file.text()) as AppState;
-      if (!imported.inputs || !imported.distanceSweep || !imported.gainSweep || !Array.isArray(imported.placements)) throw new Error('Invalid scenario');
-      setState(normalizeState(imported));
+      const imported = validateImport(JSON.parse(await file.text()));
+      if (!imported) throw new Error('Invalid scenario');
+      setState(imported);
     } catch {
       window.alert('This file is not a valid Friis RF Planner scenario.');
     }
   };
 
   const nav = [
-    ['calculator', Calculator, 'Calculator'], ['workspace', RadioTower, 'Link workspace'], ['distance', ChartLine, 'Distance sweep'], ['gain', Antenna, 'Gain sweep'],
+    ['calculator', Calculator, 'Calculator'], ['distance', ChartLine, 'Distance sweep'], ['gain', Antenna, 'Gain sweep'],
     ['placement', MapPinned, 'Placements'], ['guide', BookOpen, 'Guide'],
   ] as const;
 
@@ -109,11 +118,10 @@ function App() {
         </header>
 
         <div className="content">
-          {view === 'calculator' && <CalculatorView state={state} setState={setState} setInput={setInput} result={result} />}
-          {view === 'workspace' && <PlacementWorkspace state={state} setState={setState} />}
-          {view === 'distance' && <DistanceView state={state} setState={setState} />}
-          {view === 'gain' && <GainView state={state} setState={setState} />}
-          {view === 'placement' && <PlacementView state={state} setState={setState} />}
+          {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} />}
+          {view === 'distance' && <DistanceView state={viewState} setState={setState} />}
+          {view === 'gain' && <GainView state={viewState} setState={setState} />}
+          {view === 'placement' && <PlacementView state={viewState} setState={setState} />}
           {view === 'guide' && <GuideView />}
         </div>
       </main>
@@ -121,7 +129,7 @@ function App() {
   );
 }
 
-function CalculatorView({ state, setState, setInput, result }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; setInput: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => void; result: ReturnType<typeof calculateLink> }) {
+function CalculatorView({ state, setState, setInput, editInput, result }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; setInput: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => void; editInput: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => string | undefined; result: ReturnType<typeof calculateLink> }) {
   const setObjective = (linkObjective: LinkObjective) => setState((current) => ({ ...current, linkObjective }));
   return (
     <div className="calculator-layout">
@@ -136,7 +144,7 @@ function CalculatorView({ state, setState, setInput, result }: { state: AppState
           </div>
         </div>
         <div className="form-section"><h3>Scenario</h3><div className="form-grid three"><TextField label="Scenario or link name" value={state.inputs.scenarioName} onChange={(value) => setInput('scenarioName', value)} /><TextField label="Tx location / identifier" value={state.inputs.txId} onChange={(value) => setInput('txId', value)} /><TextField label="Rx location / identifier" value={state.inputs.rxId} onChange={(value) => setInput('rxId', value)} /></div></div>
-        <div className="form-section"><h3>Signal and geometry</h3><div className="form-grid four"><NumberField label="Transmit power" value={state.inputs.transmitPowerDbm} unit="dBm" onChange={(value) => setInput('transmitPowerDbm', value)} help="Transmitter output before Tx loss" /><NumberField label="Operating frequency" value={state.inputs.frequencyGhz} unit="GHz" min={0.000001} onChange={(value) => setInput('frequencyGhz', value)} /><CommitField label="Tx-to-Rx 3D separation" value={state.inputs.distanceM} unit="m" help="Moves Tx along its bearing in the Link workspace" onCommit={(value) => { const solved = solveTxForDistance(state.workspace, value); if (!solved.ok) return solved.reason; setState((current) => withWorkspace(current, { ...current.workspace, tx: solved.tx })); return undefined; }} /><NumberField label="Fade margin target" value={state.inputs.fadeMarginTargetDb} unit="dB" min={0} onChange={(value) => setInput('fadeMarginTargetDb', value)} /></div></div>
+        <div className="form-section"><h3>Signal and geometry</h3><div className="form-grid four"><NumberField label="Transmit power" value={state.inputs.transmitPowerDbm} unit="dBm" onChange={(value) => setInput('transmitPowerDbm', value)} help="Transmitter output before Tx loss" /><NumberField label="Operating frequency" value={state.inputs.frequencyGhz} unit="GHz" min={0.000001} onChange={(value) => setInput('frequencyGhz', value)} /><CommitField label="Tx-to-Rx 3D separation" value={state.inputs.distanceM} unit="m" help="Moves Tx along its bearing in the Link workspace" onCommit={(value) => editInput('distanceM', value)} /><NumberField label="Fade margin target" value={state.inputs.fadeMarginTargetDb} unit="dB" min={0} onChange={(value) => setInput('fadeMarginTargetDb', value)} /></div></div>
         <div className="form-section"><h3>Antenna gain and losses</h3><div className="form-grid four"><NumberField label="Tx antenna gain" value={state.inputs.txGainDbi} unit="dBi" onChange={(value) => setInput('txGainDbi', value)} help="Gain toward the receiver" /><NumberField label="Rx antenna gain" value={state.inputs.rxGainDbi} unit="dBi" onChange={(value) => setInput('rxGainDbi', value)} help="Gain toward the transmitter" /><NumberField label="Tx cable & connector loss" value={state.inputs.txLossDb} unit="dB" min={0} onChange={(value) => setInput('txLossDb', value)} /><NumberField label="Rx cable & connector loss" value={state.inputs.rxLossDb} unit="dB" min={0} onChange={(value) => setInput('rxLossDb', value)} /><NumberField label="Polarization mismatch" value={state.inputs.polarizationLossDb} unit="dB" min={0} onChange={(value) => setInput('polarizationLossDb', value)} /><NumberField label="Obstruction / environment" value={state.inputs.obstructionLossDb} unit="dB" min={0} onChange={(value) => setInput('obstructionLossDb', value)} /><NumberField label="Other miscellaneous loss" value={state.inputs.otherLossDb} unit="dB" min={0} onChange={(value) => setInput('otherLossDb', value)} /></div></div>
         <div className="form-section"><h3>Receiver thresholds</h3><div className="form-grid three"><NumberField label="Receiver sensitivity" value={state.inputs.sensitivityDbm} unit="dBm" onChange={(value) => setInput('sensitivityDbm', value)} /><NumberField label="Interference threshold" value={state.inputs.interferenceThresholdDbm} unit="dBm" onChange={(value) => setInput('interferenceThresholdDbm', value)} /></div></div>
       </section>

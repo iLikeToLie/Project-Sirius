@@ -1,55 +1,66 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_STATE, freshDefaultState } from '../data/defaults';
-import type { AppState } from '../types';
-import { normalizeState, withWorkspace } from './state';
+import { DEFAULT_STATE, DEFAULT_TERRAIN, freshDefaultState, workspaceForDistance } from '../data/defaults';
+import type { AppState, LinkWorkspace } from '../types';
+import { activeInputs } from './activeLink';
+import { separation3dM } from './linkGeometry';
+import { normalizeState, validateImport } from './state';
 
-const legacy = (distanceM: number) => {
-  const { workspace: _workspace, schemaVersion: _version, ...rest } = freshDefaultState();
-  return { ...rest, inputs: { ...rest.inputs, distanceM } } as Partial<AppState>;
+const unknownGround = () => null;
+const base = () => {
+  const { map: _map, schemaVersion: _version, ...rest } = freshDefaultState();
+  return rest;
 };
+/** A web 1.4.0 save (schema 2, plan-view workspace). */
+const v2 = (workspace: LinkWorkspace) => ({ ...base(), schemaVersion: 2, workspace });
+/** A pre-1.4.0 save: no workspace at all. */
+const v1 = (distanceM: number) => { const rest = base(); return { ...rest, inputs: { ...rest.inputs, distanceM } }; };
 
-describe('scenario migration', () => {
+describe('scenario state', () => {
   it('returns defaults when nothing is saved', () => {
     expect(normalizeState()).toEqual(DEFAULT_STATE);
+    expect(DEFAULT_STATE.schemaVersion).toBe(3);
+    expect(DEFAULT_STATE.map.sensors.map((s) => s.role)).toEqual(['tx', 'rx']);
+    expect(DEFAULT_STATE.map.useTerrainElevation).toBe(true);
   });
 
-  it('gives a legacy scenario flat-ground geometry that reproduces its distance', () => {
-    const state = normalizeState(legacy(1234.5));
-    expect(state.schemaVersion).toBe(2);
-    expect(state.workspace.terrain.enabled).toBe(false);
-    expect(state.workspace.tx.aglM).toBe(state.workspace.rx.aglM);
-    expect(state.workspace.tx.xM - state.workspace.rx.xM).toBeCloseTo(1234.5, 9);
-    expect(state.inputs.distanceM).toBeCloseTo(1234.5, 9);
+  it('migrates a 1.4.0 workspace without changing its result', () => {
+    const workspace: LinkWorkspace = { tx: { xM: 300, yM: 400, aglM: 12 }, rx: { xM: 0, yM: 0, aglM: 10 }, terrain: { ...DEFAULT_TERRAIN, enabled: true } };
+    const state = normalizeState(v2(workspace) as unknown as Partial<AppState>);
+    expect(state.schemaVersion).toBe(3);
+    expect(state.map.sensors).toHaveLength(2);
+    expect(state.map.useTerrainElevation).toBe(false);
+    expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(separation3dM(workspace), 6);
   });
 
-  it('keeps a valid saved workspace and derives distance from it', () => {
-    const saved = freshDefaultState();
-    saved.workspace.tx = { xM: 3, yM: 4, aglM: 10 };
-    saved.workspace.rx = { xM: 0, yM: 0, aglM: 10 };
-    saved.inputs.distanceM = 999;
-    const state = normalizeState(saved);
-    expect(state.workspace.tx).toEqual({ xM: 3, yM: 4, aglM: 10 });
-    expect(state.inputs.distanceM).toBeCloseTo(5, 12);
+  it('migrates pre-1.4.0 scenarios through flat geometry', () => {
+    const state = normalizeState(v1(1234.5) as unknown as Partial<AppState>);
+    expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(1234.5, 6);
+    expect(separation3dM(workspaceForDistance(1234.5))).toBeCloseTo(1234.5, 12);
   });
 
-  it('replaces malformed workspace data with migrated geometry', () => {
-    const saved = { ...freshDefaultState(), workspace: { tx: { xM: 'a', yM: 0, aglM: -2 }, rx: null } } as unknown as Partial<AppState>;
-    const state = normalizeState(saved);
-    expect(state.workspace.tx.xM - state.workspace.rx.xM).toBeCloseTo(500, 9);
-    expect(state.inputs.distanceM).toBeCloseTo(500, 9);
+  it('keeps calculator names on migrated sensors', () => {
+    const state = normalizeState(v1(500) as unknown as Partial<AppState>);
+    expect(state.map.sensors.map((s) => s.name)).toEqual([DEFAULT_STATE.inputs.txId, DEFAULT_STATE.inputs.rxId]);
   });
 
-  it('derives the calculator distance whenever the workspace changes', () => {
-    const state = withWorkspace(freshDefaultState(), { ...DEFAULT_STATE.workspace, tx: { xM: 0, yM: 40, aglM: 10 }, rx: { xM: 30, yM: 0, aglM: 10 } });
-    expect(state.inputs.distanceM).toBe(50);
-    expect(state.workspace.tx.yM).toBe(40);
+  it('rejects imports with more than six sensors, unknown roles or non-numeric fields', () => {
+    const good = freshDefaultState();
+    const seven = { ...good, map: { ...good.map, sensors: Array.from({ length: 7 }, (_, i) => ({ ...good.map.sensors[0], id: `s${i}` })) } };
+    const badRole = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], role: 'relay' }] } };
+    const badNumber = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], lat: 'north' }] } };
+    const negativeHeight = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], aglM: -1 }] } };
+    for (const raw of [seven, badRole, badNumber, negativeHeight, { inputs: good.inputs }, null, 'text']) expect(validateImport(raw)).toBeNull();
   });
 
-  it('accepts negative terrain offset but rejects invalid terrain numbers', () => {
-    const saved = freshDefaultState();
-    saved.workspace.terrain = { ...saved.workspace.terrain, offsetM: -40, contourIntervalM: 0 };
-    const state = normalizeState(saved);
-    expect(state.workspace.terrain.offsetM).toBe(-40);
-    expect(state.workspace.terrain.contourIntervalM).toBe(DEFAULT_STATE.workspace.terrain.contourIntervalM);
+  it('accepts a valid v3 scenario round trip', () => {
+    const good = freshDefaultState();
+    good.map.selectedId = good.map.sensors[1].id;
+    expect(validateImport(JSON.parse(JSON.stringify(good)))).toEqual(good);
+  });
+
+  it('clears a selection that names a missing sensor', () => {
+    const good = freshDefaultState();
+    good.map.selectedId = 'ghost';
+    expect(normalizeState(good).map.selectedId).toBeNull();
   });
 });

@@ -1,8 +1,12 @@
-import { DEFAULT_TERRAIN, freshDefaultState, workspaceForDistance } from '../data/defaults';
-import type { AntennaPlacement, AppState, LinkWorkspace, TerrainSettings } from '../types';
-import { isValidPlacement, separation3dM } from './linkGeometry';
+import { DEFAULT_TERRAIN, freshDefaultState, mapForPlacements, workspaceForDistance } from '../data/defaults';
+import type { AntennaPlacement, AppState, LinkInputs, LinkWorkspace, MapScenario, Sensor, TerrainSettings } from '../types';
+import { antennaElevationM, isValidPlacement } from './linkGeometry';
+import { MAX_SENSORS } from './sensors';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+// ---- Schema 2 (web 1.4.0 plan view), read only for migration ----
 
 function readPlacement(value: unknown): AntennaPlacement | undefined {
   if (!isRecord(value)) return undefined;
@@ -12,7 +16,7 @@ function readPlacement(value: unknown): AntennaPlacement | undefined {
 
 function readTerrain(value: unknown): TerrainSettings {
   if (!isRecord(value) || (value.model !== undefined && value.model !== DEFAULT_TERRAIN.model)) return { ...DEFAULT_TERRAIN };
-  const number = (n: unknown, fallback: number, valid: (v: number) => boolean) => typeof n === 'number' && Number.isFinite(n) && valid(n) ? n : fallback;
+  const number = (n: unknown, fallback: number, valid: (v: number) => boolean) => isFiniteNumber(n) && valid(n) ? n : fallback;
   return {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : DEFAULT_TERRAIN.enabled,
     model: DEFAULT_TERRAIN.model,
@@ -22,7 +26,7 @@ function readTerrain(value: unknown): TerrainSettings {
   };
 }
 
-/** Legacy scenarios (no workspace) get flat-ground geometry that reproduces their saved distance. */
+/** Pre-1.4.0 scenarios (no workspace) get flat-ground geometry that reproduces their saved distance. */
 function readWorkspace(value: unknown, legacyDistanceM: number): LinkWorkspace {
   const fallback = workspaceForDistance(legacyDistanceM);
   if (!isRecord(value)) return fallback;
@@ -32,25 +36,65 @@ function readWorkspace(value: unknown, legacyDistanceM: number): LinkWorkspace {
   return { tx, rx, terrain: readTerrain(value.terrain) };
 }
 
-/** The workspace is the single source of the calculator's Tx-to-Rx distance. */
-export const withWorkspace = (state: AppState, workspace: LinkWorkspace): AppState => ({
-  ...state,
-  workspace,
-  inputs: { ...state.inputs, distanceM: separation3dM(workspace) },
-});
+/**
+ * A plan-view link becomes two map sensors with terrain elevation off. Each sensor's height above
+ * ground takes its old total elevation, so the 3D separation and every result stay as saved.
+ */
+function migrateWorkspace(ws: LinkWorkspace, inputs: LinkInputs): MapScenario {
+  const total = (p: AntennaPlacement) => ({ ...p, aglM: antennaElevationM(ws.terrain, p) });
+  return mapForPlacements(inputs, total(ws.tx), total(ws.rx), false);
+}
 
-export function normalizeState(saved?: Partial<AppState>): AppState {
+// ---- Schema 3 ----
+
+const SENSOR_NUMBERS = ['lat', 'lon', 'aglM', 'gainDbi', 'cableLossDb', 'powerDbm', 'sensitivityDbm', 'fadeMarginTargetDb', 'interferenceThresholdDbm'] as const;
+
+function readSensor(value: unknown): Sensor | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, name, role, intendedTxId } = value;
+  if (typeof id !== 'string' || !id || typeof name !== 'string' || (role !== 'tx' && role !== 'rx') || typeof intendedTxId !== 'string') return undefined;
+  if (!SENSOR_NUMBERS.every((key) => isFiniteNumber(value[key]))) return undefined;
+  const sensor = Object.fromEntries(['id', 'name', 'role', 'intendedTxId', ...SENSOR_NUMBERS].map((key) => [key, value[key]])) as unknown as Sensor;
+  const valid = Math.abs(sensor.lat) <= 90 && Math.abs(sensor.lon) <= 180 && sensor.aglM >= 0 && sensor.cableLossDb >= 0 && sensor.fadeMarginTargetDb >= 0;
+  return valid ? sensor : undefined;
+}
+
+/** Strict: any invalid sensor rejects the whole map. */
+function readMap(value: unknown): MapScenario | undefined {
+  if (!isRecord(value) || !Array.isArray(value.sensors) || value.sensors.length > MAX_SENSORS || typeof value.useTerrainElevation !== 'boolean') return undefined;
+  const sensors = value.sensors.map(readSensor);
+  if (sensors.some((s) => !s)) return undefined;
+  const list = sensors as Sensor[];
+  if (new Set(list.map((s) => s.id)).size !== list.length) return undefined;
+  const ids = new Set(list.map((s) => s.id));
+  return {
+    sensors: list.map((s) => (s.intendedTxId === 'auto' || ids.has(s.intendedTxId) ? s : { ...s, intendedTxId: 'auto' })),
+    selectedId: typeof value.selectedId === 'string' && ids.has(value.selectedId) ? value.selectedId : null,
+    zonesForRxId: typeof value.zonesForRxId === 'string' && ids.has(value.zonesForRxId) ? value.zonesForRxId : 'auto',
+    useTerrainElevation: value.useTerrainElevation,
+  };
+}
+
+export function normalizeState(saved?: unknown): AppState {
   const defaults = freshDefaultState();
-  if (!saved) return defaults;
-  const inputs = { ...defaults.inputs, ...saved.inputs };
-  return withWorkspace({
-    ...defaults,
-    ...saved,
-    schemaVersion: 2,
-    linkObjective: saved.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
+  if (!isRecord(saved)) return defaults;
+  const s = saved as Partial<AppState> & { workspace?: unknown };
+  const inputs = { ...defaults.inputs, ...s.inputs };
+  const map = 'map' in s ? readMap(s.map) ?? defaults.map : migrateWorkspace(readWorkspace(s.workspace, inputs.distanceM), inputs);
+  return {
+    schemaVersion: 3,
+    linkObjective: s.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
     inputs,
-    distanceSweep: { ...defaults.distanceSweep, ...saved.distanceSweep },
-    gainSweep: { ...defaults.gainSweep, ...saved.gainSweep },
-    placements: Array.isArray(saved.placements) ? saved.placements : defaults.placements,
-  }, readWorkspace(saved.workspace, inputs.distanceM));
+    distanceSweep: { ...defaults.distanceSweep, ...s.distanceSweep },
+    gainSweep: { ...defaults.gainSweep, ...s.gainSweep },
+    placements: Array.isArray(s.placements) ? s.placements : defaults.placements,
+    map,
+  };
+}
+
+/** For JSON import: null rejects the file. Saves without a map migrate; a present map must be valid. */
+export function validateImport(raw: unknown): AppState | null {
+  if (!isRecord(raw) || !isRecord(raw.inputs) || !isRecord(raw.distanceSweep) || !isRecord(raw.gainSweep) || !Array.isArray(raw.placements)) return null;
+  if ('map' in raw && !readMap(raw.map)) return null;
+  return normalizeState(raw);
 }
