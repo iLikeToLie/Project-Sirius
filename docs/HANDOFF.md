@@ -66,19 +66,17 @@ Last updated 26 October 2026. Everything needed to continue this work on another
 
 ## Open items needing the user
 
-- **Deployment has no terrain tiles:** `public/dem/` is git-ignored, so a GitHub Pages deploy from CI has no elevation and terrain links show as unknown. Resolve with the JAXA terms item below (commit the tiles) or generate them in CI.
 - **Final review:** run the fresh-reviewer pass (superpowers workflow) over `feature/v2-ui`, then finishing-a-development-branch.
 
 - **OneMap API terms:** confirm tile use from a public site (the terms text could not be retrieved; registration may be required).
-- **JAXA AW3D30 terms:** confirm redistribution of derived tiles before committing `public/dem/`.
+- **JAXA AW3D30 terms:** the user confirmed on 2026-10-26 that publishing derived tiles is fine, so `public/dem/` is committed. The credit line shown in the app is "©JAXA, ALOS World 3D-30m (AW3D30)".
 - **Merge/PR:** decide whether to merge the branch or open a PR (nothing pushed as of this handoff).
 
 ## Not in git (copy manually or re-create)
 
 | What | Why not in git | How to restore |
 |---|---|---|
-| `Map/N001E103.zip`, `Map/N001E104.zip` (AW3D30 v4, ~8.7 MB) | The repo is public; JAXA's redistribution terms are unconfirmed | Copy from the old machine, or download from JAXA (https://www.eorc.jaxa.jp/ALOS/en/aw3d30/, free registration) tiles N001E103 and N001E104 into `Map/` |
-| `public/dem/` (generated tiles) | Same reason | `corepack pnpm dem:build` (needs the zips in `Map/`) |
+| `Map/N001E103.zip`, `Map/N001E104.zip` (AW3D30 v4, ~8.7 MB) | The original JAXA data is not redistributed | Copy from the old machine, or download from JAXA (https://www.eorc.jaxa.jp/ALOS/en/aw3d30/, free registration) tiles N001E103 and N001E104 into `Map/` |
 | `Reference Images/*.png` (coverage-map references), `design-exploration/uisp-reference.png` | Third-party screenshots | Copy manually; they are described in the v2 spec ("radial coverage like CloudRF/Radio Mobile") and the 1.5.0 spec |
 | `.superpowers/` | Scratch: execution ledgers, brainstorm mockups | Not needed; rulings and minors are copied above |
 

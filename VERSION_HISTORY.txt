@@ -324,6 +324,6 @@ Calculation scope:
 The Version 3 Friis engine is unchanged. One Bullington equivalent edge per
 path; no building heights, clutter, foliage, rain or multipath. AW3D30 is a
 surface model with about 16 % cloud-filled cells. Elevation tiles are generated
-locally with `pnpm dem:build` (public/dem is not committed pending JAXA
+locally with `pnpm dem:build` (public/dem is committed; JAXA
 redistribution terms); missing tiles flag the link as unknown. Elevation
 (c) JAXA, ALOS World 3D-30m (AW3D30); map (c) OneMap Singapore ODL v1.0.

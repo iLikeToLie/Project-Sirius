@@ -1,0 +1,19 @@
+{
+  "source": "ALOS AW3D30 v4 (ALPSMLC30)",
+  "version": "4.1",
+  "bounds": [
+    103.596,
+    1.1443,
+    104.4309,
+    1.4835
+  ],
+  "datum": "EGM96",
+  "zooms": [
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "cloudFilledShare": 0.16395560045859192
+}

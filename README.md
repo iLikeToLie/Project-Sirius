@@ -34,7 +34,7 @@ pnpm install
 pnpm dev
 ```
 
-The terrain tiles in `public/dem/` are generated, not committed. Put the AW3D30 v4 tiles `N001E103.zip` and `N001E104.zip` (JAXA, free registration) in `Map/` and run `pnpm dem:build`. Without them the workspace still runs, but terrain predictions are flagged unknown.
+The terrain tiles in `public/dem/` are generated from JAXA AW3D30 and committed. To rebuild them, put the AW3D30 v4 tiles `N001E103.zip` and `N001E104.zip` (JAXA, free registration) in `Map/` and run `pnpm dem:build`.
 
 To verify and build the production site:
 
