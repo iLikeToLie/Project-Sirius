@@ -262,3 +262,35 @@ Calculation scope:
 The Version 3 Friis engine is unchanged. Terrain affects only antenna elevations
 and the 3D separation fed to it; the result remains a free-space estimate with no
 ridge obstruction, diffraction or Fresnel clearance modelling.
+
+-------------------------------------------------------------------------------
+Web Version 1.5.0 (based on workbook Version 3)
+Deployment: https://iliketolie.github.io/friis-rf-calculator/
+Date: 2026-10-26
+
+Function:
+Replaced the plan-view Link workspace with a map of Singapore holding up to six
+transmitter/receiver sensors.
+
+Key changes:
+- Full-bleed OneMap Grey map with hillshading; floating sensor list, selected-
+  sensor card and Link settings card (desktop layout).
+- Up to six sensors, each switchable between transmitter and receiver. Drag,
+  arrow-key nudge (Shift for 10 m) or typed latitude/longitude.
+- Each receiver has an intended transmitter (nearest by default) judged for
+  desired communication; every other transmitter it receives is judged for
+  interference. Intended links and above-threshold interference are drawn.
+- Free-space range zones (acceptable, weak, interference) for the selected
+  transmitter, using its linked receiver's settings, computed in a web worker.
+- Ground elevation from Terrain Tiles on AWS (Terrarium); sea areas count as
+  0 m and missing tiles are flagged rather than read as zero.
+- The Calculator, sweeps and placement table follow the active link (selected
+  receiver and its intended transmitter).
+- Scenario schema version 3. Web 1.4.0 and earlier scenarios open as two
+  sensors with terrain elevation off, so their results are unchanged.
+
+Calculation scope:
+The Version 3 Friis engine is unchanged. All sensors share one operating
+frequency. Results remain free-space estimates: terrain does not block the
+signal and there is no diffraction or Fresnel clearance modelling. The map
+requires an internet connection; map data (c) OneMap Singapore ODL v1.0.
