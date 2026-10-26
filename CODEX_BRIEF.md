@@ -92,19 +92,49 @@ The spec names five non-obvious test cases (Review Focus 1–5 in the plan):
 
 ---
 
-## Execution Instructions
+## Status: Tasks 1–4 Complete, 5–7 Remaining
 
-**Run each task atomically using superpowers:executing-plans.**
+**Completed (Codex):**
+- ✅ Task 1: AW3D30 → Terrarium Tiles — DEM build script, 854 tiles generated, tests pass
+- ✅ Task 2: Propagation Core — knife-edge diffraction & Bullington algorithm, tests pass
+- ✅ Task 3: Objectives & Pair Evaluation — schema v3→v4, objectives system, tests pass
+- ✅ Task 4: Radial Coverage Sweep — incremental coverage computation, tests pass
+- **Test status:** 120 tests passing, production build passes
 
-The plan file (`docs/superpowers/plans/2026-10-26-link-workspace-v2.md`) provides step-by-step checklists for each task. Follow them directly:
+**Blocked in Codex (sandbox restrictions):**
+- 🚫 Task 5: Workspace UI — partially implemented, needs browser verification (localhost/Chromium blocked)
+- 🚫 Task 6: Link-Budget Drawer — not started
+- 🚫 Task 7: Release Notes & Handoff — not started
 
-1. Red: write failing tests.
-2. Implement.
-3. Green: verify tests pass, build succeeds.
-4. Browser-drive (Tasks 5–6): Playwright scripts verify UI behavior.
-5. Commit atomically per task.
+**Blocker:** Sandbox environment cannot:
+- Bind to localhost for dev server (`EPERM` on port 5199)
+- Execute Chromium for browser tests
+- Create git commits
 
-After all 7 tasks: merge to main and cut release 1.6.0.
+## Next Steps for Continuation
+
+### Option A: Local Execution (Recommended)
+Start from the completed checkpoint. Tasks 5–7 require:
+1. Local dev server: `corepack pnpm dev` (port 5173, or configure in `vite.config.ts`)
+2. Browser testing: Run `scripts/e2e/drive-map.mjs` (Playwright + installed Chrome)
+3. Final commits and merge to `main`
+
+### Option B: Unrestricted Environment
+Continue in Codex or Claude Code session with:
+- Localhost binding allowed
+- Chromium/browser execution enabled
+- Git write permissions
+- Resume from checkpoint: `codex resume 01a178b0-0318-7b43-be19-0df65e791018`
+
+## Execution Instructions (for Tasks 5–7)
+
+Run each task atomically using superpowers:executing-plans (or manually in your IDE):
+
+1. **Task 5:** Workspace UI — coverage layer, rings, objective toggles, animation, compact cards
+2. **Task 6:** Link-Budget Drawer — Calculator merge phase 1
+3. **Task 7:** Release Notes — version 1.6.0, update docs, verify green
+
+After all 7 tasks: merge to `main` and cut release 1.6.0.
 
 ---
 
