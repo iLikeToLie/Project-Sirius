@@ -2,3 +2,11 @@ node_modules/
 dist/
 *.local
 *.tsbuildinfo
+
+# Local-only data and scratch (see docs/HANDOFF.md)
+.superpowers/
+Map/
+public/dem/
+# Third-party screenshots: not redistributable from a public repo
+Reference Images/
+design-exploration/uisp-reference.png

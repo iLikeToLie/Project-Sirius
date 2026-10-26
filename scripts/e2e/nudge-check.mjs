@@ -1,0 +1,21 @@
+import { chromium } from 'playwright-core';
+
+const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+await page.goto('http://localhost:5199/friis-rf-calculator/');
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.getByRole('button', { name: 'Link workspace' }).click();
+await page.waitForSelector('.sensor-marker.role-rx');
+await page.waitForTimeout(1500);
+const centre = async (sel) => { const b = await page.locator(sel).boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+const rxBefore = await centre('.sensor-marker.role-rx');
+await page.locator('.sensor-marker.role-tx').focus();
+for (const key of ['ArrowRight', 'ArrowRight', 'Shift+ArrowLeft', 'Shift+ArrowUp']) await page.keyboard.press(key);
+await page.waitForTimeout(800);
+const rxAfter = await centre('.sensor-marker.role-rx');
+const moved = Math.hypot(rxAfter.x - rxBefore.x, rxAfter.y - rxBefore.y);
+const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')).map.sensors[0]);
+console.log('other marker moved px:', moved.toFixed(1), moved < 1 ? 'PASS (map did not pan/rotate)' : 'FAIL (map panned or rotated)');
+console.log('tx stored', stored.lat.toFixed(7), stored.lon.toFixed(7));
+await browser.close();
