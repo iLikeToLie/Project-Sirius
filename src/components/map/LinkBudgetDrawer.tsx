@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { activePair } from '../../lib/activeLink';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
@@ -10,12 +10,13 @@ import { PathProfileChart } from './PathProfileChart';
 const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location / identifier', rxId: 'Rx location / identifier' } as const;
 
 /** The Calculator's inputs, results and Rx meter for the active link, writing back through `onEdit`. */
-export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
+export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle }: {
   state: AppState;
+  open: boolean;
+  onToggle: (open: boolean) => void;
   groundAt: GroundAt;
   onEdit: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => string | undefined;
 }) {
-  const [open, setOpen] = useState(false);
   const { map } = state;
   const pair = useMemo(() => activePair(map, groundAt), [map, groundAt]);
   const model = useMemo(() => {
@@ -49,7 +50,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
   return (
     <section className={`map-card link-budget-drawer${open ? '' : ' collapsed'} link-tone-${tone}`} aria-label="Link budget">
       <div className="drawer-bar">
-        <button type="button" className="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Link budget −' : 'Link budget +'}</button>
+        <button type="button" className="ghost" aria-expanded={open} onClick={() => onToggle(!open)}>{open ? 'Link budget −' : 'Link budget +'}</button>
         <span className="drawer-summary">{inputs.txId} → {inputs.rxId} · <b>{formatNumber(result.receivedPowerDbm)} dBm</b></span>
         <StatusBadge status={result.status} />
       </div>

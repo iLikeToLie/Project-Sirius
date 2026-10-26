@@ -47,7 +47,7 @@ export function LinkSettingsCard({ inputs, onChange }: { inputs: LinkInputs; onC
     <section className="map-card link-settings-card" aria-label="Link settings">
       <h3>Link settings</h3>
       <FrequencyControl frequencyGhz={inputs.frequencyGhz} onChange={(ghz) => onChange('frequencyGhz', ghz)} />
-      <div className="form-grid three">
+      <div className="loss-rows">
         <NumberField label="Polarization" unit="dB" min={0} value={inputs.polarizationLossDb} onChange={(v) => onChange('polarizationLossDb', v)} />
         <NumberField label="Environment" unit="dB" min={0} value={inputs.obstructionLossDb} onChange={(v) => onChange('obstructionLossDb', v)} />
         <NumberField label="Other" unit="dB" min={0} value={inputs.otherLossDb} onChange={(v) => onChange('otherLossDb', v)} />

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, List, Plus, Trash2 } from 'lucide-react';
 import { MAX_SENSORS, type PairResult, receiverSummary } from '../../lib/sensors';
 import type { Sensor } from '../../types';
 import { statusTone } from '../ui';
@@ -24,7 +24,7 @@ export function SensorListCard({ sensors, pairs, selectedId, onSelect, onAdd, on
   const [collapsed, setCollapsed] = useState(false);
   return (
     <section className={`map-card sensor-list-card${collapsed ? ' collapsed' : ''}`} aria-label="Sensors">
-      <div className="map-card-heading"><button type="button" className="ghost" aria-label={collapsed ? 'Expand sensors' : 'Collapse sensors'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? '☰' : 'Sensors −'}</button><span className="tag">{sensors.length} of {MAX_SENSORS}</span></div>
+      <div className="map-card-heading"><button type="button" className="ghost" aria-label={collapsed ? 'Expand sensors' : 'Collapse sensors'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <List size={15} /> : <><ChevronLeft size={14} /> Sensors</>}</button><span className="tag">{sensors.length} of {MAX_SENSORS}</span></div>
       <ul className="sensor-rows">
         {sensors.map((sensor) => {
           const status = sensorStatus(sensor, pairs);
