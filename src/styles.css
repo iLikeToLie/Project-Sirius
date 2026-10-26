@@ -595,3 +595,72 @@ tbody tr:hover { background: var(--surface-elevated); }
   .form-grid.two, .readouts { grid-template-columns: 1fr; }
   .workspace-canvas-panel { height: 62vh; min-height: 380px; }
 }
+
+/* Web 1.5.0 — Singapore map workspace (layout B: full-bleed map, floating cards) */
+.map-workspace { position: relative; height: max(620px, calc(100vh - 210px)); border: 1px solid var(--hairline); border-radius: 10px; overflow: clip; background: var(--canvas); }
+/* .maplibregl-map sets position: relative; this selector must outrank it. */
+.map-workspace .map-canvas { position: absolute; inset: 0; }
+.map-toolbar { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; pointer-events: none; }
+.map-toolbar > * { pointer-events: auto; }
+.map-toolbar .ghost { min-height: 36px; background: var(--surface-card); }
+.map-toolbar .icon-only { width: 36px; padding: 0; }
+.map-toolbar .is-on { color: var(--canvas); background: var(--yellow); border-color: var(--yellow); }
+.map-toolbar .switch { min-height: 36px; padding: 0 12px; border: 1px solid var(--hairline); border-radius: 7px; background: var(--surface-card); }
+.map-notice, .map-toolbar .refining { padding: 8px 10px; border-radius: 7px; background: var(--surface-card); border: 1px solid var(--hairline); color: var(--mute); font-size: 12px; margin-left: 0; }
+.map-notice { color: var(--yellow); }
+
+.map-card { position: absolute; z-index: 2; display: grid; gap: 12px; padding: 14px; background: var(--surface-card); border: 1px solid var(--hairline-strong); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); max-height: calc(100% - 76px); overflow-y: auto; }
+.map-card h3, .map-card h4 { margin: 0; font-size: 14px; }
+.map-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sensor-list-card { top: 64px; left: 12px; width: 310px; }
+.link-settings-card { top: 64px; left: 334px; width: 340px; }
+.selected-sensor-card { top: 64px; right: 12px; width: 380px; }
+
+.sensor-rows { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.sensor-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+.sensor-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 40px; padding: 6px 9px; color: var(--body); background: var(--canvas); border: 1px solid var(--hairline); border-radius: 7px; cursor: pointer; text-align: left; font-size: 12px; }
+.sensor-rows li.selected .sensor-row { border-color: var(--yellow); }
+.sensor-name { min-width: 4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.sensor-status { max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--mute); }
+.tone-good { color: var(--green); } .tone-warning { color: var(--yellow); } .tone-danger { color: var(--red); } .tone-safe { color: var(--blue); }
+.role-badge { padding: 2px 6px; border-radius: 5px; font-size: 10px; font-weight: 700; border: 1px solid currentColor; }
+.role-badge.role-tx { color: var(--yellow); } .role-badge.role-rx { color: var(--blue); }
+.icon-button { width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; color: var(--mute); background: transparent; border: 1px solid var(--hairline); border-radius: 7px; cursor: pointer; }
+.icon-button:hover { color: var(--red); border-color: var(--hairline-strong); }
+.add-sensor:disabled { opacity: .5; cursor: not-allowed; }
+.sensor-row:focus-visible, .icon-button:focus-visible, .sensor-name-input:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+
+.sensor-name-input { min-width: 0; flex: 1; height: 36px; padding: 0 10px; color: var(--ink); background: var(--canvas); border: 1px solid var(--hairline); border-radius: 7px; font-weight: 700; }
+.selected-sensor-card .segmented button { padding: 0 10px; }
+.sensor-results { display: grid; gap: 8px; }
+.result-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; font-size: 12px; color: var(--mute); }
+.result-line strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.field-note.danger, .result-line.danger span { color: var(--red); }
+.inline-select { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mute); }
+.inline-select select, .selected-sensor-card select { height: 34px; padding: 0 8px; color: var(--ink); background: var(--surface-elevated); border: 1px solid var(--hairline); border-radius: 7px; }
+.zone-legend { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.zone-legend ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--body); }
+.zone-legend li { display: flex; align-items: center; gap: 8px; }
+.swatch { width: 18px; height: 10px; border-radius: 3px; border: 1px solid currentColor; }
+.swatch-acceptable { color: var(--green); background: rgba(52, 211, 153, .25); }
+.swatch-weak { color: var(--yellow); background: rgba(255, 179, 71, .22); }
+.swatch-interference { color: var(--red); background: rgba(255, 107, 107, .32); }
+
+.sensor-marker { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-card); border: 2px solid var(--hairline-strong); color: var(--blue); cursor: grab; }
+.sensor-marker.role-tx { color: var(--yellow); border-color: var(--yellow); }
+.sensor-marker.role-rx.tone-good { border-color: var(--green); }
+.sensor-marker.role-rx.tone-warning { border-color: var(--yellow); }
+.sensor-marker.role-rx.tone-danger { border-color: var(--red); }
+.sensor-marker.selected { box-shadow: 0 0 0 4px var(--canvas), 0 0 0 6px var(--yellow); }
+.sensor-marker:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+.sensor-marker-label { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 4px; white-space: nowrap; color: var(--ink); background: var(--surface-card); border: 1px solid var(--hairline); font-size: 11px; font-weight: 700; }
+
+.map-workspace .maplibregl-ctrl-attrib { background: var(--surface-card); color: var(--mute); font-size: 10px; }
+.map-workspace .maplibregl-ctrl-attrib a { color: var(--body); }
+
+@media (max-width: 1000px) {
+  .map-workspace { height: auto; overflow: visible; border: 0; display: grid; gap: 12px; background: transparent; }
+  .map-workspace .map-canvas { position: relative; height: 60vh; border: 1px solid var(--hairline); border-radius: 10px; overflow: clip; }
+  .map-toolbar { position: static; order: -1; }
+  .map-card { position: static; width: auto; max-height: none; }
+}

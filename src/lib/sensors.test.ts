@@ -40,6 +40,13 @@ describe('sensor model', () => {
     expect(back.role).toBe('tx');
   });
 
+  it('renames auto-named sensors to match a new role but keeps typed names', () => {
+    let sensors = place([], 'tx', 0);
+    sensors = place(sensors, 'rx', 100);
+    expect(setRole(sensors[1], 'tx', sensors).name).toBe('T2');
+    expect(setRole({ ...sensors[1], name: 'Depot mast' }, 'tx', sensors).name).toBe('Depot mast');
+  });
+
   it('resolves auto to the nearest transmitter, ties by order', () => {
     let sensors = place([], 'tx', -100);
     sensors = place(sensors, 'tx', 100);

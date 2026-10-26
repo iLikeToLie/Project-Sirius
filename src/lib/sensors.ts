@@ -5,17 +5,24 @@ import { calculateLink, type LinkResult } from './rf';
 
 export const MAX_SENSORS = 6;
 
-export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, defaults: LinkInputs): Sensor {
-  const ids = new Set(existing.map((s) => s.id));
-  let n = existing.length + 1;
-  while (ids.has(`sensor-${n}`)) n += 1;
+const AUTO_NAME = /^[TR][1-9]\d*$/;
+
+/** First free T1, T2… (transmitters) or R1, R2… (receivers) among the given sensors. */
+function nextName(existing: Sensor[], role: SensorRole) {
   const prefix = role === 'tx' ? 'T' : 'R';
   const names = new Set(existing.map((s) => s.name));
   let k = 1;
   while (names.has(`${prefix}${k}`)) k += 1;
+  return `${prefix}${k}`;
+}
+
+export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, defaults: LinkInputs): Sensor {
+  const ids = new Set(existing.map((s) => s.id));
+  let n = existing.length + 1;
+  while (ids.has(`sensor-${n}`)) n += 1;
   return {
     id: `sensor-${n}`,
-    name: `${prefix}${k}`,
+    name: nextName(existing, role),
     role,
     lat: at.lat,
     lon: at.lon,
@@ -32,7 +39,11 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
 
 export const addSensor = (sensors: Sensor[], sensor: Sensor) => sensors.length >= MAX_SENSORS ? sensors : [...sensors, sensor];
 
-export const setRole = (sensor: Sensor, role: SensorRole): Sensor => ({ ...sensor, role });
+/** Auto-generated names (T1, R2…) follow the new role; names the user typed are kept. */
+export function setRole(sensor: Sensor, role: SensorRole, existing: Sensor[] = []): Sensor {
+  if (sensor.role === role || !AUTO_NAME.test(sensor.name)) return { ...sensor, role };
+  return { ...sensor, role, name: nextName(existing.filter((s) => s.id !== sensor.id), role) };
+}
 
 /** Receivers that named the removed sensor as their transmitter go back to the nearest one. */
 export const removeSensor = (sensors: Sensor[], id: string) => sensors

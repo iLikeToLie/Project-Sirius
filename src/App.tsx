@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, Antenna, BookOpen, Calculator, ChartLine, Download, FileDown, Github,
   MapPinned, RadioTower, RotateCcw, Save, Signal, Upload,
@@ -12,8 +12,11 @@ import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSw
 import { normalizeState, validateImport } from './lib/state';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
 import { activeInputs, applyInputEdit } from './lib/activeLink';
-import type { GroundAt } from './lib/elevation';
+import { useElevationTiles } from './components/map/useElevationTiles';
 import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningStatus } from './types';
+
+// MapLibre is large; load the map only when the Link workspace opens.
+const MapWorkspace = lazy(() => import('./components/map/MapWorkspace').then((m) => ({ default: m.MapWorkspace })));
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -51,8 +54,10 @@ function App() {
   const [view, setView] = useState<View>('calculator');
   const [savedFlash, setSavedFlash] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
-  // Elevation tiles arrive in the map task; until then ground is unknown.
-  const groundAt: GroundAt = useMemo(() => () => null, []);
+  const elevation = useElevationTiles();
+  const { groundAt } = elevation;
+  // The Calculator's active link needs sensor ground heights even when the map is not open.
+  useEffect(() => { if (state.map.useTerrainElevation) elevation.ensure(state.map.sensors); }, [state.map.sensors, state.map.useTerrainElevation, elevation.ensure]);
   // Every view reads the active link's inputs: the selected receiver and its intended transmitter.
   const viewState = useMemo(() => ({ ...state, inputs: activeInputs(state, groundAt) }), [state, groundAt]);
   const result = useMemo(() => calculateLink(viewState.inputs, state.linkObjective), [viewState.inputs, state.linkObjective]);
@@ -91,7 +96,7 @@ function App() {
   };
 
   const nav = [
-    ['calculator', Calculator, 'Calculator'], ['distance', ChartLine, 'Distance sweep'], ['gain', Antenna, 'Gain sweep'],
+    ['calculator', Calculator, 'Calculator'], ['workspace', RadioTower, 'Link workspace'], ['distance', ChartLine, 'Distance sweep'], ['gain', Antenna, 'Gain sweep'],
     ['placement', MapPinned, 'Placements'], ['guide', BookOpen, 'Guide'],
   ] as const;
 
@@ -119,6 +124,7 @@ function App() {
 
         <div className="content">
           {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} />}
+          {view === 'workspace' && <Suspense fallback={<p className="muted">Loading map…</p>}><MapWorkspace state={state} setState={setState} elevation={elevation} /></Suspense>}
           {view === 'distance' && <DistanceView state={viewState} setState={setState} />}
           {view === 'gain' && <GainView state={viewState} setState={setState} />}
           {view === 'placement' && <PlacementView state={viewState} setState={setState} />}
