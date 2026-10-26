@@ -532,9 +532,10 @@ tbody tr:hover { background: var(--surface-elevated); }
 .contour text { fill: var(--mute); font-size: 10px; opacity: .8; paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; }
 .threshold { fill: none; stroke-width: 1.5; opacity: .45; }
 .threshold.active { opacity: .9; }
-.threshold-sensitivity { stroke: var(--red); color: var(--red); }
+/* Same threshold semantics as the receiver meter (web 1.31.2): blue, green, red. */
+.threshold-sensitivity { stroke: var(--blue); color: var(--blue); }
 .threshold-required { stroke: var(--green); color: var(--green); }
-.threshold-interference { stroke: var(--yellow); color: var(--yellow); }
+.threshold-interference { stroke: var(--red); color: var(--red); }
 .link-line { stroke: var(--link-accent, var(--mute)); stroke-width: 1.5; stroke-dasharray: 2 5; opacity: .75; }
 
 .antenna { cursor: grab; outline: none; }
