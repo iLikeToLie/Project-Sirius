@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, Antenna, BookOpen, Calculator, ChartLine, Download, FileDown, Github,
-  MapPinned, RotateCcw, Save, Signal, Upload,
+  MapPinned, RadioTower, RotateCcw, Save, Signal, Upload,
 } from 'lucide-react';
 import {
   CategoryScale, Chart as ChartJS, Filler, Legend, LinearScale, LineElement, PointElement, Title, Tooltip,
@@ -10,6 +10,10 @@ import { Line } from 'react-chartjs-2';
 import { freshDefaultState } from './data/defaults';
 import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSweep } from './lib/rf';
 import { normalizeState } from './lib/state';
+import { PlacementWorkspace } from './components/PlacementWorkspace';
+import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
+import { solveTxForDistance } from './lib/linkGeometry';
+import { withWorkspace } from './lib/state';
 import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningStatus } from './types';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -17,7 +21,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const STORAGE_KEY = 'friis-rf-planner-v3-state';
 const REPO_URL = 'https://github.com/iLikeToLie/friis-rf-calculator';
 const WORKBOOK_URL = `${REPO_URL}/raw/main/Friis_RF_Link_and_Interference_Calculator_v3.xlsx`;
-type View = 'calculator' | 'distance' | 'gain' | 'placement' | 'guide';
+type View = 'calculator' | 'workspace' | 'distance' | 'gain' | 'placement' | 'guide';
 
 function loadState(): AppState {
   try {
@@ -26,33 +30,6 @@ function loadState(): AppState {
   } catch {
     return freshDefaultState();
   }
-}
-
-function StatusBadge({ status }: { status: ScreeningStatus }) {
-  return <span className={`status status-${status.toLowerCase().replaceAll(' ', '-')}`}>{status}</span>;
-}
-
-function statusTone(status: ScreeningStatus): 'good' | 'safe' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'Acceptable link') return 'good';
-  if (status === 'Below interference threshold') return 'safe';
-  if (status === 'Weak link') return 'warning';
-  if (status === 'Invalid input') return 'neutral';
-  return 'danger';
-}
-
-function NumberField({ label, value, unit, onChange, min, step = 'any', help }: {
-  label: string; value: number; unit: string; onChange: (value: number) => void; min?: number; step?: number | 'any'; help?: string;
-}) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <div className="input-with-unit">
-        <input type="number" value={Number.isFinite(value) ? value : ''} min={min} step={step} onChange={(event) => onChange(event.target.value === '' ? NaN : Number(event.target.value))} />
-        <b>{unit}</b>
-      </div>
-      {help && <small>{help}</small>}
-    </label>
-  );
 }
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
@@ -105,7 +82,7 @@ function App() {
   };
 
   const nav = [
-    ['calculator', Calculator, 'Calculator'], ['distance', ChartLine, 'Distance sweep'], ['gain', Antenna, 'Gain sweep'],
+    ['calculator', Calculator, 'Calculator'], ['workspace', RadioTower, 'Link workspace'], ['distance', ChartLine, 'Distance sweep'], ['gain', Antenna, 'Gain sweep'],
     ['placement', MapPinned, 'Placements'], ['guide', BookOpen, 'Guide'],
   ] as const;
 
@@ -113,7 +90,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Signal size={22} /></div><div><strong>FRIIS RF</strong><span>LINK MISSION CONTROL</span></div></div>
-        <span className="version-chip">WEB 1.31.2 · V3 MODEL</span>
+        <span className="version-chip">WEB 1.4.0 · V3 MODEL</span>
         <nav>{nav.map(([id, Icon, label]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}><Icon size={19} /><span>{label}</span></button>)}</nav>
         <div className="sidebar-note"><Activity size={18} /><p><b>Screening model</b><br />Free-space estimates support engineering review; they do not prove harmful interference.</p></div>
         <a className="repo-link" href={REPO_URL} target="_blank" rel="noreferrer"><Github size={18} /> View repository</a>
@@ -133,6 +110,7 @@ function App() {
 
         <div className="content">
           {view === 'calculator' && <CalculatorView state={state} setState={setState} setInput={setInput} result={result} />}
+          {view === 'workspace' && <PlacementWorkspace state={state} setState={setState} />}
           {view === 'distance' && <DistanceView state={state} setState={setState} />}
           {view === 'gain' && <GainView state={state} setState={setState} />}
           {view === 'placement' && <PlacementView state={state} setState={setState} />}
@@ -158,7 +136,7 @@ function CalculatorView({ state, setState, setInput, result }: { state: AppState
           </div>
         </div>
         <div className="form-section"><h3>Scenario</h3><div className="form-grid three"><TextField label="Scenario or link name" value={state.inputs.scenarioName} onChange={(value) => setInput('scenarioName', value)} /><TextField label="Tx location / identifier" value={state.inputs.txId} onChange={(value) => setInput('txId', value)} /><TextField label="Rx location / identifier" value={state.inputs.rxId} onChange={(value) => setInput('rxId', value)} /></div></div>
-        <div className="form-section"><h3>Signal and geometry</h3><div className="form-grid four"><NumberField label="Transmit power" value={state.inputs.transmitPowerDbm} unit="dBm" onChange={(value) => setInput('transmitPowerDbm', value)} help="Transmitter output before Tx loss" /><NumberField label="Operating frequency" value={state.inputs.frequencyGhz} unit="GHz" min={0.000001} onChange={(value) => setInput('frequencyGhz', value)} /><NumberField label="Tx-to-Rx distance" value={state.inputs.distanceM} unit="m" min={0.000001} onChange={(value) => setInput('distanceM', value)} /><NumberField label="Fade margin target" value={state.inputs.fadeMarginTargetDb} unit="dB" min={0} onChange={(value) => setInput('fadeMarginTargetDb', value)} /></div></div>
+        <div className="form-section"><h3>Signal and geometry</h3><div className="form-grid four"><NumberField label="Transmit power" value={state.inputs.transmitPowerDbm} unit="dBm" onChange={(value) => setInput('transmitPowerDbm', value)} help="Transmitter output before Tx loss" /><NumberField label="Operating frequency" value={state.inputs.frequencyGhz} unit="GHz" min={0.000001} onChange={(value) => setInput('frequencyGhz', value)} /><CommitField label="Tx-to-Rx 3D separation" value={state.inputs.distanceM} unit="m" help="Moves Tx along its bearing in the Link workspace" onCommit={(value) => { const solved = solveTxForDistance(state.workspace, value); if (!solved.ok) return solved.reason; setState((current) => withWorkspace(current, { ...current.workspace, tx: solved.tx })); return undefined; }} /><NumberField label="Fade margin target" value={state.inputs.fadeMarginTargetDb} unit="dB" min={0} onChange={(value) => setInput('fadeMarginTargetDb', value)} /></div></div>
         <div className="form-section"><h3>Antenna gain and losses</h3><div className="form-grid four"><NumberField label="Tx antenna gain" value={state.inputs.txGainDbi} unit="dBi" onChange={(value) => setInput('txGainDbi', value)} help="Gain toward the receiver" /><NumberField label="Rx antenna gain" value={state.inputs.rxGainDbi} unit="dBi" onChange={(value) => setInput('rxGainDbi', value)} help="Gain toward the transmitter" /><NumberField label="Tx cable & connector loss" value={state.inputs.txLossDb} unit="dB" min={0} onChange={(value) => setInput('txLossDb', value)} /><NumberField label="Rx cable & connector loss" value={state.inputs.rxLossDb} unit="dB" min={0} onChange={(value) => setInput('rxLossDb', value)} /><NumberField label="Polarization mismatch" value={state.inputs.polarizationLossDb} unit="dB" min={0} onChange={(value) => setInput('polarizationLossDb', value)} /><NumberField label="Obstruction / environment" value={state.inputs.obstructionLossDb} unit="dB" min={0} onChange={(value) => setInput('obstructionLossDb', value)} /><NumberField label="Other miscellaneous loss" value={state.inputs.otherLossDb} unit="dB" min={0} onChange={(value) => setInput('otherLossDb', value)} /></div></div>
         <div className="form-section"><h3>Receiver thresholds</h3><div className="form-grid three"><NumberField label="Receiver sensitivity" value={state.inputs.sensitivityDbm} unit="dBm" onChange={(value) => setInput('sensitivityDbm', value)} /><NumberField label="Interference threshold" value={state.inputs.interferenceThresholdDbm} unit="dBm" onChange={(value) => setInput('interferenceThresholdDbm', value)} /></div></div>
       </section>
@@ -245,10 +223,6 @@ function LinkSchematic({ state, result }: { state: AppState; result: ReturnType<
   );
 }
 
-function Metric({ label, value, unit, note }: { label: string; value: string; unit: string; note?: string }) {
-  return <div className="metric"><span>{label}</span><strong>{value} <small>{unit}</small></strong>{note && <p>{note}</p>}</div>;
-}
-
 function DistanceView({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
   const points = useMemo(() => distanceSweep(state.inputs, state.distanceSweep), [state.inputs, state.distanceSweep]);
   const setSetting = (key: keyof AppState['distanceSweep'], value: number) => setState((current) => ({ ...current, distanceSweep: { ...current.distanceSweep, [key]: value } }));
@@ -287,7 +261,7 @@ function PlacementView({ state, setState }: { state: AppState; setState: React.D
 }
 
 function GuideView() {
-  return <div className="guide-grid"><section className="panel guide-hero"><p className="eyebrow">WEB 1.31.2 · VERSION 3 MODEL</p><h2>How the calculator works</h2><p>The web app reproduces the Version 3 workbook's free-space link budget, distance sweep, selectable Tx/Rx gain sweep, and placement comparison. Web 1.31.2 uses a science-forward mission-control interface with status-responsive link colours and an objective-aware receiver meter. All calculations run locally in your browser.</p><a className="primary-button" href={WORKBOOK_URL}><FileDown size={18} /> Download the source workbook</a></section><section className="panel"><h3>Core equations</h3><div className="formula"><span>Free-space path loss</span><code>32.44 + 20 log₁₀(f MHz) + 20 log₁₀(d km)</code></div><div className="formula"><span>Received power</span><code>Pᵣ = Pₜ + Gₜ + Gᵣ − FSPL − total losses</code></div><div className="formula"><span>Link margin</span><code>Pᵣ − receiver sensitivity</code></div><div className="formula"><span>Interference margin</span><code>interference threshold − Pᵣ</code></div></section><section className="panel"><h3>Objective-based interpretation</h3><ul className="guide-list"><li><b>Desired communication:</b> acceptable when received power is above sensitivity by at least the fade target; the receiver meter shows sensitivity and the required receive level (sensitivity + fade-margin target).</li><li><b>Interference avoidance:</b> possible interference when predicted power meets or exceeds the screening threshold; the receiver meter shows sensitivity and the interference threshold.</li><li>The objective changes status interpretation and the relevant meter reference only. It does not change FSPL, received power, or either margin.</li></ul></section><section className="panel"><h3>Engineering limits</h3><p className="muted">Friis assumes free-space propagation and gains in the direction of the other antenna. Version 3 does not calculate antenna patterns, side-lobe coupling, terrain, diffraction, multipath, rain fade, Fresnel clearance, receiver bandwidth, duty cycle, true SNR, or aggregate interference. Add those effects as justified losses or use a dedicated propagation study.</p></section><section className="panel"><h3>Scenario files</h3><p className="muted">Changes auto-save only on this device. Export a JSON scenario to move it to another browser or keep a reviewed snapshot; importing replaces the current browser state.</p></section></div>;
+  return <div className="guide-grid"><section className="panel guide-hero"><p className="eyebrow">WEB 1.4.0 · VERSION 3 MODEL</p><h2>How the calculator works</h2><p>The web app reproduces the Version 3 workbook's free-space link budget, distance sweep, selectable Tx/Rx gain sweep, and placement comparison. Web 1.4.0 adds the Link workspace: place Tx and Rx on a plan view, optionally over synthetic terrain, and the calculator uses their 3D separation. All calculations run locally in your browser.</p><a className="primary-button" href={WORKBOOK_URL}><FileDown size={18} /> Download the source workbook</a></section><section className="panel"><h3>Core equations</h3><div className="formula"><span>Free-space path loss</span><code>32.44 + 20 log₁₀(f MHz) + 20 log₁₀(d km)</code></div><div className="formula"><span>Received power</span><code>Pᵣ = Pₜ + Gₜ + Gᵣ − FSPL − total losses</code></div><div className="formula"><span>Link margin</span><code>Pᵣ − receiver sensitivity</code></div><div className="formula"><span>Interference margin</span><code>interference threshold − Pᵣ</code></div></section><section className="panel"><h3>Objective-based interpretation</h3><ul className="guide-list"><li><b>Desired communication:</b> acceptable when received power is above sensitivity by at least the fade target; the receiver meter shows sensitivity and the required receive level (sensitivity + fade-margin target).</li><li><b>Interference avoidance:</b> possible interference when predicted power meets or exceeds the screening threshold; the receiver meter shows sensitivity and the interference threshold.</li><li>The objective changes status interpretation and the relevant meter reference only. It does not change FSPL, received power, or either margin.</li></ul></section><section className="panel"><h3>Engineering limits</h3><p className="muted">Friis assumes free-space propagation and gains in the direction of the other antenna. Version 3 does not calculate antenna patterns, side-lobe coupling, terrain, diffraction, multipath, rain fade, Fresnel clearance, receiver bandwidth, duty cycle, true SNR, or aggregate interference. Add those effects as justified losses or use a dedicated propagation study.</p></section><section className="panel"><h3>Link workspace and terrain</h3><ul className="guide-list"><li><b>Placement:</b> drag Tx and Rx, nudge them with arrow keys, or type X, Y and height above ground. The calculator distance is the 3D separation between the two antennas.</li><li><b>Elevation:</b> antenna elevation = ground elevation + height above ground. With synthetic terrain on, moving an antenna onto a ridge or into a valley changes its elevation and the separation.</li><li><b>Typed separation:</b> keeps Rx and both heights fixed and moves Tx along its current bearing; over terrain it picks the position nearest the current Tx, or explains why none exists.</li><li><b>Threshold boundaries:</b> where a receiver at the current Rx height would see sensitivity, the required level or the interference threshold. On flat ground they are circles; over terrain they follow the ground.</li><li><b>Limits:</b> the terrain is an illustrative synthetic model, not a surveyed site, and the result stays a free-space estimate: no ridge obstruction, diffraction or Fresnel clearance.</li></ul></section><section className="panel"><h3>Scenario files</h3><p className="muted">Changes auto-save only on this device, including antenna positions and terrain settings. Scenarios saved before web 1.4.0 open with flat ground and their original distance. Export a JSON scenario to move it to another browser or keep a reviewed snapshot; importing replaces the current browser state.</p></section></div>;
 }
 
 export default App;

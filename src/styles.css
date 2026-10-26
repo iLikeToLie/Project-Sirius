@@ -510,3 +510,87 @@ tbody tr:hover { background: var(--surface-elevated); }
   .results-column, .metric-grid, .guide-grid { grid-template-columns: 1fr; }
   .result-hero, .callout, .guide-hero { grid-column: auto; }
 }
+
+/* Web 1.4.0 — Link workspace (canvas + inspector) */
+.workspace-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); gap: 18px; align-items: start; }
+.workspace-canvas-panel { position: sticky; top: 84px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: min(760px, calc(100vh - 110px)); min-height: 460px; overflow: clip; }
+.workspace-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--hairline); }
+.workspace-toolbar .ghost { min-height: 36px; }
+.workspace-toolbar .icon-only { width: 36px; padding: 0; }
+.workspace-toolbar .is-on { color: var(--canvas); background: var(--yellow); border-color: var(--yellow); }
+.refining { margin-left: auto; color: var(--mute); font-size: 12px; }
+.workspace-stage { position: relative; min-height: 0; overflow: clip; background: var(--canvas); touch-action: none; }
+.workspace-svg { position: absolute; inset: 0; display: block; cursor: grab; user-select: none; }
+.workspace-svg:active { cursor: grabbing; }
+.signal-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; color: var(--link-accent, var(--mute)); }
+.workspace-hint { margin: 0; padding: 10px 14px; border-top: 1px solid var(--hairline); color: var(--mute); font-size: 12px; line-height: 1.5; }
+
+.grid-lines line { stroke: var(--hairline); stroke-width: 1; opacity: .7; }
+.grid-lines text { fill: var(--ash); font-size: 10px; }
+.contour path { fill: none; stroke: var(--mute); stroke-width: .7; opacity: .22; }
+.contour.major path { stroke-width: 1.2; opacity: .38; }
+.contour text { fill: var(--mute); font-size: 10px; opacity: .8; paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; }
+.threshold { fill: none; stroke-width: 1.5; opacity: .45; }
+.threshold.active { opacity: .9; }
+.threshold-sensitivity { stroke: var(--red); color: var(--red); }
+.threshold-required { stroke: var(--green); color: var(--green); }
+.threshold-interference { stroke: var(--yellow); color: var(--yellow); }
+.link-line { stroke: var(--link-accent, var(--mute)); stroke-width: 1.5; stroke-dasharray: 2 5; opacity: .75; }
+
+.antenna { cursor: grab; outline: none; }
+.antenna-hit { fill: transparent; }
+.antenna-ring { fill: var(--surface-card); stroke: var(--hairline-strong); stroke-width: 1.5; }
+.antenna svg { color: var(--ink); }
+.antenna-tx svg { color: var(--yellow); }
+.antenna.selected .antenna-ring { stroke: var(--yellow); stroke-width: 2; }
+.antenna:focus-visible .antenna-ring { stroke: var(--yellow); stroke-width: 3; }
+.antenna-role { fill: var(--ink); font-size: 11px; font-weight: 700; text-anchor: middle; }
+.antenna-name { fill: var(--mute); font-size: 10px; text-anchor: middle; }
+
+.separation-label { position: absolute; top: 0; left: 0; padding: 5px 9px; color: var(--ink); background: var(--surface-card); border: 1px solid var(--link-accent, var(--hairline)); border-radius: 6px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: text; }
+.separation-label:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2px; }
+.separation-editor { position: absolute; top: 0; left: 0; z-index: 2; width: 240px; display: grid; gap: 8px; padding: 12px; background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: 8px; }
+.editor-actions { display: flex; gap: 8px; }
+.editor-actions > * { flex: 1; }
+
+.workspace-inspector { display: grid; gap: 12px; }
+.workspace-inspector .metric { min-height: 0; }
+.inspector-section { display: grid; gap: 14px; padding: 16px; }
+.inspector-section h3 { margin: 0; font-size: 14px; }
+.inspector-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.segmented { display: inline-grid; grid-auto-flow: column; gap: 4px; padding: 3px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--canvas); }
+.segmented button { min-width: 44px; min-height: 32px; border: 1px solid transparent; border-radius: 5px; color: var(--mute); background: transparent; font-size: 12px; font-weight: 700; cursor: pointer; }
+.segmented button.active { color: var(--ink); background: var(--surface-card); border-color: var(--hairline); }
+.readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.readouts div { padding: 10px; border: 1px solid var(--hairline); border-radius: 7px; background: var(--canvas); }
+.readouts dt { color: var(--mute); font-size: 12px; }
+.readouts dd { margin: 4px 0 0; color: var(--ink); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.field-note { margin: 0; color: var(--ash); font-size: 12px; line-height: 1.5; }
+.field-error { color: var(--red); font-size: 12px; line-height: 1.4; }
+.field input:disabled { opacity: .5; cursor: not-allowed; }
+.switch { display: inline-flex; align-items: center; gap: 8px; color: var(--body); font-size: 13px; cursor: pointer; }
+.switch input { width: 18px; height: 18px; accent-color: var(--yellow); }
+
+.frequency-control { display: grid; gap: 8px; }
+.frequency-control input[type='range'] { width: 100%; accent-color: var(--yellow); }
+.range-scale { display: flex; justify-content: space-between; color: var(--ash); font-size: 11px; }
+
+.threshold-legend { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.threshold-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; }
+.threshold-row svg { margin-top: 5px; }
+.threshold-row line { stroke: currentColor; stroke-width: 2; }
+.threshold-row strong { color: var(--ink); font-size: 13px; }
+.threshold-row p { margin: 3px 0 0; color: var(--mute); font-size: 12px; line-height: 1.45; }
+.tag { color: var(--mute); font-size: 11px; }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+@media (max-width: 1000px) {
+  .workspace-layout { grid-template-columns: 1fr; }
+  .workspace-canvas-panel { position: relative; top: 0; height: 68vh; }
+}
+@media (max-width: 620px) {
+  .form-grid.two, .readouts { grid-template-columns: 1fr; }
+  .workspace-canvas-panel { height: 62vh; min-height: 380px; }
+}
