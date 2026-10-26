@@ -86,7 +86,10 @@ export function PlacementWorkspace({ state, setState }: { state: AppState; setSt
   const drag = useRef<Drag | null>(null);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [view, setView] = useState<View | null>(rememberedView);
-  const [draft, setDraft] = useState<LinkWorkspace | null>(null);
+  const [draft, setDraftState] = useState<LinkWorkspace | null>(null);
+  // Pointer-up can arrive before React renders the last move, so the drag commits from this ref.
+  const draftRef = useRef<LinkWorkspace | null>(null);
+  const setDraft = (next: LinkWorkspace | null) => { draftRef.current = next; setDraftState(next); };
   const [selected, setSelected] = useState<AntennaId>('tx');
   const [snap, setSnap] = useState(false);
   const [editor, setEditor] = useState<{ text: string; error: string } | null>(null);
@@ -181,10 +184,8 @@ export function PlacementWorkspace({ state, setState }: { state: AppState; setSt
     const pointer = screenToWorld(view, size, point);
     let next = { xM: pointer.xM + active.offset.xM, yM: pointer.yM + active.offset.yM };
     if (snap) next = snapToGrid(next, SNAP_M);
-    setDraft((current) => {
-      const base = current ?? state.workspace;
-      return { ...base, [active.id]: { ...base[active.id], xM: clampWorld(next.xM), yM: clampWorld(next.yM) } };
-    });
+    const base = draftRef.current ?? state.workspace;
+    setDraft({ ...base, [active.id]: { ...base[active.id], xM: clampWorld(next.xM), yM: clampWorld(next.yM) } });
   };
 
   const endDrag = (cancelled: boolean) => (event: PointerEvent<SVGSVGElement>) => {
@@ -193,9 +194,10 @@ export function PlacementWorkspace({ state, setState }: { state: AppState; setSt
     drag.current = null;
     setPanning(false);
     if (active.kind === 'antenna') {
-      if (!cancelled && draft) {
-        commit(draft);
-        setAnnouncement(`${active.id === 'tx' ? 'Transmitter' : 'Receiver'} placed. Separation ${formatDistance(separation3dM(draft))}.`);
+      const placed = draftRef.current;
+      if (!cancelled && placed) {
+        commit(placed);
+        setAnnouncement(`${active.id === 'tx' ? 'Transmitter' : 'Receiver'} placed. Separation ${formatDistance(separation3dM(placed))}.`);
       }
       setDraft(null);
     }
@@ -270,7 +272,7 @@ export function PlacementWorkspace({ state, setState }: { state: AppState; setSt
         <div ref={stageRef} className="workspace-stage">
           {view && size.width > 0 && (
             <svg
-              className="workspace-svg" width={size.width} height={size.height} role="img"
+              className="workspace-svg" width={size.width} height={size.height} role="group"
               aria-label={`Plan view. Transmitter and receiver ${formatDistance(separation)} apart.`}
               onPointerDown={startPan} onPointerMove={moveDrag} onPointerUp={endDrag(false)} onPointerCancel={endDrag(true)}
             >
