@@ -1,8 +1,8 @@
 # Friis RF Link & Interference Calculator
 
-A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.31.2** is based on **workbook Version 3** and presents its objective-based RF tools through a science-forward mission-control interface.
+A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.6.0** is based on **workbook Version 3** and presents its objective-based RF tools through a science-forward mission-control interface.
 
-**Live calculator:** [iliketolie.github.io/friis-rf-calculator](https://iliketolie.github.io/friis-rf-calculator/)
+**Live calculator:** [iliketolie.github.io/Project-Sirius](https://iliketolie.github.io/Project-Sirius/)
 
 ## Web calculator features
 
@@ -10,10 +10,15 @@ A browser-based RF link-budget and interference-screening tool using the Friis f
 - Link-objective toggle for **Desired communication** versus **Interference avoidance**, with status logic appropriate to each use case.
 - Dynamic Tx-to-Rx graphic with antenna symbols, stylized beams, distance, endpoint power and gain, cable losses, propagation losses, status animation, receiver thresholds, and an Rx power meter.
 - Objective-aware Rx meter: desired communication compares received power with sensitivity and the required receive level; interference avoidance compares it with sensitivity and the interference threshold.
+- Link workspace on a map of Singapore (OneMap Grey with hillshading): place up to six sensors, each switchable between transmitter and receiver; drag, nudge or type their positions.
+- Per-receiver objectives: each receiver's intended transmitter (nearest by default) is judged for communication, every other transmitter for interference; links and above-threshold interference are drawn on the map.
+- Terrain diffraction (ITU-R P.526 Bullington knife edge, 4/3 Earth radius) over ALOS AW3D30 ground, with a radial coverage map for the selected transmitter (acceptable, weak, interference) using its linked receiver's settings, computed in a web worker. Free-space range rings and a Free space model option remain.
+- Workspace default objective (Desired / Avoidance) with per-receiver overrides, a frequency-scaled transmit animation, compact collapsible cards, and a Link-budget drawer holding every Calculator input and result plus a path-profile chart.
+- Antenna elevation = ground + height above ground. All sensors share one operating frequency.
 - Distance sweep with received-power, sensitivity, and interference-threshold curves.
 - Antenna-gain sweep with a Tx/Rx selector and three editable comparison distances.
 - Ten-row placement comparison with editable gains, distances, losses, rankings, and statuses.
-- Automatic device-local saving plus JSON scenario import/export.
+- Automatic device-local saving plus JSON scenario import/export. Scenarios from 1.5.0 and earlier open with the free-space model, and 1.4.0 and earlier as two map sensors with terrain elevation off, with unchanged results.
 - Responsive layout for desktop, tablet, and mobile browsers.
 - Mission-control interface with monospaced editorial typography, deep-space surfaces, solar-amber emphasis, compact instrument controls, and accessible status colours.
 - Automated tests against known Version 3 workbook results.
@@ -28,6 +33,8 @@ Prerequisites: Node.js 22 or newer and pnpm.
 pnpm install
 pnpm dev
 ```
+
+The terrain tiles in `public/dem/` are generated from JAXA AW3D30 and committed. To rebuild them, put the AW3D30 v4 tiles `N001E103.zip` and `N001E104.zip` (JAXA, free registration) in `Map/` and run `pnpm dem:build`.
 
 To verify and build the production site:
 
@@ -46,4 +53,4 @@ The repository retains the four Excel releases and [VERSION_HISTORY.txt](VERSION
 
 ## Engineering scope
 
-This calculator is for preliminary engineering analysis. Friis assumes free-space propagation and antenna gains in the direction of the other antenna. It does not replace detailed propagation modelling, antenna-pattern analysis, coordination studies, or field measurements. A threshold exceedance is a screening flag, not proof of harmful interference.
+This calculator is for preliminary engineering analysis. Friis assumes free-space propagation and antenna gains in the direction of the other antenna. The map needs an internet connection; map data ©OneMap Singapore ODL v1.0, elevation ©JAXA, ALOS World 3D-30m (AW3D30). In terrain mode a single Bullington knife-edge diffraction loss is added per path; building heights, clutter, foliage, rain and multipath are not modelled. It does not replace detailed propagation modelling, antenna-pattern analysis, coordination studies, or field measurements. A threshold exceedance is a screening flag, not proof of harmful interference.
