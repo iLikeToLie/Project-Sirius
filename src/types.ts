@@ -74,6 +74,32 @@ export interface LinkWorkspace {
   terrain: TerrainSettings;
 }
 
+export type SensorRole = 'tx' | 'rx';
+
+/** A placed antenna. Both role's fields are kept so toggling TX/RX never loses values. */
+export interface Sensor {
+  id: string;
+  name: string;
+  role: SensorRole;
+  lat: number;
+  lon: number;
+  aglM: number;
+  gainDbi: number;
+  cableLossDb: number;
+  powerDbm: number;
+  sensitivityDbm: number;
+  fadeMarginTargetDb: number;
+  interferenceThresholdDbm: number;
+  intendedTxId: 'auto' | string;
+}
+
+export interface MapScenario {
+  sensors: Sensor[];
+  selectedId: string | null;
+  zonesForRxId: 'auto' | string;
+  useTerrainElevation: boolean;
+}
+
 export interface AppState {
   schemaVersion: 2;
   linkObjective: LinkObjective;
