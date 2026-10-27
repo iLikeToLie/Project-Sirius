@@ -28,7 +28,7 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
   const summary = sensor.role === 'rx' ? receiverSummary(pairs, sensor.id) : null;
   const served = pairs.filter((p) => p.txId === sensor.id && p.intended);
   const interferes = pairs.filter((p) => p.txId === sensor.id && !p.intended && p.result.status === 'Possible interference');
-  const nearestTx = sensor.role === 'rx' ? summary?.link && sensor.intendedTxId === 'auto' ? name(summary.link.txId) : null : null;
+  const nearestTx = sensor.role === 'rx' ? summary?.link && sensor.desiredTxIds === 'auto' ? name(summary.link.txId) : null : null;
   const num = (key: keyof Sensor, v: number, check?: (v: number) => string | undefined) => check?.(v) ?? onChange({ [key]: v });
   const nonNegative = (label: string) => (v: number) => (v < 0 ? `${label} cannot be negative.` : undefined);
 
@@ -75,7 +75,7 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
       {sensor.role === 'rx' && effectiveObjective(map, sensor) === 'desired' && (
         <label className="field">
           <span>Intended transmitter</span>
-          <select value={sensor.intendedTxId} onChange={(event) => onChange({ intendedTxId: event.target.value })}>
+          <select value={sensor.desiredTxIds === 'auto' ? 'auto' : sensor.desiredTxIds[0] ?? 'auto'} onChange={(event) => onChange({ desiredTxIds: event.target.value === 'auto' ? 'auto' : [event.target.value] })}>
             <option value="auto">{nearestTx ? `Auto (nearest: ${nearestTx})` : 'Auto (nearest)'}</option>
             {transmitters.map((tx) => <option key={tx.id} value={tx.id}>{tx.name}</option>)}
           </select>

@@ -90,7 +90,7 @@ export interface Sensor {
   sensitivityDbm: number;
   fadeMarginTargetDb: number;
   interferenceThresholdDbm: number;
-  intendedTxId: 'auto' | string;
+  desiredTxIds: 'auto' | string[];
   objective: 'default' | LinkObjective;
 }
 
@@ -104,7 +104,7 @@ export interface MapScenario {
 }
 
 export interface AppState {
-  schemaVersion: 4;
+  schemaVersion: 5;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;

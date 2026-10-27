@@ -19,7 +19,7 @@ describe('sensor model', () => {
     const t1 = createSensor([], 'tx', SG_REFERENCE, defaults);
     expect([t1.powerDbm, t1.gainDbi, t1.cableLossDb, t1.aglM]).toEqual([30, 12, 1.5, 10]);
     const r1 = createSensor([t1], 'rx', SG_REFERENCE, defaults);
-    expect([r1.gainDbi, r1.cableLossDb, r1.sensitivityDbm, r1.intendedTxId]).toEqual([15, 1, -85, 'auto']);
+    expect([r1.gainDbi, r1.cableLossDb, r1.sensitivityDbm, r1.desiredTxIds]).toEqual([15, 1, -85, 'auto']);
     expect(r1.id).not.toBe(t1.id);
   });
 
@@ -51,11 +51,11 @@ describe('sensor model', () => {
     let sensors = place([], 'tx', 0);
     sensors = place(sensors, 'tx', 50);
     sensors = place(sensors, 'rx', 100);
-    sensors = sensors.map((s) => (s.role === 'rx' ? { ...s, intendedTxId: sensors[1].id } : s));
+    sensors = sensors.map((s) => (s.role === 'rx' ? { ...s, desiredTxIds: [sensors[1].id] } : s));
     const after = changeRole(sensors, sensors[1].id, 'rx');
     expect(after[1].role).toBe('rx');
-    expect(after[2].intendedTxId).toBe('auto');
-    expect(changeRole(after, sensors[1].id, 'tx')[2].intendedTxId).toBe('auto');
+    expect(after[2].desiredTxIds).toBe('auto');
+    expect(changeRole(after, sensors[1].id, 'tx')[2].desiredTxIds).toBe('auto');
   });
 
   it('resolves auto to the nearest transmitter, ties by order', () => {
@@ -70,10 +70,10 @@ describe('sensor model', () => {
   it('reverts receivers to auto when their transmitter is deleted', () => {
     let sensors = place([], 'tx', 0);
     sensors = place(sensors, 'rx', 100);
-    sensors = sensors.map((s) => s.role === 'rx' ? { ...s, intendedTxId: sensors[0].id } : s);
+    sensors = sensors.map((s) => s.role === 'rx' ? { ...s, desiredTxIds: [sensors[0].id] } : s);
     const after = removeSensor(sensors, sensors[0].id);
     expect(after).toHaveLength(1);
-    expect(after[0].intendedTxId).toBe('auto');
+    expect(after[0].desiredTxIds).toBe('auto');
   });
 
   it('has no intended transmitter when none exist', () => {
@@ -128,7 +128,7 @@ describe('sensor model', () => {
     sensors = place(sensors, 'tx', 5000);
     sensors = place(sensors, 'rx', 100);
     const rx = sensors[3];
-    const linked = sensors.map((s) => s.id === rx.id ? { ...s, intendedTxId: sensors[2].id } : s);
+    const linked = sensors.map((s) => s.id === rx.id ? { ...s, desiredTxIds: [sensors[2].id] } : s);
     const pairs = evaluatePairs(scenario(linked), defaults, flat);
     const summary = receiverSummary(pairs, rx.id);
     expect(summary.link?.txId).toBe(sensors[2].id);

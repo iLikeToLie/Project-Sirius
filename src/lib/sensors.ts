@@ -34,7 +34,7 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     sensitivityDbm: defaults.sensitivityDbm,
     fadeMarginTargetDb: defaults.fadeMarginTargetDb,
     interferenceThresholdDbm: defaults.interferenceThresholdDbm,
-    intendedTxId: 'auto',
+    desiredTxIds: 'auto',
     objective: 'default',
   };
 }
@@ -51,14 +51,20 @@ export function setRole(sensor: Sensor, role: SensorRole, existing: Sensor[] = [
 export function changeRole(sensors: Sensor[], id: string, role: SensorRole): Sensor[] {
   return sensors.map((s) => {
     if (s.id === id) return setRole(s, role, sensors);
-    return role === 'rx' && s.intendedTxId === id ? { ...s, intendedTxId: 'auto' } : s;
+    if (role !== 'rx' || s.desiredTxIds === 'auto' || !s.desiredTxIds.includes(id)) return s;
+    const desiredTxIds = s.desiredTxIds.filter((txId) => txId !== id);
+    return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : ('auto' as const) };
   });
 }
 
 /** Receivers that named the removed sensor as their transmitter go back to the nearest one. */
 export const removeSensor = (sensors: Sensor[], id: string) => sensors
   .filter((s) => s.id !== id)
-  .map((s) => s.intendedTxId === id ? { ...s, intendedTxId: 'auto' } : s);
+  .map((s) => {
+    if (s.desiredTxIds === 'auto' || !s.desiredTxIds.includes(id)) return s;
+    const desiredTxIds = s.desiredTxIds.filter((txId) => txId !== id);
+    return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : ('auto' as const) };
+  });
 
 export function groundOf(s: Sensor, groundAt: GroundAt, useTerrain: boolean): number | null {
   return useTerrain ? groundAt(s) : 0;
@@ -78,7 +84,7 @@ export const effectiveObjective = (map: MapScenario, rx: Sensor) => rx.objective
 export function resolveIntendedTx(scenario: MapScenario, rx: Sensor, groundAt: GroundAt): Sensor | null {
   if (effectiveObjective(scenario, rx) === 'avoidance') return null;
   const transmitters = scenario.sensors.filter((s) => s.role === 'tx');
-  const named = transmitters.find((s) => s.id === rx.intendedTxId);
+  const named = rx.desiredTxIds === 'auto' ? undefined : transmitters.find((s) => s.id === rx.desiredTxIds[0]);
   if (named) return named;
   let best: Sensor | null = null;
   let bestDistance = Infinity;

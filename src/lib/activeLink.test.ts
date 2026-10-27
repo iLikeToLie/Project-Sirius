@@ -31,7 +31,7 @@ describe('active link', () => {
     expect(zoneReceiver(map(sensors), T1.id, flat)).toMatchObject({ rx: { id: R1.id }, reason: 'linked' });
     expect(zoneReceiver(map(sensors, { zonesForRxId: R3.id }), T1.id, flat)).toMatchObject({ rx: { id: R3.id }, reason: 'linked' });
     expect(zoneReceiver(map(sensors, { zonesForRxId: R2.id }), T1.id, flat)).toMatchObject({ rx: { id: R1.id }, reason: 'linked' });
-    const lonely = [T1, T2, { ...R1, intendedTxId: T2.id }];
+    const lonely = [T1, T2, { ...R1, desiredTxIds: [T2.id] }];
     expect(zoneReceiver(map(lonely), T1.id, flat)).toMatchObject({ rx: { id: R1.id }, reason: 'nearest' });
     expect(zoneReceiver(map([T1]), T1.id, flat)).toBeNull();
   });
