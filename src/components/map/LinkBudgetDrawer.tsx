@@ -17,7 +17,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
 }) {
   const [open, setOpen] = useState(false);
   const { map } = state;
-  const pair = useMemo(() => activePair(map, groundAt), [map, groundAt]);
+  const pair = useMemo(() => activePair(map, groundAt, state.inputs), [map, groundAt, state.inputs]);
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);

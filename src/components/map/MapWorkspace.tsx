@@ -5,7 +5,7 @@ import { coverageZones } from '../../lib/coverage';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor, resolveIntendedTx } from '../../lib/sensors';
+import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
@@ -70,8 +70,8 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     return next === m.sensors ? m : { ...m, sensors: next, selectedId: sensor.id };
   });
 
-  // Zones belong to the selected transmitter, or the selected receiver's intended transmitter.
-  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? resolveIntendedTx(liveMap, selected, groundAt) ?? activePair(liveMap, groundAt)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt]);
+  // Zones belong to the selected transmitter, or the selected receiver's strongest desired transmitter.
+  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? activePair(liveMap, groundAt, state.inputs)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt, state.inputs]);
   const zone = useMemo(() => (zoneTx ? zoneReceiver(liveMap, zoneTx.id, groundAt) : null), [zoneTx, liveMap, groundAt]);
   const linkedRxIds = zoneTx ? pairs.filter((p) => p.txId === zoneTx.id && p.intended).map((p) => p.rxId) : [];
 
@@ -164,7 +164,8 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const tones: Record<string, string> = Object.fromEntries(sensors.map((s) => {
     if (s.role === 'tx') return [s.id, 'tx'];
     const summary = receiverSummary(pairs, s.id);
-    return [s.id, summary.interferersAbove ? 'danger' : summary.link ? statusTone(summary.link.result.status) : 'neutral'];
+    const link = summary.links[0];
+    return [s.id, summary.interferersAbove ? 'danger' : link ? statusTone(link.result.status) : 'neutral'];
   }));
 
   return (

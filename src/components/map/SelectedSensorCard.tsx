@@ -26,9 +26,10 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
   const name = (id: string) => map.sensors.find((s) => s.id === id)?.name ?? '—';
   const transmitters = map.sensors.filter((s) => s.role === 'tx');
   const summary = sensor.role === 'rx' ? receiverSummary(pairs, sensor.id) : null;
+  const link = summary?.links[0];
   const served = pairs.filter((p) => p.txId === sensor.id && p.intended);
   const interferes = pairs.filter((p) => p.txId === sensor.id && !p.intended && p.result.status === 'Possible interference');
-  const nearestTx = sensor.role === 'rx' ? summary?.link && sensor.desiredTxIds === 'auto' ? name(summary.link.txId) : null : null;
+  const nearestTx = sensor.role === 'rx' ? link && sensor.desiredTxIds === 'auto' ? name(link.txId) : null : null;
   const num = (key: keyof Sensor, v: number, check?: (v: number) => string | undefined) => check?.(v) ?? onChange({ [key]: v });
   const nonNegative = (label: string) => (v: number) => (v < 0 ? `${label} cannot be negative.` : undefined);
 
@@ -83,10 +84,10 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
       )}
 
       <div className="sensor-results" aria-live="polite">
-        {sensor.role === 'rx' && summary && (summary.link ? (
+        {sensor.role === 'rx' && summary && (link ? (
           <>
-            <div className="result-line"><span>Link from {name(summary.link.txId)}</span><strong>{formatNumber(summary.link.result.receivedPowerDbm)} dBm</strong><StatusBadge status={summary.link.result.status} /></div>
-            <p className="field-note">{summary.link.clearance} · Diffraction {formatNumber(summary.link.propagationLossDb)} dB · {formatDistance(summary.link.distanceM)} 3D separation{summary.link.elevationKnown ? '' : '. Elevation unavailable for this path; terrain prediction is unknown.'}</p>
+            <div className="result-line"><span>Link from {name(link.txId)}</span><strong>{formatNumber(link.result.receivedPowerDbm)} dBm</strong><StatusBadge status={link.result.status} /></div>
+            <p className="field-note">{link.clearance} · Diffraction {formatNumber(link.propagationLossDb)} dB · {formatDistance(link.distanceM)} 3D separation{link.elevationKnown ? '' : '. Elevation unavailable for this path; terrain prediction is unknown.'}</p>
             {summary.worstInterferer
               ? <div className="result-line danger"><span>Worst interferer {name(summary.worstInterferer.txId)}</span><strong>{formatNumber(summary.worstInterferer.result.receivedPowerDbm)} dBm</strong><StatusBadge status={summary.worstInterferer.result.status} /></div>
               : <p className="field-note">No other transmitter reaches its {formatNumber(sensor.interferenceThresholdDbm, 1)} dBm interference threshold.</p>}

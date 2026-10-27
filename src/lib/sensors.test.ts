@@ -3,8 +3,9 @@ import { DEFAULT_STATE } from '../data/defaults';
 import type { MapScenario, Sensor, SensorRole } from '../types';
 import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
+import { calculateLink } from './rf';
 import {
-  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, receiverSummary, removeSensor, resolveIntendedTx, setRole,
+  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, receiverSummary, removeSensor, resolveDesiredTxs, setRole, type PairResult,
 } from './sensors';
 
 const flat: GroundAt = () => 0;
@@ -13,6 +14,59 @@ const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSe
 const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation });
 const LINK = ['Acceptable link', 'Weak link', 'No link'];
 const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
+const [T1, T2, T3, R1, R2] = place(place(place(place(place([], 'tx', 0), 'tx', 1000), 'tx', 2000), 'rx', 200), 'rx', 400);
+const sensorsWithLinks: Sensor[] = [T1, T2, { ...R1, desiredTxIds: [T1.id, T2.id] }, { ...R2, desiredTxIds: [T1.id] }];
+const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[] => powers.map(([txId, power]) => ({
+  txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, clearance: 'unknown',
+  result: { ...calculateLink(defaults, 'desired'), receivedPowerDbm: power },
+}));
+
+describe('desired transmitter sets', () => {
+  it('returns every listed transmitter in sensor order, ignoring missing and receiver ids', () => {
+    const rx = { ...R1, desiredTxIds: [T2.id, 'missing', R2.id, T1.id] };
+    expect(resolveDesiredTxs(scenario([T1, T2, rx, R2]), rx, flat).map((s) => s.name)).toEqual(['T1', 'T2']);
+  });
+
+  it('returns one nearest transmitter for auto and none for avoidance', () => {
+    expect(resolveDesiredTxs(scenario([T1, T2, R1]), R1, flat)).toEqual([T1]);
+    const rx: Sensor = { ...R1, desiredTxIds: [T1.id, T2.id], objective: 'avoidance' };
+    expect(resolveDesiredTxs(scenario([T1, T2, rx]), rx, flat)).toEqual([]);
+    expect(rx.desiredTxIds).toEqual([T1.id, T2.id]);
+    expect(resolveDesiredTxs(scenario([T1, T2, rx]), { ...rx, objective: 'desired' }, flat)).toEqual([T1, T2]);
+  });
+
+  it('marks every listed transmitter as desired and the others as interference', () => {
+    const pairs = evaluatePairs(scenario([T1, T2, T3, { ...R1, desiredTxIds: [T1.id, T2.id] }]), defaults, flat);
+    expect(pairs.filter((p) => p.rxId === R1.id && p.intended).map((p) => p.txId)).toEqual([T1.id, T2.id]);
+    expect(pairs.find((p) => p.txId === T3.id)?.intended).toBe(false);
+    expect(pairs.filter((p) => p.intended).every((p) => LINK.includes(p.result.status))).toBe(true);
+    expect(INTERFERENCE).toContain(pairs.find((p) => p.txId === T3.id)?.result.status);
+  });
+
+  it('sorts desired links by received power, best first, ties by transmitter id', () => {
+    const pairs = pairsWithPowers(R1.id, [['T2', -70], ['T1', -70], ['T3', -60]]);
+    expect(receiverSummary(pairs, R1.id).links.map((p) => p.txId)).toEqual(['T3', 'T1', 'T2']);
+    expect(pairs.map((p) => p.txId)).toEqual(['T2', 'T1', 'T3']);
+  });
+
+  it('keeps unknown-power desired links behind finite links', () => {
+    const pairs = pairsWithPowers(R1.id, [['T1', NaN], ['T2', -60]]);
+    expect(receiverSummary(pairs, R1.id).links.map((p) => p.txId)).toEqual(['T2', 'T1']);
+  });
+
+  it('drops a transmitter from every list when it becomes a receiver', () => {
+    const after = changeRole(sensorsWithLinks, T1.id, 'rx');
+    expect(after.find((s) => s.id === R1.id)?.desiredTxIds).toEqual([T2.id]);
+    expect(after.find((s) => s.id === R2.id)?.desiredTxIds).toBe('auto');
+    expect(sensorsWithLinks.find((s) => s.id === R1.id)?.desiredTxIds).toEqual([T1.id, T2.id]);
+  });
+
+  it('drops a removed transmitter from every list, reverting only empty lists to auto', () => {
+    const after = removeSensor(sensorsWithLinks, T1.id);
+    expect(after.find((s) => s.id === R1.id)?.desiredTxIds).toEqual([T2.id]);
+    expect(after.find((s) => s.id === R2.id)?.desiredTxIds).toBe('auto');
+  });
+});
 
 describe('sensor model', () => {
   it('creates sensors from calculator defaults', () => {
@@ -62,9 +116,9 @@ describe('sensor model', () => {
     let sensors = place([], 'tx', -100);
     sensors = place(sensors, 'tx', 100);
     sensors = place(sensors, 'rx', 0);
-    expect(resolveIntendedTx(scenario(sensors), sensors[2], flat)?.name).toBe('T1');
+    expect(resolveDesiredTxs(scenario(sensors), sensors[2], flat)[0]?.name).toBe('T1');
     sensors = place(sensors, 'rx', 60);
-    expect(resolveIntendedTx(scenario(sensors), sensors[3], flat)?.name).toBe('T2');
+    expect(resolveDesiredTxs(scenario(sensors), sensors[3], flat)[0]?.name).toBe('T2');
   });
 
   it('reverts receivers to auto when their transmitter is deleted', () => {
@@ -81,10 +135,10 @@ describe('sensor model', () => {
     sensors = place(sensors, 'rx', 100);
     sensors = [setRole(sensors[0], 'rx'), sensors[1]];
     const s = scenario(sensors);
-    expect(resolveIntendedTx(s, sensors[1], flat)).toBeNull();
+    expect(resolveDesiredTxs(s, sensors[1], flat)).toEqual([]);
     const pairs = evaluatePairs(s, defaults, flat);
     expect(pairs).toEqual([]);
-    expect(receiverSummary(pairs, sensors[1].id).link).toBeNull();
+    expect(receiverSummary(pairs, sensors[1].id).links).toEqual([]);
   });
 
   it('judges intended pairs as desired and others as avoidance', () => {
@@ -131,7 +185,7 @@ describe('sensor model', () => {
     const linked = sensors.map((s) => s.id === rx.id ? { ...s, desiredTxIds: [sensors[2].id] } : s);
     const pairs = evaluatePairs(scenario(linked), defaults, flat);
     const summary = receiverSummary(pairs, rx.id);
-    expect(summary.link?.txId).toBe(sensors[2].id);
+    expect(summary.links[0]?.txId).toBe(sensors[2].id);
     expect(summary.interferersAbove).toBe(2);
     expect(summary.worstInterferer?.txId).toBe(sensors[1].id); // T2 is 50 m away, T1 100 m
   });
@@ -143,7 +197,7 @@ describe('terrain and objectives', () => {
   it('resolves default and override without changing another receiver', () => {
     const before = evaluatePairs(m(), defaults, flat);
     const changed = { ...m(), sensors: sensors.map((s, i) => i === 1 ? { ...s, objective: 'avoidance' as const } : s), selectedId: sensors[1].id };
-    expect(resolveIntendedTx(changed, changed.sensors[1], flat)).toBeNull();
+    expect(resolveDesiredTxs(changed, changed.sensors[1], flat)).toEqual([]);
     expect(evaluatePairs(changed, defaults, flat)[0].intended).toBe(false);
     expect(evaluatePairs(changed, defaults, flat)[1]).toEqual(before[1]);
     expect(effectiveObjective({ ...m(), defaultObjective: 'avoidance' }, { ...sensors[1], objective: 'default' })).toBe('avoidance');

@@ -47,7 +47,7 @@ export function setRole(sensor: Sensor, role: SensorRole, existing: Sensor[] = [
   return { ...sensor, role, name: nextName(existing.filter((s) => s.id !== sensor.id), role) };
 }
 
-/** Sets one sensor's role; receivers that named it as their transmitter go back to the nearest one. */
+/** Sets one sensor's role and removes it from desired lists when it becomes a receiver. */
 export function changeRole(sensors: Sensor[], id: string, role: SensorRole): Sensor[] {
   return sensors.map((s) => {
     if (s.id === id) return setRole(s, role, sensors);
@@ -57,7 +57,7 @@ export function changeRole(sensors: Sensor[], id: string, role: SensorRole): Sen
   });
 }
 
-/** Receivers that named the removed sensor as their transmitter go back to the nearest one. */
+/** Removes a sensor and its desired links; an emptied list returns to auto. */
 export const removeSensor = (sensors: Sensor[], id: string) => sensors
   .filter((s) => s.id !== id)
   .map((s) => {
@@ -81,18 +81,18 @@ export function separationM(a: Sensor, b: Sensor, groundAt: GroundAt, useTerrain
 
 export const effectiveObjective = (map: MapScenario, rx: Sensor) => rx.objective === 'default' ? map.defaultObjective : rx.objective;
 
-export function resolveIntendedTx(scenario: MapScenario, rx: Sensor, groundAt: GroundAt): Sensor | null {
-  if (effectiveObjective(scenario, rx) === 'avoidance') return null;
+export function resolveDesiredTxs(scenario: MapScenario, rx: Sensor, groundAt: GroundAt): Sensor[] {
+  if (effectiveObjective(scenario, rx) === 'avoidance') return [];
   const transmitters = scenario.sensors.filter((s) => s.role === 'tx');
-  const named = rx.desiredTxIds === 'auto' ? undefined : transmitters.find((s) => s.id === rx.desiredTxIds[0]);
-  if (named) return named;
+  const desiredTxIds = rx.desiredTxIds;
+  if (desiredTxIds !== 'auto') return transmitters.filter((s) => desiredTxIds.includes(s.id));
   let best: Sensor | null = null;
   let bestDistance = Infinity;
   for (const tx of transmitters) {
     const d = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
     if (d < bestDistance) { best = tx; bestDistance = d; }
   }
-  return best;
+  return best ? [best] : [];
 }
 
 export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number): LinkInputs {
@@ -122,15 +122,15 @@ export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, freque
   return bullingtonLossDb(profile, profile.groundM[0] + tx.aglM, profile.groundM[profile.groundM.length - 1] + rx.aglM, frequencyGhz);
 }
 
-/** Every Tx→Rx pair: the receiver's intended pair as desired communication, the rest as interference. */
+/** Every Tx→Rx pair: the receiver's desired set as communication, the rest as interference. */
 export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundAt: GroundAt): PairResult[] {
   const known = (s: Sensor) => groundOf(s, groundAt, scenario.useTerrainElevation) !== null;
   const pairs: PairResult[] = [];
   for (const rx of scenario.sensors.filter((s) => s.role === 'rx')) {
-    const intendedId = resolveIntendedTx(scenario, rx, groundAt)?.id;
+    const desired = resolveDesiredTxs(scenario, rx, groundAt);
     for (const tx of scenario.sensors.filter((s) => s.role === 'tx')) {
       const distanceM = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
-      const intended = tx.id === intendedId;
+      const intended = desired.some((d) => d.id === tx.id);
       const propagation = pairPropagation(scenario, tx, rx, shared.frequencyGhz, groundAt);
       const inputs = pairInputs(shared, tx, rx, distanceM);
       inputs.otherLossDb += propagation.lossDb;
@@ -153,5 +153,7 @@ export function receiverSummary(pairs: PairResult[], rxId: string) {
   const mine = pairs.filter((p) => p.rxId === rxId);
   const interferers = mine.filter((p) => !p.intended && p.result.status === 'Possible interference');
   const worstInterferer = interferers.reduce<PairResult | null>((worst, p) => !worst || p.result.receivedPowerDbm > worst.result.receivedPowerDbm ? p : worst, null);
-  return { link: mine.find((p) => p.intended) ?? null, worstInterferer, interferersAbove: interferers.length };
+  const power = (p: PairResult) => Number.isFinite(p.result.receivedPowerDbm) ? p.result.receivedPowerDbm : -Infinity;
+  const links = mine.filter((p) => p.intended).sort((a, b) => power(b) - power(a) || a.txId.localeCompare(b.txId));
+  return { links, worstInterferer, interferersAbove: interferers.length };
 }
