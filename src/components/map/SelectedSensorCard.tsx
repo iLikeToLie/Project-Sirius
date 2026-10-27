@@ -76,7 +76,7 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
       {sensor.role === 'rx' && effectiveObjective(map, sensor) === 'desired' && (
         <fieldset className="desired-transmitters">
           <legend>Desired transmitters</legend>
-          <label className="switch"><input type="checkbox" checked={sensor.desiredTxIds === 'auto'} onChange={() => onChange({ desiredTxIds: 'auto' })} />{nearestTx ? `Auto (nearest: ${nearestTx})` : 'Auto (nearest)'}</label>
+          <label className="switch"><input type="checkbox" checked={sensor.desiredTxIds === 'auto'} disabled={sensor.desiredTxIds === 'auto'} onChange={() => onChange({ desiredTxIds: 'auto' })} />{nearestTx ? `Auto (nearest: ${nearestTx})` : 'Auto (nearest)'}</label>
           {transmitters.map((tx) => <label className="switch" key={tx.id}><input type="checkbox" checked={sensor.desiredTxIds !== 'auto' && sensor.desiredTxIds.includes(tx.id)} onChange={() => onChange({ desiredTxIds: toggleDesired(sensor.desiredTxIds, tx.id, transmitters.map((s) => s.id)) })} />{tx.name}</label>)}
         </fieldset>
       )}

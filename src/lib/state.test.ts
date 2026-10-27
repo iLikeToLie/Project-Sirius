@@ -43,6 +43,12 @@ describe('scenario state', () => {
     expect(state.map.sensors.find((s) => s.role === 'rx')?.desiredTxIds).toEqual(['sensor-1']);
   });
 
+  it('opens a saved receiver with an empty intendedTxId on auto instead of rejecting the map', () => {
+    const state = normalizeState(v4WithReceiver({ intendedTxId: '' }) as unknown as Partial<AppState>);
+    expect(state.map.sensors).toHaveLength(2);
+    expect(state.map.sensors.find((s) => s.role === 'rx')?.desiredTxIds).toBe('auto');
+  });
+
   it('drops unknown transmitters and falls back to auto when nothing is left', () => {
     const state = normalizeState(v5WithReceiver({ desiredTxIds: ['missing-id'] }) as unknown as Partial<AppState>);
     expect(state.map.sensors.find((s) => s.role === 'rx')?.desiredTxIds).toBe('auto');

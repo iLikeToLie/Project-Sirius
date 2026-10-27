@@ -21,7 +21,8 @@ const servedBy = (map: MapScenario, txId: string, groundAt: GroundAt) => receive
  */
 export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs = DEFAULT_STATE.inputs): Pair | null {
   const strongestTx = (rx: Sensor) => {
-    const best = receiverSummary(evaluatePairs(map, shared, groundAt), rx.id).links[0];
+    const own = { ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === rx.id) };
+    const best = receiverSummary(evaluatePairs(own, shared, groundAt), rx.id).links[0];
     return map.sensors.find((s) => s.id === best?.txId);
   };
   const selected = map.sensors.find((s) => s.id === map.selectedId);

@@ -5,7 +5,7 @@ import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
 import { calculateLink } from './rf';
 import {
-  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, meterScale, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, type PairResult,
+  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, meterScale, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, worstLink, type PairResult,
 } from './sensors';
 
 const flat: GroundAt = () => 0;
@@ -248,5 +248,15 @@ describe('terrain and objectives', () => {
     const [pair] = evaluatePairs(m(), defaults, p => p.lon > SG_REFERENCE.lon + .008 && p.lon < SG_REFERENCE.lon + .010 ? null : 0);
     expect(pair.elevationKnown).toBe(false); expect(pair.propagationLossDb).toBeNaN();
     expect(pair.clearance).toBe('unknown'); expect(pair.result.status).toBe('Invalid input');
+  });
+});
+
+describe('worst desired link', () => {
+  const link = (txId: string, status: string) => ({ txId, result: { status } }) as unknown as PairResult;
+
+  it('returns the weakest status across desired links, keeping the strongest on ties', () => {
+    expect(worstLink([link('A', 'Acceptable link'), link('B', 'No link'), link('C', 'Weak link')])?.txId).toBe('B');
+    expect(worstLink([link('A', 'Acceptable link'), link('B', 'Acceptable link')])?.txId).toBe('A');
+    expect(worstLink([])).toBeUndefined();
   });
 });

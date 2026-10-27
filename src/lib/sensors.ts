@@ -47,24 +47,22 @@ export function setRole(sensor: Sensor, role: SensorRole, existing: Sensor[] = [
   return { ...sensor, role, name: nextName(existing.filter((s) => s.id !== sensor.id), role) };
 }
 
+/** Drops one transmitter from a receiver's desired list; an emptied list returns to auto. */
+const withoutDesired = (s: Sensor, id: string): Sensor => {
+  if (s.desiredTxIds === 'auto' || !s.desiredTxIds.includes(id)) return s;
+  const desiredTxIds = s.desiredTxIds.filter((txId) => txId !== id);
+  return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : 'auto' };
+};
+
 /** Sets one sensor's role and removes it from desired lists when it becomes a receiver. */
 export function changeRole(sensors: Sensor[], id: string, role: SensorRole): Sensor[] {
-  return sensors.map((s) => {
-    if (s.id === id) return setRole(s, role, sensors);
-    if (role !== 'rx' || s.desiredTxIds === 'auto' || !s.desiredTxIds.includes(id)) return s;
-    const desiredTxIds = s.desiredTxIds.filter((txId) => txId !== id);
-    return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : ('auto' as const) };
-  });
+  return sensors.map((s) => (s.id === id ? setRole(s, role, sensors) : role === 'rx' ? withoutDesired(s, id) : s));
 }
 
 /** Removes a sensor and its desired links; an emptied list returns to auto. */
 export const removeSensor = (sensors: Sensor[], id: string) => sensors
   .filter((s) => s.id !== id)
-  .map((s) => {
-    if (s.desiredTxIds === 'auto' || !s.desiredTxIds.includes(id)) return s;
-    const desiredTxIds = s.desiredTxIds.filter((txId) => txId !== id);
-    return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : ('auto' as const) };
-  });
+  .map((s) => withoutDesired(s, id));
 
 export function groundOf(s: Sensor, groundAt: GroundAt, useTerrain: boolean): number | null {
   return useTerrain ? groundAt(s) : 0;
@@ -170,3 +168,9 @@ export function receiverSummary(pairs: PairResult[], rxId: string) {
   const links = mine.filter((p) => p.intended).sort((a, b) => power(b) - power(a) || a.txName.localeCompare(b.txName) || a.txId.localeCompare(b.txId));
   return { links, worstInterferer, interferersAbove: interferers.length };
 }
+
+const STATUS_SEVERITY: Record<string, number> = { 'No link': 3, 'Weak link': 2, 'Invalid input': 1 };
+
+/** The desired link with the worst status; links are sorted best first, so ties keep the strongest. */
+export const worstLink = (links: PairResult[]): PairResult | undefined => links.reduce<PairResult | undefined>(
+  (worst, l) => (!worst || (STATUS_SEVERITY[l.result.status] ?? 0) > (STATUS_SEVERITY[worst.result.status] ?? 0) ? l : worst), undefined);

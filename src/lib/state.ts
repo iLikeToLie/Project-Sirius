@@ -65,7 +65,7 @@ function readSensor(value: unknown): Sensor | undefined {
   const { id, name, role } = value;
   const desiredTxIds = 'desiredTxIds' in value
     ? readDesired(value.desiredTxIds)
-    : value.intendedTxId === 'auto' ? 'auto' : typeof value.intendedTxId === 'string' && value.intendedTxId ? [value.intendedTxId] : undefined;
+    : typeof value.intendedTxId !== 'string' ? undefined : value.intendedTxId && value.intendedTxId !== 'auto' ? [value.intendedTxId] : 'auto';
   if (typeof id !== 'string' || !id || typeof name !== 'string' || (role !== 'tx' && role !== 'rx') || !desiredTxIds) return undefined;
   if (!SENSOR_NUMBERS.every((key) => isFiniteNumber(value[key]))) return undefined;
   const sensor = Object.fromEntries(['id', 'name', 'role', ...SENSOR_NUMBERS].map((key) => [key, value[key]])) as unknown as Sensor;

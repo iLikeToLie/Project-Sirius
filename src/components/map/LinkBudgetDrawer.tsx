@@ -30,11 +30,12 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
     return { inputs, propagation, objective, result, known };
   }, [pair, map, state.inputs, groundAt]);
 
+  const links = useMemo(() => (pair ? receiverSummary(evaluatePairs(map, state.inputs, groundAt), pair.rx.id).links : []), [pair, map, state.inputs, groundAt]);
+
   if (!pair || !model) {
     return <section className="map-card link-budget-drawer collapsed" aria-label="Link budget"><div className="drawer-bar"><b>Link budget</b><span className="field-note">Add a transmitter and a receiver to see the link budget.</span></div></section>;
   }
   const { inputs, propagation, objective, result, known } = model;
-  const links = receiverSummary(evaluatePairs(map, state.inputs, groundAt), pair.rx.id).links;
   const num = <K extends keyof LinkInputs>(key: K) => (v: number) => { onEdit(key, v as LinkInputs[K]); };
   const text = (key: keyof typeof TEXT_LABELS) => (
     <label className="field"><span>{TEXT_LABELS[key]}</span><input type="text" value={inputs[key]} onChange={(e) => { onEdit(key, e.target.value); }} /></label>

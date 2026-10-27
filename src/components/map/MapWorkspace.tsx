@@ -5,7 +5,7 @@ import { coverageZones } from '../../lib/coverage';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor } from '../../lib/sensors';
+import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor, worstLink } from '../../lib/sensors';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
@@ -164,7 +164,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const tones: Record<string, string> = Object.fromEntries(sensors.map((s) => {
     if (s.role === 'tx') return [s.id, 'tx'];
     const summary = receiverSummary(pairs, s.id);
-    const link = summary.links[0];
+    const link = worstLink(summary.links);
     return [s.id, summary.interferersAbove ? 'danger' : link ? statusTone(link.result.status) : 'neutral'];
   }));
 
