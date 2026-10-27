@@ -19,7 +19,7 @@ The schema-4 fixture in `scripts/e2e/fixtures/v4-single-link.json` was generated
 1. Missing legacy transmitter: import succeeds, selection becomes `auto`, one nearest-link meter remains.
 2. Last desired checkbox unticked: `auto` becomes checked, stored selection is `auto`, one nearest-link meter remains.
 3. Missing elevation: synthetic zero-elevation tiles are supplied except the tile under Weak. Alpha retains a finite meter; Weak shows Unknown and the elevation warning, with no fill or needle.
-4. Avoidance: all desired rows disappear, the stored list stays intact, and switching back restores all rows.
+4. Avoidance: the desired rows are replaced by one meter for the shown pair against the interference threshold, the stored list stays intact, and switching back restores all rows.
 5. Role change: changing Alpha to a receiver removes it from desired lists; changing the last listed transmitter to a receiver returns the original receiver to `auto`.
 6. Equal power: colocated Alpha and Zulu have identical powers and bar widths, sort Alpha first despite their IDs and insertion order, and Alpha supplies the drawer summary.
 
