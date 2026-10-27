@@ -81,6 +81,12 @@ export function separationM(a: Sensor, b: Sensor, groundAt: GroundAt, useTerrain
 
 export const effectiveObjective = (map: MapScenario, rx: Sensor) => rx.objective === 'default' ? map.defaultObjective : rx.objective;
 
+export function toggleDesired(current: Sensor['desiredTxIds'], txId: string, allTxIds: string[]): Sensor['desiredTxIds'] {
+  const selected = current === 'auto' ? [] : current;
+  const next = allTxIds.filter((id) => id === txId ? !selected.includes(id) : selected.includes(id));
+  return next.length ? next : 'auto';
+}
+
 export function resolveDesiredTxs(scenario: MapScenario, rx: Sensor, groundAt: GroundAt): Sensor[] {
   if (effectiveObjective(scenario, rx) === 'avoidance') return [];
   const transmitters = scenario.sensors.filter((s) => s.role === 'tx');

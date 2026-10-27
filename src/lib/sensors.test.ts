@@ -5,7 +5,7 @@ import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
 import { calculateLink } from './rf';
 import {
-  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, receiverSummary, removeSensor, resolveDesiredTxs, setRole, type PairResult,
+  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, type PairResult,
 } from './sensors';
 
 const flat: GroundAt = () => 0;
@@ -22,6 +22,20 @@ const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[]
 }));
 
 describe('desired transmitter sets', () => {
+  it('returns to auto when the last desired transmitter is unticked', () => {
+    expect(toggleDesired([T1.id], T1.id, [T1.id, T2.id])).toBe('auto');
+  });
+
+  it('adds a transmitter in sensor order without changing the original list', () => {
+    const current = [T2.id];
+    expect(toggleDesired(current, T1.id, [T1.id, T2.id])).toEqual([T1.id, T2.id]);
+    expect(current).toEqual([T2.id]);
+  });
+
+  it('switches auto to an explicit selection', () => {
+    expect(toggleDesired('auto', T2.id, [T1.id, T2.id])).toEqual([T2.id]);
+  });
+
   it('returns every listed transmitter in sensor order, ignoring missing and receiver ids', () => {
     const rx = { ...R1, desiredTxIds: [T2.id, 'missing', R2.id, T1.id] };
     expect(resolveDesiredTxs(scenario([T1, T2, rx, R2]), rx, flat).map((s) => s.name)).toEqual(['T1', 'T2']);

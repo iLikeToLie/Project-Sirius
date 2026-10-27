@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatNumber } from '../../lib/rf';
-import { effectiveObjective, groundOf, type PairResult, receiverSummary } from '../../lib/sensors';
+import { effectiveObjective, groundOf, type PairResult, receiverSummary, toggleDesired } from '../../lib/sensors';
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
 import { CommitField, StatusBadge } from '../ui';
@@ -74,20 +74,20 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
       <div hidden={tab !== 'Link'}>
       {sensor.role === 'rx' && <label className="field"><span>Objective</span><select value={sensor.objective} onChange={e => onChange({ objective: e.target.value as Sensor['objective'] })}><option value="default">Workspace default ({map.defaultObjective})</option><option value="desired">Desired</option><option value="avoidance">Avoidance</option></select></label>}
       {sensor.role === 'rx' && effectiveObjective(map, sensor) === 'desired' && (
-        <label className="field">
-          <span>Intended transmitter</span>
-          <select value={sensor.desiredTxIds === 'auto' ? 'auto' : sensor.desiredTxIds[0] ?? 'auto'} onChange={(event) => onChange({ desiredTxIds: event.target.value === 'auto' ? 'auto' : [event.target.value] })}>
-            <option value="auto">{nearestTx ? `Auto (nearest: ${nearestTx})` : 'Auto (nearest)'}</option>
-            {transmitters.map((tx) => <option key={tx.id} value={tx.id}>{tx.name}</option>)}
-          </select>
-        </label>
+        <fieldset className="desired-transmitters">
+          <legend>Desired transmitters</legend>
+          <label className="switch"><input type="checkbox" checked={sensor.desiredTxIds === 'auto'} onChange={() => onChange({ desiredTxIds: 'auto' })} />{nearestTx ? `Auto (nearest: ${nearestTx})` : 'Auto (nearest)'}</label>
+          {transmitters.map((tx) => <label className="switch" key={tx.id}><input type="checkbox" checked={sensor.desiredTxIds !== 'auto' && sensor.desiredTxIds.includes(tx.id)} onChange={() => onChange({ desiredTxIds: toggleDesired(sensor.desiredTxIds, tx.id, transmitters.map((s) => s.id)) })} />{tx.name}</label>)}
+        </fieldset>
       )}
 
       <div className="sensor-results" aria-live="polite">
         {sensor.role === 'rx' && summary && (link ? (
           <>
-            <div className="result-line"><span>Link from {name(link.txId)}</span><strong>{formatNumber(link.result.receivedPowerDbm)} dBm</strong><StatusBadge status={link.result.status} /></div>
-            <p className="field-note">{link.clearance} · Diffraction {formatNumber(link.propagationLossDb)} dB · {formatDistance(link.distanceM)} 3D separation{link.elevationKnown ? '' : '. Elevation unavailable for this path; terrain prediction is unknown.'}</p>
+            {summary.links.map((desired) => <div key={desired.txId}>
+              <div className="result-line"><span>Link from {name(desired.txId)}</span><strong>{desired.elevationKnown ? `${formatNumber(desired.result.receivedPowerDbm)} dBm` : 'Unknown'}</strong>{desired.elevationKnown && <StatusBadge status={desired.result.status} />}</div>
+              <p className="field-note">{desired.clearance} · Diffraction {formatNumber(desired.propagationLossDb)} dB · {formatDistance(desired.distanceM)} 3D separation{desired.elevationKnown ? '' : '. Elevation unavailable for this path; terrain prediction is unknown.'}</p>
+            </div>)}
             {summary.worstInterferer
               ? <div className="result-line danger"><span>Worst interferer {name(summary.worstInterferer.txId)}</span><strong>{formatNumber(summary.worstInterferer.result.receivedPowerDbm)} dBm</strong><StatusBadge status={summary.worstInterferer.result.status} /></div>
               : <p className="field-note">No other transmitter reaches its {formatNumber(sensor.interferenceThresholdDbm, 1)} dBm interference threshold.</p>}
