@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
-import { activePair, applyInputEdit, zoneReceiver } from '../../lib/activeLink';
+import { activePair, applyInputEdit, zoneReceiver, type LinkPin } from '../../lib/activeLink';
 import { coverageZones } from '../../lib/coverage';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
@@ -32,8 +32,10 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const [draft, setDraft] = useState<Record<string, LatLon>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [hidePanels, setHidePanels] = useState(false);
+  const [pin, setPin] = useState<LinkPin | null>(null);
   const [showAll, setShowAll] = useState(false);
   const { map } = state;
+  useEffect(() => setPin(null), [map.selectedId]);
   const groundAt: GroundAt = elevation.groundAt;
   const dragging = Object.keys(draft).length > 0;
 
@@ -50,7 +52,10 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const setShared = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => setState((current) => ({ ...current, inputs: { ...current.inputs, [key]: value } }));
 
   const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
-    const edited = applyInputEdit(state, key, value, groundAt);
+    const shown = activePair(state.map, groundAt, state.inputs, pin);
+    const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id } : null;
+    setPin(held);
+    const edited = applyInputEdit(state, key, value, groundAt, held);
     if (!edited.ok) return edited.reason;
     setState(edited.state);
     return undefined;
@@ -71,7 +76,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   });
 
   // Zones belong to the selected transmitter, or the selected receiver's strongest desired transmitter.
-  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? activePair(liveMap, groundAt, state.inputs)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt, state.inputs]);
+  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? activePair(liveMap, groundAt, state.inputs, pin)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt, state.inputs, pin]);
   const zone = useMemo(() => (zoneTx ? zoneReceiver(liveMap, zoneTx.id, groundAt) : null), [zoneTx, liveMap, groundAt]);
   const linkedRxIds = zoneTx ? pairs.filter((p) => p.txId === zoneTx.id && p.intended).map((p) => p.rxId) : [];
 
@@ -201,7 +206,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
 
-      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} />
+      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} pin={pin} onPin={setPin} />
 
       {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} />}
 

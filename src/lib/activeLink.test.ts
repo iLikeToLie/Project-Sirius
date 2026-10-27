@@ -157,3 +157,29 @@ it('active inputs include the same terrain loss as pair evaluation', async () =>
   const pair = evaluatePairs(m, DEFAULT_STATE.inputs, ridge).find(p => p.rxId === R1.id && p.intended)!;
   expect(activeInputs(state(m), ridge).otherLossDb).toBeCloseTo(DEFAULT_STATE.inputs.otherLossDb + pair.propagationLossDb, 10);
 });
+
+describe('pinned transmitter', () => {
+  const m = map([T1, { ...T2, powerDbm: T2.powerDbm + 30 }, { ...R1, desiredTxIds: [T1.id, T2.id] }], { selectedId: R1.id });
+  const pin = { rxId: R1.id, txId: T2.id };
+
+  it('keeps editing the pinned transmitter after the edit would re-rank the strongest link', () => {
+    const first = applyInputEdit(state(m), 'transmitPowerDbm', -40, flat, pin);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(activePair(first.state.map, flat, first.state.inputs)?.tx.id).toBe(T1.id);
+    expect(activePair(first.state.map, flat, first.state.inputs, pin)?.tx.id).toBe(T2.id);
+    const second = applyInputEdit(first.state, 'transmitPowerDbm', -30, flat, pin);
+    const sensorsAfter = second.ok ? second.state.map.sensors : [];
+    expect(sensorsAfter.find((s) => s.id === T2.id)?.powerDbm).toBe(-30);
+    expect(sensorsAfter.find((s) => s.id === T1.id)?.powerDbm).toBe(T1.powerDbm);
+  });
+
+  it('ignores a pin that is not one of the receiver’s desired transmitters', () => {
+    const only1 = map([T1, T2, { ...R1, desiredTxIds: [T1.id] }], { selectedId: R1.id });
+    expect(activePair(only1, flat, DEFAULT_STATE.inputs, pin)?.tx.id).toBe(T1.id);
+  });
+
+  it('ignores a pin held for a different receiver', () => {
+    expect(activePair(m, flat, DEFAULT_STATE.inputs, { rxId: R2.id, txId: T1.id })?.tx.id).toBe(T2.id);
+  });
+});

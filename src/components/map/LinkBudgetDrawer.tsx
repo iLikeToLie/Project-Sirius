@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { activePair } from '../../lib/activeLink';
+import { activePair, type LinkPin } from '../../lib/activeLink';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
 import { effectiveObjective, evaluatePairs, groundOf, pairInputs, pairPropagation, receiverSummary, separationM } from '../../lib/sensors';
@@ -11,14 +11,16 @@ import { RxMeterStack } from './RxMeterStack';
 const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location / identifier', rxId: 'Rx location / identifier' } as const;
 
 /** The Calculator's inputs, results and Rx meter for the active link, writing back through `onEdit`. */
-export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
+export function LinkBudgetDrawer({ state, groundAt, onEdit, pin, onPin }: {
   state: AppState;
   groundAt: GroundAt;
+  pin: LinkPin | null;
+  onPin: (pin: LinkPin | null) => void;
   onEdit: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => string | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const { map } = state;
-  const pair = useMemo(() => activePair(map, groundAt, state.inputs), [map, groundAt, state.inputs]);
+  const pair = useMemo(() => activePair(map, groundAt, state.inputs, pin), [map, groundAt, state.inputs, pin]);
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);
@@ -53,6 +55,14 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
         <div className="drawer-body">
           <div className="drawer-inputs">
             <p className="field-note"><b>{objective === 'desired' ? 'Desired communication' : 'Interference avoidance'}.</b> {objective === 'desired' ? 'Tx and Rx should communicate. Received power above sensitivity with the required fade margin is desirable.' : 'Tx and Rx should remain isolated. Received power below the interference threshold is desirable.'}</p>
+            {links.length > 1 && (
+              <label className="field link-pin"><span>Showing link from</span>
+                <select value={pin?.rxId === pair.rx.id && pin.txId === pair.tx.id ? pair.tx.id : ''} onChange={(e) => onPin(e.target.value ? { rxId: pair.rx.id, txId: e.target.value } : null)}>
+                  <option value="">Strongest (re-ranks as you edit)</option>
+                  {links.map((l) => <option key={l.txId} value={l.txId}>{l.txName}</option>)}
+                </select>
+              </label>
+            )}
             <div className="form-grid three">{text('scenarioName')}{text('txId')}{text('rxId')}</div>
             <div className="form-grid four">
               <NumberField label="Transmit power" unit="dBm" value={inputs.transmitPowerDbm} onChange={num('transmitPowerDbm')} />

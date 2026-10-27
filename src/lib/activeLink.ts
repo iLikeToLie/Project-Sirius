@@ -10,6 +10,9 @@ export interface LinkState { inputs: LinkInputs; map: MapScenario }
 
 type Pair = { tx: Sensor; rx: Sensor };
 
+/** A transmitter the user chose to keep showing for a receiver, so edits cannot re-rank the link away from it. */
+export interface LinkPin { rxId: string; txId: string }
+
 const receivers = (map: MapScenario) => map.sensors.filter((s) => s.role === 'rx');
 const nearest = (from: Sensor, candidates: Sensor[], map: MapScenario, groundAt: GroundAt) => candidates.reduce<Sensor | null>((best, s) =>
   !best || separationM(from, s, groundAt, map.useTerrainElevation) < separationM(from, best, groundAt, map.useTerrainElevation) ? s : best, null);
@@ -19,8 +22,10 @@ const servedBy = (map: MapScenario, txId: string, groundAt: GroundAt) => receive
  * The link the Calculator, sweeps and placements show: the selected receiver's strongest desired pair,
  * else the selected transmitter's nearest served receiver, else the first receiver's pair.
  */
-export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs = DEFAULT_STATE.inputs): Pair | null {
+export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs = DEFAULT_STATE.inputs, pin: LinkPin | null = null): Pair | null {
   const strongestTx = (rx: Sensor) => {
+    const pinned = pin?.rxId === rx.id ? resolveDesiredTxs(map, rx, groundAt).find((s) => s.id === pin.txId) : undefined;
+    if (pinned) return pinned;
     const own = { ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === rx.id) };
     const best = receiverSummary(evaluatePairs(own, shared, groundAt), rx.id).links[0];
     return map.sensors.find((s) => s.id === best?.txId);
@@ -87,9 +92,9 @@ const SENSOR_FIELDS: Partial<Record<keyof LinkInputs, ['tx' | 'rx', keyof Sensor
 const replaceSensor = (map: MapScenario, next: Sensor): MapScenario => ({ ...map, sensors: map.sensors.map((s) => (s.id === next.id ? next : s)) });
 
 export function applyInputEdit<S extends LinkState, K extends keyof LinkInputs>(
-  state: S, key: K, value: LinkInputs[K], groundAt: GroundAt,
+  state: S, key: K, value: LinkInputs[K], groundAt: GroundAt, pin: LinkPin | null = null,
 ): { ok: true; state: S } | { ok: false; reason: string } {
-  const pair = activePair(state.map, groundAt, state.inputs);
+  const pair = activePair(state.map, groundAt, state.inputs, pin);
   if (!pair) return { ok: true, state: { ...state, inputs: { ...state.inputs, [key]: value } } };
 
   if (key === 'distanceM') {
