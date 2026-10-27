@@ -24,7 +24,7 @@ describe('active link', () => {
     const m = map([T1, { ...T2, powerDbm: T2.powerDbm + 30 }, { ...R1, desiredTxIds: [T1.id, T2.id] }], { selectedId: R1.id });
     const strongest = receiverSummary(evaluatePairs(m, DEFAULT_STATE.inputs, flat), R1.id).links[0];
     expect(strongest.txId).toBe(T2.id);
-    expect(activePair(m, flat)?.tx.id).toBe(strongest.txId);
+    expect(activePair(m, flat, DEFAULT_STATE.inputs)?.tx.id).toBe(strongest.txId);
     expect(activeInputs(state(m), flat).txId).toBe(T2.name);
     const edited = applyInputEdit(state(m), 'txGainDbi', 20, flat);
     expect(edited.ok && edited.state.map.sensors.find((s) => s.id === T2.id)?.gainDbi).toBe(20);
@@ -32,19 +32,19 @@ describe('active link', () => {
 
   it('uses the strongest desired link when falling back to the first receiver', () => {
     const m = map([T1, { ...T2, powerDbm: T2.powerDbm + 30 }, { ...R1, desiredTxIds: [T1.id, T2.id] }]);
-    expect(activePair(m, flat)?.tx.id).toBe(T2.id);
+    expect(activePair(m, flat, DEFAULT_STATE.inputs)?.tx.id).toBe(T2.id);
   });
 
   it('serves a transmitter to every receiver that lists it, including second choices', () => {
     const m = map([T1, T2, { ...R1, desiredTxIds: [T2.id, T1.id] }, { ...R2, desiredTxIds: [T2.id, T1.id] }]);
     expect(zoneReceiver({ ...m, zonesForRxId: R2.id }, T2.id, flat)).toMatchObject({ rx: { id: R2.id }, reason: 'linked' });
     expect(zoneReceiver({ ...m, selectedId: R1.id }, T2.id, flat)).toMatchObject({ rx: { id: R1.id }, reason: 'linked' });
-    expect(activePair({ ...m, selectedId: T2.id }, flat)).toMatchObject({ tx: { id: T2.id }, rx: { id: R2.id } });
+    expect(activePair({ ...m, selectedId: T2.id }, flat, DEFAULT_STATE.inputs)).toMatchObject({ tx: { id: T2.id }, rx: { id: R2.id } });
   });
 
   it('breaks equal-power ties by transmitter id consistently with receiverSummary', () => {
     const m = map([{ ...T2, lat: T1.lat, lon: T1.lon }, T1, { ...R1, desiredTxIds: [T2.id, T1.id] }], { selectedId: R1.id });
-    expect(activePair(m, flat)?.tx.id).toBe(T1.id);
+    expect(activePair(m, flat, DEFAULT_STATE.inputs)?.tx.id).toBe(T1.id);
   });
 
   it('uses terrain loss and shared frequency when choosing the strongest desired link', () => {
@@ -69,24 +69,24 @@ describe('active link', () => {
   it('keeps a finite desired pair ahead of a path with missing terrain', () => {
     const m = map([T1, T2, { ...R1, desiredTxIds: [T1.id, T2.id] }], { selectedId: R1.id, propagationModel: 'terrain', useTerrainElevation: true });
     const missing: GroundAt = p => p.lon < SG_REFERENCE.lon + .001 ? null : 0;
-    expect(activePair(m, missing)?.tx.id).toBe(T2.id);
+    expect(activePair(m, missing, DEFAULT_STATE.inputs)?.tx.id).toBe(T2.id);
     expect(activeElevationKnown(state(m), missing)).toBe(true);
   });
 
   it('keeps avoidance lists for later and falls back to the nearest comparison transmitter', () => {
     const rx: Sensor = { ...R1, desiredTxIds: [T2.id], objective: 'avoidance' };
     const m = map([T1, T2, rx], { selectedId: R1.id });
-    expect(activePair(m, flat)?.tx.id).toBe(T1.id);
+    expect(activePair(m, flat, DEFAULT_STATE.inputs)?.tx.id).toBe(T1.id);
     expect(zoneReceiver(m, T2.id, flat)?.reason).toBe('nearest');
-    expect(activePair({ ...m, sensors: [T1, T2, { ...rx, objective: 'desired' }] }, flat)?.tx.id).toBe(T2.id);
+    expect(activePair({ ...m, sensors: [T1, T2, { ...rx, objective: 'desired' }] }, flat, DEFAULT_STATE.inputs)?.tx.id).toBe(T2.id);
     expect(rx.desiredTxIds).toEqual([T2.id]);
   });
 
   it('picks the active pair from the selection', () => {
-    expect(activePair(map(sensors, { selectedId: R2.id }), flat)).toMatchObject({ tx: { id: T2.id }, rx: { id: R2.id } });
-    expect(activePair(map(sensors, { selectedId: T1.id }), flat)).toMatchObject({ tx: { id: T1.id }, rx: { id: R1.id } });
-    expect(activePair(map(sensors), flat)).toMatchObject({ tx: { id: T1.id }, rx: { id: R1.id } });
-    expect(activePair(map([T1, T2]), flat)).toBeNull();
+    expect(activePair(map(sensors, { selectedId: R2.id }), flat, DEFAULT_STATE.inputs)).toMatchObject({ tx: { id: T2.id }, rx: { id: R2.id } });
+    expect(activePair(map(sensors, { selectedId: T1.id }), flat, DEFAULT_STATE.inputs)).toMatchObject({ tx: { id: T1.id }, rx: { id: R1.id } });
+    expect(activePair(map(sensors), flat, DEFAULT_STATE.inputs)).toMatchObject({ tx: { id: T1.id }, rx: { id: R1.id } });
+    expect(activePair(map([T1, T2]), flat, DEFAULT_STATE.inputs)).toBeNull();
   });
 
   it('chooses the zone receiver', () => {
@@ -148,7 +148,7 @@ describe('active link', () => {
 it('uses selected avoidance receiver for zones and exposes its comparison pair', () => {
   const m = map(sensors.map(s => s.id === R3.id ? { ...s, objective: 'avoidance' as const } : s), { selectedId: R3.id });
   expect(zoneReceiver(m, T1.id, flat)?.rx.id).toBe(R3.id);
-  expect(activePair(m, flat)?.rx.id).toBe(R3.id);
+  expect(activePair(m, flat, DEFAULT_STATE.inputs)?.rx.id).toBe(R3.id);
 });
 it('active inputs include the same terrain loss as pair evaluation', async () => {
   const { evaluatePairs } = await import('./sensors');

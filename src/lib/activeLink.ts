@@ -1,5 +1,4 @@
 import type { LinkInputs, MapScenario, Sensor } from '../types';
-import { DEFAULT_STATE } from '../data/defaults';
 import type { GroundAt } from './elevation';
 import { toLatLon, toLocalM } from './geo';
 import { solveTxAlongBearing } from './linkGeometry';
@@ -22,7 +21,7 @@ const servedBy = (map: MapScenario, txId: string, groundAt: GroundAt) => receive
  * The link the Calculator, sweeps and placements show: the selected receiver's strongest desired pair,
  * else the selected transmitter's nearest served receiver, else the first receiver's pair.
  */
-export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs = DEFAULT_STATE.inputs, pin: LinkPin | null = null): Pair | null {
+export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs, pin: LinkPin | null = null): Pair | null {
   const strongestTx = (rx: Sensor) => {
     const pinned = pin?.rxId === rx.id ? resolveDesiredTxs(map, rx, groundAt).find((s) => s.id === pin.txId) : undefined;
     if (pinned) return pinned;
@@ -61,16 +60,16 @@ export function zoneReceiver(map: MapScenario, txId: string, groundAt: GroundAt)
   return any ? { rx: any, reason: 'nearest' } : null;
 }
 
-export function activeInputs(state: LinkState, groundAt: GroundAt): LinkInputs {
-  const pair = activePair(state.map, groundAt, state.inputs);
+export function activeInputs(state: LinkState, groundAt: GroundAt, pin: LinkPin | null = null): LinkInputs {
+  const pair = activePair(state.map, groundAt, state.inputs, pin);
   if (!pair) return state.inputs;
   const inputs = pairInputs(state.inputs, pair.tx, pair.rx, separationM(pair.tx, pair.rx, groundAt, state.map.useTerrainElevation));
   return { ...inputs, otherLossDb: inputs.otherLossDb + pairPropagation(state.map, pair.tx, pair.rx, inputs.frequencyGhz, groundAt).lossDb };
 }
 
 /** False when terrain is on and either end of the active link has no ground elevation yet. */
-export function activeElevationKnown(state: LinkState, groundAt: GroundAt): boolean {
-  const pair = activePair(state.map, groundAt, state.inputs);
+export function activeElevationKnown(state: LinkState, groundAt: GroundAt, pin: LinkPin | null = null): boolean {
+  const pair = activePair(state.map, groundAt, state.inputs, pin);
   if (!pair) return true;
   return [pair.tx, pair.rx].every((s) => groundOf(s, groundAt, state.map.useTerrainElevation) !== null);
 }

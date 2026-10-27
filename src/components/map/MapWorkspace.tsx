@@ -26,16 +26,14 @@ function zoomForCell(cellM: number, lat: number) {
   return Math.min(14, Math.max(10, Math.ceil(Math.log2(metresPerPixelZ0 / cellM))));
 }
 
-export function MapWorkspace({ state, setState, elevation }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation }) {
+export function MapWorkspace({ state, setState, elevation, pin, setPin }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation; pin: LinkPin | null; setPin: (pin: LinkPin | null) => void }) {
   const handle = useRef<SensorMapHandle | null>(null);
   const [view, setView] = useState<MapView | null>(null);
   const [draft, setDraft] = useState<Record<string, LatLon>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [hidePanels, setHidePanels] = useState(false);
-  const [pin, setPin] = useState<LinkPin | null>(null);
   const [showAll, setShowAll] = useState(false);
   const { map } = state;
-  useEffect(() => setPin(null), [map.selectedId]);
   const groundAt: GroundAt = elevation.groundAt;
   const dragging = Object.keys(draft).length > 0;
 
@@ -54,9 +52,9 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
     const shown = activePair(state.map, groundAt, state.inputs, pin);
     const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id } : null;
-    setPin(held);
     const edited = applyInputEdit(state, key, value, groundAt, held);
     if (!edited.ok) return edited.reason;
+    setPin(held);
     setState(edited.state);
     return undefined;
   };

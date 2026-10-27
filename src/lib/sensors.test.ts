@@ -252,11 +252,24 @@ describe('terrain and objectives', () => {
 });
 
 describe('worst desired link', () => {
-  const link = (txId: string, status: string) => ({ txId, result: { status } }) as unknown as PairResult;
+  const link = (txId: string, status: string, elevationKnown = true) => ({ txId, elevationKnown, result: { status } }) as unknown as PairResult;
 
   it('returns the weakest status across desired links, keeping the strongest on ties', () => {
     expect(worstLink([link('A', 'Acceptable link'), link('B', 'No link'), link('C', 'Weak link')])?.txId).toBe('B');
     expect(worstLink([link('A', 'Acceptable link'), link('B', 'Acceptable link')])?.txId).toBe('A');
     expect(worstLink([])).toBeUndefined();
+  });
+
+  it('ignores links whose ground elevation is still unknown unless none is known', () => {
+    expect(worstLink([link('A', 'Acceptable link'), link('B', 'No link', false)])?.txId).toBe('A');
+    expect(worstLink([link('A', 'Weak link', false), link('B', 'No link', false)])?.txId).toBe('B');
+  });
+});
+
+describe('desired list that names no transmitter', () => {
+  it('resolves to the nearest transmitter instead of no link', () => {
+    const rx = { ...R1, desiredTxIds: ['not-a-transmitter'] };
+    expect(resolveDesiredTxs(scenario([T1, T2, rx]), rx, flat).map((t) => t.id)).toEqual([T1.id]);
+    expect(resolveDesiredTxs(scenario([T1, T2, { ...R1, desiredTxIds: [] }]), { ...R1, desiredTxIds: [] }, flat).map((t) => t.id)).toEqual([T1.id]);
   });
 });

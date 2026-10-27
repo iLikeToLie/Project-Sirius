@@ -89,7 +89,10 @@ export function resolveDesiredTxs(scenario: MapScenario, rx: Sensor, groundAt: G
   if (effectiveObjective(scenario, rx) === 'avoidance') return [];
   const transmitters = scenario.sensors.filter((s) => s.role === 'tx');
   const desiredTxIds = rx.desiredTxIds;
-  if (desiredTxIds !== 'auto') return transmitters.filter((s) => desiredTxIds.includes(s.id));
+  if (desiredTxIds !== 'auto') {
+    const named = transmitters.filter((s) => desiredTxIds.includes(s.id));
+    if (named.length) return named;
+  }
   let best: Sensor | null = null;
   let bestDistance = Infinity;
   for (const tx of transmitters) {
@@ -171,6 +174,9 @@ export function receiverSummary(pairs: PairResult[], rxId: string) {
 
 const STATUS_SEVERITY: Record<string, number> = { 'No link': 3, 'Weak link': 2, 'Invalid input': 1 };
 
-/** The desired link with the worst status; links are sorted best first, so ties keep the strongest. */
-export const worstLink = (links: PairResult[]): PairResult | undefined => links.reduce<PairResult | undefined>(
-  (worst, l) => (!worst || (STATUS_SEVERITY[l.result.status] ?? 0) > (STATUS_SEVERITY[worst.result.status] ?? 0) ? l : worst), undefined);
+/** The desired link with the worst status, ignoring links whose ground elevation is still unknown; ties keep the strongest. */
+export const worstLink = (links: PairResult[]): PairResult | undefined => {
+  const known = links.filter((l) => l.elevationKnown);
+  return (known.length ? known : links).reduce<PairResult | undefined>(
+    (worst, l) => (!worst || (STATUS_SEVERITY[l.result.status] ?? 0) > (STATUS_SEVERITY[worst.result.status] ?? 0) ? l : worst), undefined);
+};
