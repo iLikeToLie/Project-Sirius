@@ -1,6 +1,15 @@
 # Handoff — Friis RF calculator / Link workspace
 
-Last updated 26 October 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
+Last updated 27 October 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
+
+## Status update, 27 October 2026 (read first)
+
+- `feature/link-workspace-terrain` (this branch) now holds the v2 terrain work as uncommitted-then-committed changes: DEM build scripts (`scripts/build-dem.mjs`, `dem-lib.mjs`), `src/lib/propagation.ts`, `coverage.ts`, `SignalOverlay`, `CoverageLegend`, and the state/worker/map updates. `corepack pnpm test` and `corepack pnpm build` pass on it.
+- Related branches, all pushed to origin: `feature/v2-ui` (v2 tasks 1-7 done, review + merge pending), `feature/multi-link-receivers` (multi-transmitter receivers; see `docs/MULTI_LINK_REVIEW.md`, plan in `docs/superpowers/plans/2026-10-27-multi-link-receivers.md`), `worktree-coverage-aesthetic`.
+- Pending ideas are in `docs/BACKLOG.md` (basemap restyle, hiding range circles in terrain mode, Rx meter per transmitter).
+- Next step: decide the merge order of the branches above into `main`, then cut release 1.6.0. `package.json` on this branch still says 1.5.0.
+- `.claude/` (including local worktrees) is git-ignored; on a new machine re-create worktrees with `git worktree add` from the pushed branches if needed.
+- The "Where things stand" table below is older than this section; where they disagree, this section wins.
 
 ## Where things stand
 

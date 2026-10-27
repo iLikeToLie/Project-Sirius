@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { formatNumber } from '../../lib/rf';
-import { groundOf, type PairResult, receiverSummary } from '../../lib/sensors';
+import { effectiveObjective, groundOf, type PairResult, receiverSummary } from '../../lib/sensors';
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
 import { CommitField, StatusBadge } from '../ui';
@@ -19,6 +20,8 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
   onRoleChange: (role: SensorRole) => void;
   onZonesFor: (rxId: string) => void;
 }) {
+  const [tab, setTab] = useState('Sensor');
+  const [collapsed, setCollapsed] = useState(false);
   const ground = groundOf(sensor, groundAt, map.useTerrainElevation);
   const name = (id: string) => map.sensors.find((s) => s.id === id)?.name ?? '—';
   const transmitters = map.sensors.filter((s) => s.role === 'tx');
@@ -30,7 +33,7 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
   const nonNegative = (label: string) => (v: number) => (v < 0 ? `${label} cannot be negative.` : undefined);
 
   return (
-    <section className="map-card selected-sensor-card" aria-label={`Selected sensor ${sensor.name}`}>
+    <section className={`map-card selected-sensor-card${collapsed ? ' collapsed' : ''}`} aria-label={`Selected sensor ${sensor.name}`}>
       <div className="map-card-heading">
         <input className="sensor-name-input" aria-label="Sensor name" value={sensor.name} onChange={(event) => onChange({ name: event.target.value })} />
         <div className="segmented" role="group" aria-label="Sensor role">
@@ -42,6 +45,10 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
         </div>
       </div>
 
+      <button type="button" className="ghost" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? 'Expand sensor' : 'Collapse sensor'}</button>
+      {!collapsed && <>
+      <div className="segmented" role="tablist" aria-label="Sensor details">{['Sensor', 'Link', 'Coverage'].map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>)}</div>
+      <div hidden={tab !== 'Sensor'}>
       <div className="form-grid two">
         <CommitField label="Latitude" unit="°" value={sensor.lat} onCommit={(v) => num('lat', v, (x) => (x < SG_BOUNDS.minLat || x > SG_BOUNDS.maxLat ? 'Keep within the Singapore map area.' : undefined))} />
         <CommitField label="Longitude" unit="°" value={sensor.lon} onCommit={(v) => num('lon', v, (x) => (x < SG_BOUNDS.minLon || x > SG_BOUNDS.maxLon ? 'Keep within the Singapore map area.' : undefined))} />
@@ -62,7 +69,10 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
         <div><dt>Total antenna elevation</dt><dd>{formatNumber((ground ?? 0) + sensor.aglM, 1)} m{map.useTerrainElevation && ground === null ? ' (ground taken as 0)' : ''}</dd></div>
       </dl>
 
-      {sensor.role === 'rx' && (
+      </div>
+      <div hidden={tab !== 'Link'}>
+      {sensor.role === 'rx' && <label className="field"><span>Objective</span><select value={sensor.objective} onChange={e => onChange({ objective: e.target.value as Sensor['objective'] })}><option value="default">Workspace default ({map.defaultObjective})</option><option value="desired">Desired</option><option value="avoidance">Avoidance</option></select></label>}
+      {sensor.role === 'rx' && effectiveObjective(map, sensor) === 'desired' && (
         <label className="field">
           <span>Intended transmitter</span>
           <select value={sensor.intendedTxId} onChange={(event) => onChange({ intendedTxId: event.target.value })}>
@@ -76,12 +86,12 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
         {sensor.role === 'rx' && summary && (summary.link ? (
           <>
             <div className="result-line"><span>Link from {name(summary.link.txId)}</span><strong>{formatNumber(summary.link.result.receivedPowerDbm)} dBm</strong><StatusBadge status={summary.link.result.status} /></div>
-            <p className="field-note">{formatDistance(summary.link.distanceM)} 3D separation{summary.link.elevationKnown ? '' : '. Elevation unavailable for this pair; ground taken as 0 m.'}</p>
+            <p className="field-note">{summary.link.clearance} · Diffraction {formatNumber(summary.link.propagationLossDb)} dB · {formatDistance(summary.link.distanceM)} 3D separation{summary.link.elevationKnown ? '' : '. Elevation unavailable for this path; terrain prediction is unknown.'}</p>
             {summary.worstInterferer
               ? <div className="result-line danger"><span>Worst interferer {name(summary.worstInterferer.txId)}</span><strong>{formatNumber(summary.worstInterferer.result.receivedPowerDbm)} dBm</strong><StatusBadge status={summary.worstInterferer.result.status} /></div>
               : <p className="field-note">No other transmitter reaches its {formatNumber(sensor.interferenceThresholdDbm, 1)} dBm interference threshold.</p>}
           </>
-        ) : <p className="field-note">No transmitter on the map. Add one or switch a sensor to Transmitter.</p>)}
+        ) : <p className="field-note">{effectiveObjective(map, sensor) === 'avoidance' ? `Avoidance: ${summary.interferersAbove} transmitter(s) above interference threshold.` : 'No intended transmitter available.'}</p>)}
 
         {sensor.role === 'tx' && (
           <>
@@ -91,6 +101,8 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
         )}
       </div>
 
+      </div>
+      <div hidden={tab !== 'Coverage'}>
       {zoneInfo && (
         <div className="zone-legend">
           <div className="map-card-heading"><h4>Range of {zoneInfo.txName}</h4>
@@ -108,9 +120,10 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
             <li><span className="swatch swatch-weak" aria-hidden="true" />Weak link (above sensitivity)</li>
             <li><span className="swatch swatch-interference" aria-hidden="true" />Possible interference</li>
           </ul>
-          <p className="field-note">Using {zoneInfo.rxName}’s settings{zoneInfo.reason === 'nearest' ? ' (nearest receiver; none is linked to this transmitter)' : ''}. Free-space boundary at Rx height {formatNumber(zoneInfo.aglM, 1)} m above ground; terrain does not block the signal.</p>
+          <p className="field-note">Using {zoneInfo.rxName}’s settings{zoneInfo.reason === 'nearest' ? ' (nearest receiver; none is linked to this transmitter)' : ''}. {map.propagationModel === 'terrain' ? 'Terrain diffraction at Rx height' : 'Free-space boundary at Rx height'} {formatNumber(zoneInfo.aglM, 1)} m above ground.{map.propagationModel === 'terrain' ? '' : ' Dashed rings are free-space reference ranges.'}</p>
         </div>
       )}
+      </div></>}
     </section>
   );
 }

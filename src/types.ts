@@ -91,6 +91,7 @@ export interface Sensor {
   fadeMarginTargetDb: number;
   interferenceThresholdDbm: number;
   intendedTxId: 'auto' | string;
+  objective: 'default' | LinkObjective;
 }
 
 export interface MapScenario {
@@ -98,10 +99,12 @@ export interface MapScenario {
   selectedId: string | null;
   zonesForRxId: 'auto' | string;
   useTerrainElevation: boolean;
+  defaultObjective: LinkObjective;
+  propagationModel: 'free-space' | 'terrain';
 }
 
 export interface AppState {
-  schemaVersion: 3;
+  schemaVersion: 4;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;

@@ -47,7 +47,7 @@ function migrateWorkspace(ws: LinkWorkspace, inputs: LinkInputs): MapScenario {
   const rxTotal = antennaElevationM(ws.terrain, ws.rx);
   const lift = -Math.min(0, txTotal, rxTotal);
   const at = (p: AntennaPlacement, total: number) => ({ ...p, aglM: total + lift });
-  return mapForPlacements(inputs, at(ws.tx, txTotal), at(ws.rx, rxTotal), false);
+  return { ...mapForPlacements(inputs, at(ws.tx, txTotal), at(ws.rx, rxTotal), false), propagationModel: 'free-space' };
 }
 
 // ---- Schema 3 ----
@@ -61,12 +61,16 @@ function readSensor(value: unknown): Sensor | undefined {
   if (!SENSOR_NUMBERS.every((key) => isFiniteNumber(value[key]))) return undefined;
   const sensor = Object.fromEntries(['id', 'name', 'role', 'intendedTxId', ...SENSOR_NUMBERS].map((key) => [key, value[key]])) as unknown as Sensor;
   const valid = Math.abs(sensor.lat) <= 90 && Math.abs(sensor.lon) <= 180 && sensor.aglM >= 0 && sensor.cableLossDb >= 0 && sensor.fadeMarginTargetDb >= 0;
+  if (value.objective !== undefined && !['default', 'desired', 'avoidance'].includes(value.objective as string)) return undefined;
+  sensor.objective = value.objective as Sensor['objective'] ?? 'default';
   return valid ? sensor : undefined;
 }
 
 /** Strict: any invalid sensor rejects the whole map. */
 function readMap(value: unknown): MapScenario | undefined {
   if (!isRecord(value) || !Array.isArray(value.sensors) || value.sensors.length > MAX_SENSORS || typeof value.useTerrainElevation !== 'boolean') return undefined;
+  if (value.propagationModel !== undefined && !['terrain', 'free-space'].includes(value.propagationModel as string)) return undefined;
+  if (value.defaultObjective !== undefined && !['desired', 'avoidance'].includes(value.defaultObjective as string)) return undefined;
   const sensors = value.sensors.map(readSensor);
   if (sensors.some((s) => !s)) return undefined;
   const list = sensors as Sensor[];
@@ -77,6 +81,8 @@ function readMap(value: unknown): MapScenario | undefined {
     selectedId: typeof value.selectedId === 'string' && ids.has(value.selectedId) ? value.selectedId : null,
     zonesForRxId: typeof value.zonesForRxId === 'string' && ids.has(value.zonesForRxId) ? value.zonesForRxId : 'auto',
     useTerrainElevation: value.useTerrainElevation,
+    propagationModel: value.propagationModel as MapScenario['propagationModel'] ?? 'free-space',
+    defaultObjective: value.defaultObjective as MapScenario['defaultObjective'] ?? 'desired',
   };
 }
 
@@ -87,7 +93,7 @@ export function normalizeState(saved?: unknown): AppState {
   const inputs = { ...defaults.inputs, ...s.inputs };
   const map = 'map' in s ? readMap(s.map) ?? defaults.map : migrateWorkspace(readWorkspace(s.workspace, inputs.distanceM), inputs);
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     linkObjective: s.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
     inputs,
     distanceSweep: { ...defaults.distanceSweep, ...s.distanceSweep },

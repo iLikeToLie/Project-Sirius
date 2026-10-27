@@ -1,6 +1,6 @@
 import type { LatLon } from './geo';
 
-export const ELEVATION_TILE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+export const ELEVATION_TILE_URL = import.meta.env.BASE_URL + 'dem/{z}/{x}/{y}.png';
 export const ELEVATION_ZOOM = 14;
 const TILE_SIZE = 256;
 

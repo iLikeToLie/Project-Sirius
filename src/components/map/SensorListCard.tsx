@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { MAX_SENSORS, type PairResult, receiverSummary } from '../../lib/sensors';
 import type { Sensor } from '../../types';
@@ -9,7 +10,7 @@ function sensorStatus(sensor: Sensor, pairs: PairResult[]): { text: string; tone
     return { text: served === 1 ? 'serves 1' : `serves ${served}`, tone: 'neutral' };
   }
   const { link, interferersAbove } = receiverSummary(pairs, sensor.id);
-  if (!link) return { text: 'No transmitter', tone: 'neutral' };
+  if (!link) return { text: interferersAbove ? `${interferersAbove} interferer(s)` : 'No intended link', tone: interferersAbove ? 'danger' : 'safe' };
   const base = link.result.status === 'Acceptable link' ? 'OK' : link.result.status === 'Weak link' ? 'Weak' : link.result.status === 'No link' ? 'No link' : 'Invalid';
   return interferersAbove
     ? { text: `${base}, ${interferersAbove} interferer${interferersAbove > 1 ? 's' : ''}`, tone: 'danger' }
@@ -20,9 +21,10 @@ export function SensorListCard({ sensors, pairs, selectedId, onSelect, onAdd, on
   sensors: Sensor[]; pairs: PairResult[]; selectedId: string | null;
   onSelect: (id: string) => void; onAdd: () => void; onRemove: (id: string) => void;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
   return (
-    <section className="map-card sensor-list-card" aria-label="Sensors">
-      <div className="map-card-heading"><h3>Sensors</h3><span className="tag">{sensors.length} of {MAX_SENSORS}</span></div>
+    <section className={`map-card sensor-list-card${collapsed ? ' collapsed' : ''}`} aria-label="Sensors">
+      <div className="map-card-heading"><button type="button" className="ghost" aria-label={collapsed ? 'Expand sensors' : 'Collapse sensors'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? '☰' : 'Sensors −'}</button><span className="tag">{sensors.length} of {MAX_SENSORS}</span></div>
       <ul className="sensor-rows">
         {sensors.map((sensor) => {
           const status = sensorStatus(sensor, pairs);
