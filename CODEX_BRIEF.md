@@ -1,4 +1,21 @@
-# Codex Brief: Link Workspace v1.6.0 (Terrain Diffraction & Calculator Merge Phase 1)
+# Codex Brief: Multi-transmitter receivers
+
+The current task is complete on `feature/multi-link-receivers` in
+`.claude/worktrees/multi-link-receivers`, based on `origin/main` (`a04bc24`).
+Continue from that worktree. The main checkout contains separate terrain work.
+
+- Tasks 1–4: commits `77093ce`, `43eb669`.
+- Task 5: multi-select picker, commit `0495955`.
+- Task 6: stacked Rx meters and name-based equal-power ordering, commit `c0dfd3f`.
+- Task 7: all six review cases passed in headless Chromium; details and remaining review limitation are in `docs/MULTI_LINK_REVIEW.md`.
+- Verification: 145 unit tests pass; `tsc -b` and the production build pass. Both drawer and multi-link browser regressions pass.
+- Use the existing `node_modules` symlink; no dependency installation is needed. Run `node_modules/.bin/vitest run --configLoader runner`, `node_modules/.bin/tsc -b`, and `node_modules/.bin/vite build`.
+- For browser checks, use the overrides documented in `docs/MULTI_LINK_REVIEW.md`.
+- No merge, push, or release has been performed. Independent review is recommended before merging; this session performed a whole-branch self-review.
+
+The terrain brief below is historical context. Its branch, model, and incomplete-task status do not describe this multi-link task.
+
+# Historical brief: Link Workspace v1.6.0 (Terrain Diffraction & Calculator Merge Phase 1)
 
 ## Execution Settings
 
