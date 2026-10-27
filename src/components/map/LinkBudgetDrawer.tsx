@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { activePair } from '../../lib/activeLink';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
-import { effectiveObjective, groundOf, pairInputs, pairPropagation, separationM } from '../../lib/sensors';
+import { effectiveObjective, evaluatePairs, groundOf, pairInputs, pairPropagation, receiverSummary, separationM } from '../../lib/sensors';
 import type { AppState, LinkInputs } from '../../types';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from '../ui';
 import { PathProfileChart } from './PathProfileChart';
+import { RxMeterStack } from './RxMeterStack';
 
 const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location / identifier', rxId: 'Rx location / identifier' } as const;
 
@@ -33,13 +34,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
     return <section className="map-card link-budget-drawer collapsed" aria-label="Link budget"><div className="drawer-bar"><b>Link budget</b><span className="field-note">Add a transmitter and a receiver to see the link budget.</span></div></section>;
   }
   const { inputs, propagation, objective, result, known } = model;
-  const requiredDbm = inputs.sensitivityDbm + inputs.fadeMarginTargetDb;
-  const referenceDbm = objective === 'desired' ? requiredDbm : inputs.interferenceThresholdDbm;
-  const referenceTitle = objective === 'desired' ? `Required receive level: sensitivity + ${inputs.fadeMarginTargetDb} dB fade margin` : `Interference threshold ${inputs.interferenceThresholdDbm} dBm`;
-  const values = [result.receivedPowerDbm, inputs.sensitivityDbm, referenceDbm].filter(Number.isFinite);
-  const scaleMin = values.length ? Math.floor(Math.min(...values) - 10) : -120;
-  const scaleMax = values.length ? Math.ceil(Math.max(...values) + 10) : 0;
-  const position = (v: number) => (Number.isFinite(v) && scaleMax > scaleMin ? Math.max(0, Math.min(100, ((v - scaleMin) / (scaleMax - scaleMin)) * 100)) : 0);
+  const links = receiverSummary(evaluatePairs(map, state.inputs, groundAt), pair.rx.id).links;
   const num = <K extends keyof LinkInputs>(key: K) => (v: number) => { onEdit(key, v as LinkInputs[K]); };
   const text = (key: keyof typeof TEXT_LABELS) => (
     <label className="field"><span>{TEXT_LABELS[key]}</span><input type="text" value={inputs[key]} onChange={(e) => { onEdit(key, e.target.value); }} /></label>
@@ -85,17 +80,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit }: {
               <Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" />
             </div>
             {!known && map.useTerrainElevation && <p className="field-note" role="status">Elevation unavailable for this path; terrain prediction is unknown.</p>}
-            <div className="power-meter">
-              <div className="meter-title"><span>Rx power meter</span><b>{formatNumber(result.receivedPowerDbm)} dBm</b></div>
-              <div className="meter-track">
-                <span className="meter-fill" style={{ width: `${position(result.receivedPowerDbm)}%` }} />
-                <span className="meter-needle" style={{ left: `${position(result.receivedPowerDbm)}%` }} />
-                <span className="meter-marker sensitivity-marker" style={{ left: `${position(inputs.sensitivityDbm)}%` }} title={`Sensitivity ${inputs.sensitivityDbm} dBm`} />
-                <span className={`meter-marker ${objective === 'desired' ? 'required-marker' : 'threshold-marker'}`} style={{ left: `${position(referenceDbm)}%` }} title={referenceTitle} />
-              </div>
-              <div className="meter-scale"><span>{scaleMin} dBm</span><span>{scaleMax} dBm</span></div>
-              <div className="threshold-key"><span className="sensitivity-key">Sensitivity <b>{formatNumber(inputs.sensitivityDbm)} dBm</b></span><span className={objective === 'desired' ? 'required-key' : 'threshold-key-item'} title={referenceTitle}>{objective === 'desired' ? 'Required level' : 'Interference'} <b>{formatNumber(referenceDbm)} dBm</b></span></div>
-            </div>
+            <RxMeterStack links={links} inputs={inputs} objective={objective} />
             {map.propagationModel === 'terrain' && <PathProfileChart tx={pair.tx} rx={pair.rx} groundAt={map.useTerrainElevation ? groundAt : () => 0} frequencyGhz={inputs.frequencyGhz} />}
           </div>
         </div>

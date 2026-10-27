@@ -5,7 +5,7 @@ import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
 import { calculateLink } from './rf';
 import {
-  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, type PairResult,
+  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, meterScale, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, type PairResult,
 } from './sensors';
 
 const flat: GroundAt = () => 0;
@@ -17,11 +17,25 @@ const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
 const [T1, T2, T3, R1, R2] = place(place(place(place(place([], 'tx', 0), 'tx', 1000), 'tx', 2000), 'rx', 200), 'rx', 400);
 const sensorsWithLinks: Sensor[] = [T1, T2, { ...R1, desiredTxIds: [T1.id, T2.id] }, { ...R2, desiredTxIds: [T1.id] }];
 const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[] => powers.map(([txId, power]) => ({
-  txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, clearance: 'unknown',
+  txId, txName: txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, clearance: 'unknown',
   result: { ...calculateLink(defaults, 'desired'), receivedPowerDbm: power },
 }));
 
 describe('desired transmitter sets', () => {
+  it('uses one meter scale covering every power, sensitivity and required level', () => {
+    const scale = meterScale(pairsWithPowers(R1.id, [['T1', -90], ['T2', -60]]), { ...defaults, sensitivityDbm: -85 });
+    expect(scale.scaleMin).toBeLessThanOrEqual(-100);
+    expect(scale.scaleMax).toBeGreaterThanOrEqual(-50);
+  });
+
+  it('keeps the meter scale finite with unknown powers and no links', () => {
+    for (const links of [[], pairsWithPowers(R1.id, [['T1', NaN]])]) {
+      const scale = meterScale(links, defaults);
+      expect(Number.isFinite(scale.scaleMin)).toBe(true);
+      expect(scale.scaleMax).toBeGreaterThan(scale.scaleMin);
+    }
+  });
+
   it('returns to auto when the last desired transmitter is unticked', () => {
     expect(toggleDesired([T1.id], T1.id, [T1.id, T2.id])).toBe('auto');
   });
@@ -57,10 +71,17 @@ describe('desired transmitter sets', () => {
     expect(INTERFERENCE).toContain(pairs.find((p) => p.txId === T3.id)?.result.status);
   });
 
-  it('sorts desired links by received power, best first, ties by transmitter id', () => {
+  it('sorts desired links by received power, best first, ties by transmitter name', () => {
     const pairs = pairsWithPowers(R1.id, [['T2', -70], ['T1', -70], ['T3', -60]]);
     expect(receiverSummary(pairs, R1.id).links.map((p) => p.txId)).toEqual(['T3', 'T1', 'T2']);
     expect(pairs.map((p) => p.txId)).toEqual(['T2', 'T1', 'T3']);
+  });
+
+  it('breaks equal-power ties by transmitter name even after renaming', () => {
+    const pairs = pairsWithPowers(R1.id, [['T1', -70], ['T2', -70]]);
+    pairs[0].txName = 'Zulu';
+    pairs[1].txName = 'Alpha';
+    expect(receiverSummary(pairs, R1.id).links.map((p) => p.txId)).toEqual(['T2', 'T1']);
   });
 
   it('keeps unknown-power desired links behind finite links', () => {

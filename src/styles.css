@@ -704,3 +704,7 @@ tbody tr:hover { background: var(--surface-elevated); }
 .link-budget-drawer:focus-within { outline: none; }
 @media (max-width: 900px) { .drawer-body { grid-template-columns: 1fr; } }
 .selected-sensor-card { max-height: calc(100% - 330px); overflow-y: auto; }
+
+.rx-meter-stack, .desired-transmitters { display: grid; gap: 10px; }
+.desired-transmitters { margin: 10px 0; padding: 10px; border: 1px solid var(--hairline); border-radius: 8px; }
+.desired-transmitters legend { color: var(--mute); font-size: 12px; }

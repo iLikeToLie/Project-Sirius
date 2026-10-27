@@ -118,7 +118,13 @@ export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM
   };
 }
 
-export interface PairResult { txId: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; clearance: Clearance | 'unknown' }
+export interface PairResult { txId: string; txName: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; clearance: Clearance | 'unknown' }
+
+export function meterScale(links: PairResult[], inputs: LinkInputs): { scaleMin: number; scaleMax: number } {
+  const values = [inputs.sensitivityDbm, inputs.sensitivityDbm + inputs.fadeMarginTargetDb, inputs.interferenceThresholdDbm,
+    ...links.filter((p) => p.elevationKnown).map((p) => p.result.receivedPowerDbm)].filter(Number.isFinite);
+  return { scaleMin: values.length ? Math.floor(Math.min(...values) - 10) : -120, scaleMax: values.length ? Math.ceil(Math.max(...values) + 10) : 0 };
+}
 
 export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, frequencyGhz: number, groundAt: GroundAt): { lossDb: number; clearance: Clearance | 'unknown' } {
   if (map.propagationModel !== 'terrain') return { lossDb: 0, clearance: 'unknown' };
@@ -142,6 +148,7 @@ export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundA
       inputs.otherLossDb += propagation.lossDb;
       pairs.push({
         txId: tx.id,
+        txName: tx.name,
         rxId: rx.id,
         intended,
         distanceM,
@@ -160,6 +167,6 @@ export function receiverSummary(pairs: PairResult[], rxId: string) {
   const interferers = mine.filter((p) => !p.intended && p.result.status === 'Possible interference');
   const worstInterferer = interferers.reduce<PairResult | null>((worst, p) => !worst || p.result.receivedPowerDbm > worst.result.receivedPowerDbm ? p : worst, null);
   const power = (p: PairResult) => Number.isFinite(p.result.receivedPowerDbm) ? p.result.receivedPowerDbm : -Infinity;
-  const links = mine.filter((p) => p.intended).sort((a, b) => power(b) - power(a) || a.txId.localeCompare(b.txId));
+  const links = mine.filter((p) => p.intended).sort((a, b) => power(b) - power(a) || a.txName.localeCompare(b.txName) || a.txId.localeCompare(b.txId));
   return { links, worstInterferer, interferersAbove: interferers.length };
 }
