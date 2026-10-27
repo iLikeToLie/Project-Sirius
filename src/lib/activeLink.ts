@@ -26,7 +26,8 @@ export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInp
     const pinned = pin?.rxId === rx.id ? resolveDesiredTxs(map, rx, groundAt).find((s) => s.id === pin.txId) : undefined;
     if (pinned) return pinned;
     const own = { ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === rx.id) };
-    const best = receiverSummary(evaluatePairs(own, shared, groundAt), rx.id).links[0];
+    const links = receiverSummary(evaluatePairs(own, shared, groundAt), rx.id).links;
+    const best = links.find((l) => l.elevationKnown) ?? links[0];
     return map.sensors.find((s) => s.id === best?.txId);
   };
   const selected = map.sensors.find((s) => s.id === map.selectedId);

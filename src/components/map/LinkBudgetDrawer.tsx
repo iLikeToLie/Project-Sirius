@@ -32,7 +32,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, pin, onPin }: {
     return { inputs, propagation, objective, result, known };
   }, [pair, map, state.inputs, groundAt]);
 
-  const links = useMemo(() => (pair ? receiverSummary(evaluatePairs(map, state.inputs, groundAt), pair.rx.id).links : []), [pair, map, state.inputs, groundAt]);
+  const links = useMemo(() => (pair ? receiverSummary(evaluatePairs({ ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === pair.rx.id) }, state.inputs, groundAt), pair.rx.id).links : []), [pair, map, state.inputs, groundAt]);
 
   if (!pair || !model) {
     return <section className="map-card link-budget-drawer collapsed" aria-label="Link budget"><div className="drawer-bar"><b>Link budget</b><span className="field-note">Add a transmitter and a receiver to see the link budget.</span></div></section>;

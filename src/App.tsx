@@ -12,6 +12,7 @@ import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSw
 import { normalizeState, validateImport } from './lib/state';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
 import { activeElevationKnown, activeInputs, activePair, applyInputEdit, type LinkPin } from './lib/activeLink';
+import { resolveDesiredTxs } from './lib/sensors';
 import { useElevationTiles } from './components/map/useElevationTiles';
 import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningStatus } from './types';
 
@@ -62,6 +63,12 @@ function App() {
   // A transmitter the user is editing stays the active one even if the edit would re-rank the links.
   const [pin, setPin] = useState<LinkPin | null>(null);
   useEffect(() => setPin(null), [state.map.selectedId]);
+  // A pin whose transmitter has left the receiver's desired set must not come back to life if it is re-added.
+  useEffect(() => {
+    if (!pin) return;
+    const rx = state.map.sensors.find((s) => s.id === pin.rxId);
+    if (!rx || !resolveDesiredTxs(state.map, rx, groundAt).some((s) => s.id === pin.txId)) setPin(null);
+  }, [pin, state.map, groundAt]);
   const viewState = useMemo(() => ({ ...state, inputs: activeInputs(state, groundAt, pin) }), [state, groundAt, pin]);
   const elevationKnown = useMemo(() => activeElevationKnown(state, groundAt, pin), [state, groundAt, pin]);
   const result = useMemo(() => calculateLink(viewState.inputs, state.linkObjective), [viewState.inputs, state.linkObjective]);

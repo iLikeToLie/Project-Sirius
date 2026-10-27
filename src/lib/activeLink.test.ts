@@ -183,3 +183,13 @@ describe('pinned transmitter', () => {
     expect(activePair(m, flat, DEFAULT_STATE.inputs, { rxId: R2.id, txId: T1.id })?.tx.id).toBe(T2.id);
   });
 });
+
+describe('strongest link with unknown ground', () => {
+  it('prefers a known-elevation transmitter over a stronger one whose ground is unknown', () => {
+    const strong = { ...T2, powerDbm: T2.powerDbm + 30 };
+    const m = map([T1, strong, { ...R1, desiredTxIds: [T1.id, T2.id] }], { selectedId: R1.id, useTerrainElevation: true });
+    const groundAt: GroundAt = (p) => (p.lat === T2.lat && p.lon === T2.lon ? null : 0);
+    expect(activePair(m, groundAt, DEFAULT_STATE.inputs)?.tx.id).toBe(T1.id);
+    expect(activePair(m, flat, DEFAULT_STATE.inputs)?.tx.id).toBe(T2.id);
+  });
+});
