@@ -13,7 +13,8 @@ import { SG_BOUNDS } from './SelectedSensorCard';
 export const ONEMAP_TILE_URL = 'https://www.onemap.gov.sg/maps/tiles/Grey/{z}/{x}/{y}.png';
 const ONEMAP_ATTRIBUTION = '©OneMap Singapore ODL v1.0';
 const ELEVATION_ATTRIBUTION = '©JAXA, ALOS World 3D-30m (AW3D30)';
-const PAD = 0.05;
+// Pan margin beyond Singapore (about 33 km), so a setup near the coast can still be centred in view.
+const PAD = 0.3;
 
 export interface MapLink { from: LatLon; to: LatLon; kind: 'intended' | 'interference'; tone: string; emphasis: boolean }
 export interface MapZones {
