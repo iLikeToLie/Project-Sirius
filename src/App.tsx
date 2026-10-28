@@ -11,7 +11,8 @@ import { freshDefaultState } from './data/defaults';
 import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSweep } from './lib/rf';
 import { normalizeState, validateImport } from './lib/state';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
-import { activeElevationKnown, activeInputs, applyInputEdit } from './lib/activeLink';
+import { activeElevationKnown, activeInputs, activePair, applyInputEdit, type LinkPin } from './lib/activeLink';
+import { resolveDesiredTxs } from './lib/sensors';
 import { useElevationTiles } from './components/map/useElevationTiles';
 import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningStatus } from './types';
 
@@ -59,14 +60,27 @@ function App() {
   // The Calculator's active link needs sensor ground heights even when the map is not open.
   useEffect(() => { if (state.map.useTerrainElevation) elevation.ensure(state.map.sensors); }, [state.map.sensors, state.map.useTerrainElevation, elevation.ensure]);
   // Every view reads the active link's inputs: the selected receiver and its intended transmitter.
-  const viewState = useMemo(() => ({ ...state, inputs: activeInputs(state, groundAt) }), [state, groundAt]);
+  // A transmitter the user is editing stays the active one even if the edit would re-rank the links.
+  const [pin, setPin] = useState<LinkPin | null>(null);
+  useEffect(() => setPin(null), [state.map.selectedId]);
+  // A pin whose transmitter has left the receiver's desired set must not come back to life if it is re-added.
+  useEffect(() => {
+    if (!pin) return;
+    const rx = state.map.sensors.find((s) => s.id === pin.rxId);
+    if (!rx || !resolveDesiredTxs(state.map, rx, groundAt).some((s) => s.id === pin.txId)) setPin(null);
+  }, [pin, state.map, groundAt]);
+  const viewState = useMemo(() => ({ ...state, inputs: activeInputs(state, groundAt, pin) }), [state, groundAt, pin]);
+  const elevationKnown = useMemo(() => activeElevationKnown(state, groundAt, pin), [state, groundAt, pin]);
   const result = useMemo(() => calculateLink(viewState.inputs, state.linkObjective), [viewState.inputs, state.linkObjective]);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
 
   const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
-    const edited = applyInputEdit(state, key, value, groundAt);
+    const shown = activePair(state.map, groundAt, state.inputs, pin);
+    const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id } : null;
+    const edited = applyInputEdit(state, key, value, groundAt, held);
     if (!edited.ok) return edited.reason;
+    setPin(held);
     setState(edited.state);
     return undefined;
   };
@@ -123,8 +137,8 @@ function App() {
         </header>
 
         <div className="content">
-          {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} elevationKnown={activeElevationKnown(state, groundAt)} />}
-          {view === 'workspace' && <Suspense fallback={<p className="muted">Loading map…</p>}><MapWorkspace state={state} setState={setState} elevation={elevation} /></Suspense>}
+          {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} elevationKnown={elevationKnown} />}
+          {view === 'workspace' && <Suspense fallback={<p className="muted">Loading map…</p>}><MapWorkspace state={state} setState={setState} elevation={elevation} pin={pin} setPin={setPin} /></Suspense>}
           {view === 'distance' && <DistanceView state={viewState} setState={setState} />}
           {view === 'gain' && <GainView state={viewState} setState={setState} />}
           {view === 'placement' && <PlacementView state={viewState} setState={setState} />}

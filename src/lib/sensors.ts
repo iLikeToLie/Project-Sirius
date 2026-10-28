@@ -34,7 +34,7 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     sensitivityDbm: defaults.sensitivityDbm,
     fadeMarginTargetDb: defaults.fadeMarginTargetDb,
     interferenceThresholdDbm: defaults.interferenceThresholdDbm,
-    intendedTxId: 'auto',
+    desiredTxIds: 'auto',
     objective: 'default',
   };
 }
@@ -47,18 +47,22 @@ export function setRole(sensor: Sensor, role: SensorRole, existing: Sensor[] = [
   return { ...sensor, role, name: nextName(existing.filter((s) => s.id !== sensor.id), role) };
 }
 
-/** Sets one sensor's role; receivers that named it as their transmitter go back to the nearest one. */
+/** Drops one transmitter from a receiver's desired list; an emptied list returns to auto. */
+const withoutDesired = (s: Sensor, id: string): Sensor => {
+  if (s.desiredTxIds === 'auto' || !s.desiredTxIds.includes(id)) return s;
+  const desiredTxIds = s.desiredTxIds.filter((txId) => txId !== id);
+  return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : 'auto' };
+};
+
+/** Sets one sensor's role and removes it from desired lists when it becomes a receiver. */
 export function changeRole(sensors: Sensor[], id: string, role: SensorRole): Sensor[] {
-  return sensors.map((s) => {
-    if (s.id === id) return setRole(s, role, sensors);
-    return role === 'rx' && s.intendedTxId === id ? { ...s, intendedTxId: 'auto' } : s;
-  });
+  return sensors.map((s) => (s.id === id ? setRole(s, role, sensors) : role === 'rx' ? withoutDesired(s, id) : s));
 }
 
-/** Receivers that named the removed sensor as their transmitter go back to the nearest one. */
+/** Removes a sensor and its desired links; an emptied list returns to auto. */
 export const removeSensor = (sensors: Sensor[], id: string) => sensors
   .filter((s) => s.id !== id)
-  .map((s) => s.intendedTxId === id ? { ...s, intendedTxId: 'auto' } : s);
+  .map((s) => withoutDesired(s, id));
 
 export function groundOf(s: Sensor, groundAt: GroundAt, useTerrain: boolean): number | null {
   return useTerrain ? groundAt(s) : 0;
@@ -75,18 +79,27 @@ export function separationM(a: Sensor, b: Sensor, groundAt: GroundAt, useTerrain
 
 export const effectiveObjective = (map: MapScenario, rx: Sensor) => rx.objective === 'default' ? map.defaultObjective : rx.objective;
 
-export function resolveIntendedTx(scenario: MapScenario, rx: Sensor, groundAt: GroundAt): Sensor | null {
-  if (effectiveObjective(scenario, rx) === 'avoidance') return null;
+export function toggleDesired(current: Sensor['desiredTxIds'], txId: string, allTxIds: string[]): Sensor['desiredTxIds'] {
+  const selected = current === 'auto' ? [] : current;
+  const next = allTxIds.filter((id) => id === txId ? !selected.includes(id) : selected.includes(id));
+  return next.length ? next : 'auto';
+}
+
+export function resolveDesiredTxs(scenario: MapScenario, rx: Sensor, groundAt: GroundAt): Sensor[] {
+  if (effectiveObjective(scenario, rx) === 'avoidance') return [];
   const transmitters = scenario.sensors.filter((s) => s.role === 'tx');
-  const named = transmitters.find((s) => s.id === rx.intendedTxId);
-  if (named) return named;
+  const desiredTxIds = rx.desiredTxIds;
+  if (desiredTxIds !== 'auto') {
+    const named = transmitters.filter((s) => desiredTxIds.includes(s.id));
+    if (named.length) return named;
+  }
   let best: Sensor | null = null;
   let bestDistance = Infinity;
   for (const tx of transmitters) {
     const d = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
     if (d < bestDistance) { best = tx; bestDistance = d; }
   }
-  return best;
+  return best ? [best] : [];
 }
 
 export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number): LinkInputs {
@@ -106,7 +119,13 @@ export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM
   };
 }
 
-export interface PairResult { txId: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; clearance: Clearance | 'unknown' }
+export interface PairResult { txId: string; txName: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; clearance: Clearance | 'unknown' }
+
+export function meterScale(links: PairResult[], inputs: LinkInputs): { scaleMin: number; scaleMax: number } {
+  const values = [inputs.sensitivityDbm, inputs.sensitivityDbm + inputs.fadeMarginTargetDb, inputs.interferenceThresholdDbm,
+    ...links.filter((p) => p.elevationKnown).map((p) => p.result.receivedPowerDbm)].filter(Number.isFinite);
+  return { scaleMin: values.length ? Math.floor(Math.min(...values) - 10) : -120, scaleMax: values.length ? Math.ceil(Math.max(...values) + 10) : 0 };
+}
 
 export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, frequencyGhz: number, groundAt: GroundAt): { lossDb: number; clearance: Clearance | 'unknown' } {
   if (map.propagationModel !== 'terrain') return { lossDb: 0, clearance: 'unknown' };
@@ -116,20 +135,21 @@ export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, freque
   return bullingtonLossDb(profile, profile.groundM[0] + tx.aglM, profile.groundM[profile.groundM.length - 1] + rx.aglM, frequencyGhz);
 }
 
-/** Every Tx→Rx pair: the receiver's intended pair as desired communication, the rest as interference. */
+/** Every Tx→Rx pair: the receiver's desired set as communication, the rest as interference. */
 export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundAt: GroundAt): PairResult[] {
   const known = (s: Sensor) => groundOf(s, groundAt, scenario.useTerrainElevation) !== null;
   const pairs: PairResult[] = [];
   for (const rx of scenario.sensors.filter((s) => s.role === 'rx')) {
-    const intendedId = resolveIntendedTx(scenario, rx, groundAt)?.id;
+    const desired = resolveDesiredTxs(scenario, rx, groundAt);
     for (const tx of scenario.sensors.filter((s) => s.role === 'tx')) {
       const distanceM = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
-      const intended = tx.id === intendedId;
+      const intended = desired.some((d) => d.id === tx.id);
       const propagation = pairPropagation(scenario, tx, rx, shared.frequencyGhz, groundAt);
       const inputs = pairInputs(shared, tx, rx, distanceM);
       inputs.otherLossDb += propagation.lossDb;
       pairs.push({
         txId: tx.id,
+        txName: tx.name,
         rxId: rx.id,
         intended,
         distanceM,
@@ -147,5 +167,16 @@ export function receiverSummary(pairs: PairResult[], rxId: string) {
   const mine = pairs.filter((p) => p.rxId === rxId);
   const interferers = mine.filter((p) => !p.intended && p.result.status === 'Possible interference');
   const worstInterferer = interferers.reduce<PairResult | null>((worst, p) => !worst || p.result.receivedPowerDbm > worst.result.receivedPowerDbm ? p : worst, null);
-  return { link: mine.find((p) => p.intended) ?? null, worstInterferer, interferersAbove: interferers.length };
+  const power = (p: PairResult) => Number.isFinite(p.result.receivedPowerDbm) ? p.result.receivedPowerDbm : -Infinity;
+  const links = mine.filter((p) => p.intended).sort((a, b) => power(b) - power(a) || a.txName.localeCompare(b.txName) || a.txId.localeCompare(b.txId));
+  return { links, worstInterferer, interferersAbove: interferers.length };
 }
+
+const STATUS_SEVERITY: Record<string, number> = { 'No link': 3, 'Weak link': 2, 'Invalid input': 1 };
+
+/** The desired link with the worst status, ignoring links whose ground elevation is still unknown; ties keep the strongest. */
+export const worstLink = (links: PairResult[]): PairResult | undefined => {
+  const known = links.filter((l) => l.elevationKnown);
+  return (known.length ? known : links).reduce<PairResult | undefined>(
+    (worst, l) => (!worst || (STATUS_SEVERITY[l.result.status] ?? 0) > (STATUS_SEVERITY[worst.result.status] ?? 0) ? l : worst), undefined);
+};

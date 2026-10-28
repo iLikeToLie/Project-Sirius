@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff, Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
-import { activePair, applyInputEdit, zoneReceiver } from '../../lib/activeLink';
+import { activePair, applyInputEdit, zoneReceiver, type LinkPin } from '../../lib/activeLink';
 import { coverageZones } from '../../lib/coverage';
 import { signalRange } from '../../lib/signalColour';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor, resolveIntendedTx } from '../../lib/sensors';
+import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor, worstLink } from '../../lib/sensors';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
@@ -27,7 +27,7 @@ function zoomForCell(cellM: number, lat: number) {
   return Math.min(14, Math.max(10, Math.ceil(Math.log2(metresPerPixelZ0 / cellM))));
 }
 
-export function MapWorkspace({ state, setState, elevation }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation }) {
+export function MapWorkspace({ state, setState, elevation, pin, setPin }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation; pin: LinkPin | null; setPin: (pin: LinkPin | null) => void }) {
   const handle = useRef<SensorMapHandle | null>(null);
   const [view, setView] = useState<MapView | null>(null);
   const [draft, setDraft] = useState<Record<string, LatLon>>({});
@@ -59,8 +59,11 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const setShared = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => setState((current) => ({ ...current, inputs: { ...current.inputs, [key]: value } }));
 
   const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
-    const edited = applyInputEdit(state, key, value, groundAt);
+    const shown = activePair(state.map, groundAt, state.inputs, pin);
+    const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id } : null;
+    const edited = applyInputEdit(state, key, value, groundAt, held);
     if (!edited.ok) return edited.reason;
+    setPin(held);
     setState(edited.state);
     return undefined;
   };
@@ -79,8 +82,8 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
     return next === m.sensors ? m : { ...m, sensors: next, selectedId: sensor.id };
   });
 
-  // Zones belong to the selected transmitter, or the selected receiver's intended transmitter.
-  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? resolveIntendedTx(liveMap, selected, groundAt) ?? activePair(liveMap, groundAt)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt]);
+  // Zones belong to the selected transmitter, or the selected receiver's strongest desired transmitter.
+  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? activePair(liveMap, groundAt, state.inputs, pin)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt, state.inputs, pin]);
   const zone = useMemo(() => (zoneTx ? zoneReceiver(liveMap, zoneTx.id, groundAt) : null), [zoneTx, liveMap, groundAt]);
   const linkedRxIds = zoneTx ? pairs.filter((p) => p.txId === zoneTx.id && p.intended).map((p) => p.rxId) : [];
 
@@ -174,7 +177,8 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
   const tones: Record<string, string> = Object.fromEntries(sensors.map((s) => {
     if (s.role === 'tx') return [s.id, 'tx'];
     const summary = receiverSummary(pairs, s.id);
-    return [s.id, summary.interferersAbove ? 'danger' : summary.link ? statusTone(summary.link.result.status) : 'neutral'];
+    const link = worstLink(summary.links);
+    return [s.id, summary.interferersAbove ? 'danger' : link ? statusTone(link.result.status) : 'neutral'];
   }));
 
   return (
@@ -217,7 +221,7 @@ export function MapWorkspace({ state, setState, elevation }: { state: AppState; 
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
 
-      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} />
+      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={setPin} />
 
       {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} />}
 

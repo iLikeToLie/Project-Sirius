@@ -1,24 +1,27 @@
 import { useMemo } from 'react';
-import { activePair } from '../../lib/activeLink';
+import { activePair, type LinkPin } from '../../lib/activeLink';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
-import { effectiveObjective, groundOf, pairInputs, pairPropagation, separationM } from '../../lib/sensors';
+import { effectiveObjective, evaluatePairs, groundOf, pairInputs, pairPropagation, receiverSummary, separationM } from '../../lib/sensors';
 import type { AppState, LinkInputs } from '../../types';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from '../ui';
 import { PathProfileChart } from './PathProfileChart';
+import { RxMeterStack } from './RxMeterStack';
 
 const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location / identifier', rxId: 'Rx location / identifier' } as const;
 
 /** The Calculator's inputs, results and Rx meter for the active link, writing back through `onEdit`. */
-export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle }: {
+export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin, onPin }: {
   state: AppState;
   open: boolean;
   onToggle: (open: boolean) => void;
   groundAt: GroundAt;
+  pin: LinkPin | null;
+  onPin: (pin: LinkPin | null) => void;
   onEdit: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => string | undefined;
 }) {
   const { map } = state;
-  const pair = useMemo(() => activePair(map, groundAt), [map, groundAt]);
+  const pair = useMemo(() => activePair(map, groundAt, state.inputs, pin), [map, groundAt, state.inputs, pin]);
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);
@@ -30,17 +33,15 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle }: {
     return { inputs, propagation, objective, result, known };
   }, [pair, map, state.inputs, groundAt]);
 
+  const rxPairs = useMemo(() => (pair ? evaluatePairs({ ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === pair.rx.id) }, state.inputs, groundAt) : []), [pair, map, state.inputs, groundAt]);
+
   if (!pair || !model) {
     return <section className="map-card link-budget-drawer collapsed" aria-label="Link budget"><div className="drawer-bar"><b>Link budget</b><span className="field-note">Add a transmitter and a receiver to see the link budget.</span></div></section>;
   }
   const { inputs, propagation, objective, result, known } = model;
-  const requiredDbm = inputs.sensitivityDbm + inputs.fadeMarginTargetDb;
-  const referenceDbm = objective === 'desired' ? requiredDbm : inputs.interferenceThresholdDbm;
-  const referenceTitle = objective === 'desired' ? `Required receive level: sensitivity + ${inputs.fadeMarginTargetDb} dB fade margin` : `Interference threshold ${inputs.interferenceThresholdDbm} dBm`;
-  const values = [result.receivedPowerDbm, inputs.sensitivityDbm, referenceDbm].filter(Number.isFinite);
-  const scaleMin = values.length ? Math.floor(Math.min(...values) - 10) : -120;
-  const scaleMax = values.length ? Math.ceil(Math.max(...values) + 10) : 0;
-  const position = (v: number) => (Number.isFinite(v) && scaleMax > scaleMin ? Math.max(0, Math.min(100, ((v - scaleMin) / (scaleMax - scaleMin)) * 100)) : 0);
+  const links = receiverSummary(rxPairs, pair.rx.id).links;
+  // An avoidance receiver has no desired links, so its meter shows the shown pair against the interference threshold.
+  const meterLinks = objective === 'avoidance' ? rxPairs.filter((p) => p.txId === pair.tx.id) : links;
   const num = <K extends keyof LinkInputs>(key: K) => (v: number) => { onEdit(key, v as LinkInputs[K]); };
   const text = (key: keyof typeof TEXT_LABELS) => (
     <label className="field"><span>{TEXT_LABELS[key]}</span><input type="text" value={inputs[key]} onChange={(e) => { onEdit(key, e.target.value); }} /></label>
@@ -58,6 +59,14 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle }: {
         <div className="drawer-body">
           <div className="drawer-inputs">
             <p className="field-note"><b>{objective === 'desired' ? 'Desired communication' : 'Interference avoidance'}.</b> {objective === 'desired' ? 'Tx and Rx should communicate. Received power above sensitivity with the required fade margin is desirable.' : 'Tx and Rx should remain isolated. Received power below the interference threshold is desirable.'}</p>
+            {links.length > 1 && (
+              <label className="field link-pin"><span>Showing link from</span>
+                <select value={pin?.rxId === pair.rx.id && pin.txId === pair.tx.id ? pair.tx.id : ''} onChange={(e) => onPin(e.target.value ? { rxId: pair.rx.id, txId: e.target.value } : null)}>
+                  <option value="">Strongest (re-ranks as you edit)</option>
+                  {links.map((l) => <option key={l.txId} value={l.txId}>{l.txName}</option>)}
+                </select>
+              </label>
+            )}
             <div className="form-grid three">{text('scenarioName')}{text('txId')}{text('rxId')}</div>
             <div className="form-grid four">
               <NumberField label="Transmit power" unit="dBm" value={inputs.transmitPowerDbm} onChange={num('transmitPowerDbm')} />
@@ -86,17 +95,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle }: {
               <Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" />
             </div>
             {!known && map.useTerrainElevation && <p className="field-note" role="status">Elevation unavailable for this path; terrain prediction is unknown.</p>}
-            <div className="power-meter">
-              <div className="meter-title"><span>Rx power meter</span><b>{formatNumber(result.receivedPowerDbm)} dBm</b></div>
-              <div className="meter-track">
-                <span className="meter-fill" style={{ width: `${position(result.receivedPowerDbm)}%` }} />
-                <span className="meter-needle" style={{ left: `${position(result.receivedPowerDbm)}%` }} />
-                <span className="meter-marker sensitivity-marker" style={{ left: `${position(inputs.sensitivityDbm)}%` }} title={`Sensitivity ${inputs.sensitivityDbm} dBm`} />
-                <span className={`meter-marker ${objective === 'desired' ? 'required-marker' : 'threshold-marker'}`} style={{ left: `${position(referenceDbm)}%` }} title={referenceTitle} />
-              </div>
-              <div className="meter-scale"><span>{scaleMin} dBm</span><span>{scaleMax} dBm</span></div>
-              <div className="threshold-key"><span className="sensitivity-key">Sensitivity <b>{formatNumber(inputs.sensitivityDbm)} dBm</b></span><span className={objective === 'desired' ? 'required-key' : 'threshold-key-item'} title={referenceTitle}>{objective === 'desired' ? 'Required level' : 'Interference'} <b>{formatNumber(referenceDbm)} dBm</b></span></div>
-            </div>
+            <RxMeterStack links={meterLinks} inputs={inputs} objective={objective} />
             {map.propagationModel === 'terrain' && <PathProfileChart tx={pair.tx} rx={pair.rx} groundAt={map.useTerrainElevation ? groundAt : () => 0} frequencyGhz={inputs.frequencyGhz} />}
           </div>
         </div>
