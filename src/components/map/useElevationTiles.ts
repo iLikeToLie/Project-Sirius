@@ -4,10 +4,22 @@ import type { LatLon } from '../../lib/geo';
 
 export type ElevationStatus = 'idle' | 'loading' | 'ready' | 'offline';
 const MAX_TILES_PER_REQUEST = 64;
+// Extent of the bundled AW3D30 tiles (public/dem/manifest.json). The map can pan beyond it; no tiles exist there.
+const DEM_BOUNDS = { minLon: 103.596, minLat: 1.1443, maxLon: 104.4309, maxLat: 1.4835 };
+
+/** A tile the server has no data for (outside the DEM or not generated): unknown ground, not an outage. */
+class MissingTile extends Error {}
+
+function insideDem(z: number, x: number, y: number) {
+  const nw = tilePixel({ lat: DEM_BOUNDS.maxLat, lon: DEM_BOUNDS.minLon }, z);
+  const se = tilePixel({ lat: DEM_BOUNDS.minLat, lon: DEM_BOUNDS.maxLon }, z);
+  return x >= nw.x && x <= se.x && y >= nw.y && y <= se.y;
+}
 
 async function fetchTile(z: number, x: number, y: number): Promise<ElevationTile> {
   const url = ELEVATION_TILE_URL.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
   const response = await fetch(url);
+  if (response.status === 404) throw new MissingTile(`Elevation tile ${z}/${x}/${y}: no data`);
   if (!response.ok) throw new Error(`Elevation tile ${z}/${x}/${y}: HTTP ${response.status}`);
   const bitmap = await createImageBitmap(await response.blob());
   const canvas = new OffscreenCanvas(256, 256);
@@ -37,12 +49,13 @@ export function useElevationTiles() {
     for (const [z, x, y] of tiles) {
       const key = `${z}/${x}/${y}`;
       if (cache.current.has(key)) continue;
+      if (!insideDem(z, x, y)) { cache.current.set(key, 'failed'); continue; }
       cache.current.set(key, 'pending');
       inFlight.current += 1;
       setStatus((current) => (current === 'offline' ? current : 'loading'));
       fetchTile(z, x, y)
         .then((tile) => { cache.current.set(key, tile); setVersion((v) => v + 1); })
-        .catch(() => { cache.current.set(key, 'failed'); setStatus('offline'); })
+        .catch((error) => { cache.current.set(key, 'failed'); if (!(error instanceof MissingTile)) setStatus('offline'); })
         .finally(() => {
           inFlight.current -= 1;
           if (inFlight.current === 0) setStatus((current) => (current === 'offline' ? current : 'ready'));
