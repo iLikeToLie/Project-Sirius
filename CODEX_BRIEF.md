@@ -1,4 +1,4 @@
-> **28 October 2026:** the multi-link work below is now merged into `integrate/consolidation` (web 1.7.0, based on `main`). Start from that branch and `docs/HANDOFF.md`, not from the multi-link worktree. The rest of this brief is historical.
+> **Historical.** This brief records the multi-link (and earlier v2) Codex work, merged in web 1.7.0. Current state, live site and how to resume are in `docs/HANDOFF.md`; work from `main`.
 
 # Codex Brief: Multi-transmitter receivers
 
