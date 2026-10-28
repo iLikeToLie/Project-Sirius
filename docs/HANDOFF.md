@@ -1,15 +1,24 @@
 # Handoff — Friis RF calculator / Link workspace
 
-Last updated 26 October 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
+Last updated 28 October 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
 
 ## Where things stand
 
 | Item | State |
 |---|---|
-| Branch | `feature/link-workspace-terrain` (from `main` @ `92643ba`, web 1.31.2); v2 UI work is on `feature/v2-ui`, branched from it. Not merged, nothing pushed. |
+| Branch | `integrate/consolidation`, from `main` @ `b91d4a9` (web 1.6.0, PRs #1 and #2). It merges `feature/multi-link-receivers` and ports the one new change on `feature/link-workspace-terrain` (`609b284`). Local only: not pushed, not merged to `main`. |
 | Web 1.4.0 | Plan-view Link workspace with synthetic terrain. Done; superseded by 1.5.0. |
 | Web 1.5.0 | Singapore map workspace: OneMap Grey basemap, up to 6 TX/RX sensors, intended transmitter per receiver, free-space range zones, schema 3. **Done, reviewed, 91 tests green.** |
-| Web 1.6.0 (v2) | Terrain diffraction (ITU-R P.526 Bullington) on AW3D30, radial coverage map, objective default + per-receiver override, animation restore, compact cards, Link-budget drawer. **All 7 plan tasks implemented; 121 unit tests green; browser drives `scripts/e2e/terrain-workspace.mjs` and `link-budget-drawer.mjs` pass.** Awaiting final fresh-reviewer pass and the open items below. |
+| Web 1.6.0 (v2) | Terrain diffraction (ITU-R P.526 Bullington) on AW3D30, radial coverage map, objective default + per-receiver override, animation restore, compact cards, Link-budget drawer. **All 7 plan tasks implemented; 121 unit tests green; browser drives `scripts/e2e/terrain-workspace.mjs` and `link-budget-drawer.mjs` pass.** **Released to GitHub Pages from `main` (`b91d4a9`), including PR #2: CloudRF-style coverage gradient, terrain model for migrated scenarios, UI polish.** |
+| Web 1.7.0 | Consolidation (this branch): multi-transmitter receivers (`desiredTxIds`, schema 5, stacked Rx meters, drawer link pin), terrain coverage style toggle (Gradient / Bands), free-space rings hidden in terrain mode. **Not released.** |
+
+## Branches (28 October 2026)
+
+- `main`: web 1.6.0, deployed. Contains `feature/v2-ui` (PR #1) and `worktree-coverage-aesthetic` (PR #2).
+- `feature/multi-link-receivers`: merged into `integrate/consolidation`. Branched from `main` before PR #2.
+- `feature/link-workspace-terrain` (`609b284`): despite being the newest commit, most of its files are older copies of v2-ui or multi-link files, and it lacks the drawer and PR #2. Its only new change (hide free-space rings in terrain mode, backlog item 2) and its docs (`docs/BACKLOG.md`, the multi-link plan) were ported by hand rather than merged. Do not merge it.
+- Pending ideas are in `docs/BACKLOG.md`.
+- `.claude/` (including local worktrees) is git-ignored; on a new machine re-create worktrees with `git worktree add` from the pushed branches if needed.
 
 ## Read in this order
 
@@ -23,7 +32,10 @@ Last updated 26 October 2026. Everything needed to continue this work on another
 ## Decisions the user made (do not re-ask)
 
 - **Sensors:** sensors are transmitters and receivers, up to **6**, each with a TX/RX toggle.
-- **Objective:** a receiver's **intended transmitter** defaults to the **nearest**. The objective is a **workspace default plus per-receiver override**. An avoidance receiver has no intended link.
+- **Objective:** a receiver has a set of **desired transmitters**, **Auto (nearest)** by default (1.7.0; was one intended transmitter). An avoidance receiver shows the displayed pair against the interference threshold.
+- **Coverage style:** terrain coverage can be drawn as a **gradient or as bands**, with a toggle (1.7.0).
+- **Consolidation:** build on `main`; keep every feature; prefer the latest work.
+- **Objective (1.6.0):** a receiver's **intended transmitter** defaults to the **nearest**. The objective is a **workspace default plus per-receiver override**. An avoidance receiver has no intended link.
 - **Shared settings:** all sensors share **one operating frequency**.
 - **Map:** a terrain map of **Singapore**, not satellite, using MapLibre + OneMap Grey. Layout **B**: full-bleed map with floating cards, desktop-first.
 - **Zones:** range zones use the **linked receiver's** settings.

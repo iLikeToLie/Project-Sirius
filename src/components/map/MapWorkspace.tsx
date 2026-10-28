@@ -11,7 +11,7 @@ import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
 import { statusTone } from '../ui';
-import { CoverageLegend } from './CoverageLegend';
+import { CoverageLegend, type CoverageStyle } from './CoverageLegend';
 import { LinkBudgetDrawer } from './LinkBudgetDrawer';
 import { LinkSettingsCard } from './LinkSettingsCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
@@ -34,6 +34,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const [showSettings, setShowSettings] = useState(false);
   const [hidePanels, setHidePanels] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [coverageStyle, setCoverageStyle] = useState<CoverageStyle>('gradient');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { map } = state;
   const groundAt: GroundAt = elevation.groundAt;
@@ -139,11 +140,12 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const zoneResult = useMemo(() => terrain ? coverage.result && coverageRequest && zoneRequest ? coverageZones(coverage.result, coverageRequest, zoneRequest.request.ground) : null : free.result, [terrain, coverage.result, coverageRequest, zoneRequest, free.result]);
   const refining = terrain ? coverage.refining : free.refining;
   const objective = zone ? effectiveObjective(liveMap, zone.rx) : map.defaultObjective;
-  const rings = useMemo(() => zoneTx && zoneRequest ? (['sensitivity', 'required', 'interference'] as const).flatMap(id => {
+  // Rings are free-space reference ranges, so they would mislead once terrain diffraction is on.
+  const rings = useMemo(() => zoneTx && zoneRequest && !terrain ? (['sensitivity', 'required', 'interference'] as const).flatMap(id => {
     const range = zoneRequest.request.slant[`${id}M`];
     if (!Number.isFinite(range)) return [];
     return [{ id, label: `${id} ${range >= 1000 ? (range / 1000).toFixed(2) + ' km' : range.toFixed(0) + ' m'}`, points: Array.from({ length: 129 }, (_, i) => offsetLatLon(zoneTx, Math.sin(i * 2 * Math.PI / 128) * range, Math.cos(i * 2 * Math.PI / 128) * range)) }];
-  }) : [], [zoneTx, zoneRequest]);
+  }) : [], [zoneTx, zoneRequest, terrain]);
   useEffect(() => {
     if (!map.useTerrainElevation || !terrain) return;
     for (const p of pairs) {
@@ -159,11 +161,12 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     return {
       result: zoneResult,
       objective, showAll,
-      range: zoneResult.powerDbm && zone ? signalRange(zone.rx, objective, showAll) : undefined,
+      // Without a range the map paints the threshold bands and their outlines instead of the gradient.
+      range: zoneResult.powerDbm && zone && coverageStyle === 'gradient' ? signalRange(zone.rx, objective, showAll) : undefined,
       corners: [at(bounds.minX, bounds.maxY), at(bounds.maxX, bounds.maxY), at(bounds.maxX, bounds.minY), at(bounds.minX, bounds.minY)] as [LatLon, LatLon, LatLon, LatLon],
       outlines: { sensitivity: lines(zoneResult.outlines.sensitivity), required: lines(zoneResult.outlines.required), interference: lines(zoneResult.outlines.interference) },
     };
-  }, [zoneResult, objective, showAll, zone]);
+  }, [zoneResult, objective, showAll, zone, coverageStyle]);
 
   const byId = new Map(sensors.map((s) => [s.id, s]));
   const links: MapLink[] = pairs
@@ -215,7 +218,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
 
-      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} range={zones?.range} />
+      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} range={zones?.range} coverageStyle={coverageStyle} onCoverageStyle={setCoverageStyle} />
       <SensorListCard
         sensors={sensors} pairs={pairs} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}

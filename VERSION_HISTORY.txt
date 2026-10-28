@@ -328,3 +328,34 @@ surface model with about 16 % cloud-filled cells. Elevation tiles are generated
 locally with `pnpm dem:build` (public/dem is committed; JAXA
 redistribution terms); missing tiles flag the link as unknown. Elevation
 (c) JAXA, ALOS World 3D-30m (AW3D30); map (c) OneMap Singapore ODL v1.0.
+
+-------------------------------------------------------------------------------
+Web Version 1.7.0 (based on workbook Version 3)
+Deployment: https://iliketolie.github.io/friis-rf-calculator/
+Date: 2026-10-28
+
+Function:
+Consolidated the terrain, coverage-gradient and multi-transmitter work into
+one Link workspace.
+
+Key changes:
+- Receivers choose a set of desired transmitters (Auto = nearest, or tick one
+  or more). Each desired link is judged for communication; every other
+  transmitter is judged for interference.
+- Stacked Rx meter: one bar per desired transmitter on a shared scale, sorted
+  strongest first. An avoidance receiver shows the displayed pair against the
+  interference threshold.
+- Link-budget drawer: a Showing link from selector pins one desired
+  transmitter so edits cannot re-rank the link while it is being edited.
+- Terrain coverage style toggle in the legend: Gradient (continuous received
+  power, CloudRF style) or Bands (acceptable, weak, interference with outlines).
+- Free-space range rings are hidden in the Terrain diffraction model, where
+  they no longer describe coverage.
+- Scenario schema version 5. A 1.6.0 receiver's intended transmitter becomes
+  a one-item desired list; unknown or duplicate transmitter ids are dropped and
+  an empty list returns to Auto.
+
+Calculation scope:
+Unchanged from 1.6.0. The Version 3 Friis engine and the Bullington terrain
+diffraction model are unchanged. The coverage style changes only how the
+coverage map is drawn, not the computed received power.

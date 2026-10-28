@@ -121,7 +121,7 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
             <li><span className="swatch swatch-weak" aria-hidden="true" />Weak link (above sensitivity)</li>
             <li><span className="swatch swatch-interference" aria-hidden="true" />Possible interference</li>
           </ul>
-          <p className="field-note">Using {zoneInfo.rxName}’s settings{zoneInfo.reason === 'nearest' ? ' (nearest receiver; none is linked to this transmitter)' : ''}. {map.propagationModel === 'terrain' ? 'Terrain diffraction at Rx height' : 'Free-space boundary at Rx height'} {formatNumber(zoneInfo.aglM, 1)} m above ground. Dashed rings are free-space reference ranges.</p>
+          <p className="field-note">Using {zoneInfo.rxName}’s settings{zoneInfo.reason === 'nearest' ? ' (nearest receiver; none is linked to this transmitter)' : ''}. {map.propagationModel === 'terrain' ? 'Terrain diffraction at Rx height' : 'Free-space boundary at Rx height'} {formatNumber(zoneInfo.aglM, 1)} m above ground.{map.propagationModel === 'terrain' ? '' : ' Dashed rings are free-space reference ranges.'}</p>
         </div>
       )}
       </div></>}
