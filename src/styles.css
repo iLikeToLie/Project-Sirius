@@ -766,6 +766,7 @@ tbody tr:hover { background: var(--surface-elevated); }
 .legend-check { display: flex; align-items: center; gap: 6px; color: var(--mute); font-size: 10px; cursor: pointer; }
 .legend-check input { width: 12px; height: 12px; margin: 0; accent-color: var(--yellow); }
 .signal-scale { min-width: 0; }
+.coverage-style { display: grid; grid-template-columns: 1fr 1fr; }
 
 /* Drawer */
 .link-budget-drawer { left: 10px; right: 10px; bottom: 10px; max-height: min(40%, 380px); }
@@ -795,3 +796,9 @@ tbody tr:hover { background: var(--surface-elevated); }
   .tool-label { display: none; }
   .tool.tool-group, .switch-group { padding: 0 9px; }
 }
+
+/* Multi-link receivers: desired-transmitter list and stacked Rx meters */
+.selected-sensor-card { overflow-y: auto; }
+.rx-meter-stack, .desired-transmitters { display: grid; gap: 10px; }
+.desired-transmitters { margin: 10px 0; padding: 10px; border: 1px solid var(--hairline); border-radius: 8px; }
+.desired-transmitters legend { color: var(--mute); font-size: 12px; }

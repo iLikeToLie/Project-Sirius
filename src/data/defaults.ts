@@ -37,7 +37,7 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     sensitivityDbm: inputs.sensitivityDbm,
     fadeMarginTargetDb: inputs.fadeMarginTargetDb,
     interferenceThresholdDbm: inputs.interferenceThresholdDbm,
-    intendedTxId: 'auto' as const,
+    desiredTxIds: 'auto' as const,
     objective: 'default' as const,
   };
   return {
@@ -75,7 +75,7 @@ const DEFAULT_INPUTS: LinkInputs = {
 const defaultPlacements = workspaceForDistance(500);
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   linkObjective: 'desired',
   inputs: DEFAULT_INPUTS,
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },

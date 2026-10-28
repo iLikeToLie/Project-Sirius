@@ -1,6 +1,6 @@
 # Friis RF Link & Interference Calculator
 
-A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.6.0** is based on **workbook Version 3** and presents its objective-based RF tools through a science-forward mission-control interface.
+A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.7.0** is based on **workbook Version 3** and presents its objective-based RF tools through a science-forward mission-control interface.
 
 **Live calculator:** [iliketolie.github.io/Project-Sirius](https://iliketolie.github.io/Project-Sirius/)
 
@@ -11,8 +11,8 @@ A browser-based RF link-budget and interference-screening tool using the Friis f
 - Dynamic Tx-to-Rx graphic with antenna symbols, stylized beams, distance, endpoint power and gain, cable losses, propagation losses, status animation, receiver thresholds, and an Rx power meter.
 - Objective-aware Rx meter: desired communication compares received power with sensitivity and the required receive level; interference avoidance compares it with sensitivity and the interference threshold.
 - Link workspace on a map of Singapore (OneMap Grey with hillshading): place up to six sensors, each switchable between transmitter and receiver; drag, nudge or type their positions.
-- Per-receiver objectives: each receiver's intended transmitter (nearest by default) is judged for communication, every other transmitter for interference; links and above-threshold interference are drawn on the map.
-- Terrain diffraction (ITU-R P.526 Bullington knife edge, 4/3 Earth radius) over ALOS AW3D30 ground, with a radial coverage map for the selected transmitter (acceptable, weak, interference) using its linked receiver's settings, computed in a web worker. Free-space range rings and a Free space model option remain.
+- Per-receiver objectives: each receiver has a set of desired transmitters (Auto picks the nearest), judged for communication with one Rx meter bar each; every other transmitter is judged for interference; links and above-threshold interference are drawn on the map.
+- Terrain diffraction (ITU-R P.526 Bullington knife edge, 4/3 Earth radius) over ALOS AW3D30 ground, with a radial coverage map for the selected transmitter (acceptable, weak, interference) using its linked receiver's settings, computed in a web worker and drawn as a continuous signal gradient or as threshold bands. A Free space model option remains, with free-space range rings shown only in that model.
 - Workspace default objective (Desired / Avoidance) with per-receiver overrides, a frequency-scaled transmit animation, compact collapsible cards, and a Link-budget drawer holding every Calculator input and result plus a path-profile chart.
 - Antenna elevation = ground + height above ground. All sensors share one operating frequency.
 - Distance sweep with received-power, sensitivity, and interference-threshold curves.

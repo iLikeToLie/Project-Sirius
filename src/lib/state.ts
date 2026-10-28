@@ -54,12 +54,22 @@ function migrateWorkspace(ws: LinkWorkspace, inputs: LinkInputs): MapScenario {
 
 const SENSOR_NUMBERS = ['lat', 'lon', 'aglM', 'gainDbi', 'cableLossDb', 'powerDbm', 'sensitivityDbm', 'fadeMarginTargetDb', 'interferenceThresholdDbm'] as const;
 
+function readDesired(value: unknown): Sensor['desiredTxIds'] | undefined {
+  if (value === 'auto') return 'auto';
+  if (Array.isArray(value) && value.every((id) => typeof id === 'string')) return value;
+  return undefined;
+}
+
 function readSensor(value: unknown): Sensor | undefined {
   if (!isRecord(value)) return undefined;
-  const { id, name, role, intendedTxId } = value;
-  if (typeof id !== 'string' || !id || typeof name !== 'string' || (role !== 'tx' && role !== 'rx') || typeof intendedTxId !== 'string') return undefined;
+  const { id, name, role } = value;
+  const desiredTxIds = 'desiredTxIds' in value
+    ? readDesired(value.desiredTxIds)
+    : typeof value.intendedTxId !== 'string' ? undefined : value.intendedTxId && value.intendedTxId !== 'auto' ? [value.intendedTxId] : 'auto';
+  if (typeof id !== 'string' || !id || typeof name !== 'string' || (role !== 'tx' && role !== 'rx') || !desiredTxIds) return undefined;
   if (!SENSOR_NUMBERS.every((key) => isFiniteNumber(value[key]))) return undefined;
-  const sensor = Object.fromEntries(['id', 'name', 'role', 'intendedTxId', ...SENSOR_NUMBERS].map((key) => [key, value[key]])) as unknown as Sensor;
+  const sensor = Object.fromEntries(['id', 'name', 'role', ...SENSOR_NUMBERS].map((key) => [key, value[key]])) as unknown as Sensor;
+  sensor.desiredTxIds = desiredTxIds;
   const valid = Math.abs(sensor.lat) <= 90 && Math.abs(sensor.lon) <= 180 && sensor.aglM >= 0 && sensor.cableLossDb >= 0 && sensor.fadeMarginTargetDb >= 0;
   if (value.objective !== undefined && !['default', 'desired', 'avoidance'].includes(value.objective as string)) return undefined;
   sensor.objective = value.objective as Sensor['objective'] ?? 'default';
@@ -76,8 +86,13 @@ function readMap(value: unknown): MapScenario | undefined {
   const list = sensors as Sensor[];
   if (new Set(list.map((s) => s.id)).size !== list.length) return undefined;
   const ids = new Set(list.map((s) => s.id));
+  const txIds = new Set(list.filter((s) => s.role === 'tx').map((s) => s.id));
   return {
-    sensors: list.map((s) => (s.intendedTxId === 'auto' || ids.has(s.intendedTxId) ? s : { ...s, intendedTxId: 'auto' })),
+    sensors: list.map((s) => {
+      if (s.desiredTxIds === 'auto') return s;
+      const desiredTxIds = [...new Set(s.desiredTxIds.filter((id) => txIds.has(id)))];
+      return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : 'auto' };
+    }),
     selectedId: typeof value.selectedId === 'string' && ids.has(value.selectedId) ? value.selectedId : null,
     zonesForRxId: typeof value.zonesForRxId === 'string' && ids.has(value.zonesForRxId) ? value.zonesForRxId : 'auto',
     useTerrainElevation: value.useTerrainElevation,
@@ -93,7 +108,7 @@ export function normalizeState(saved?: unknown): AppState {
   const inputs = { ...defaults.inputs, ...s.inputs };
   const map = 'map' in s ? readMap(s.map) ?? defaults.map : migrateWorkspace(readWorkspace(s.workspace, inputs.distanceM), inputs);
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     linkObjective: s.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
     inputs,
     distanceSweep: { ...defaults.distanceSweep, ...s.distanceSweep },

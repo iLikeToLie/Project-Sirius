@@ -12,21 +12,57 @@ const base = () => {
 };
 /** A web 1.4.0 save (schema 2, plan-view workspace). */
 const v2 = (workspace: LinkWorkspace) => ({ ...base(), schemaVersion: 2, workspace });
+const v4WithReceiver = (receiver: Record<string, unknown>) => {
+  const state = freshDefaultState();
+  const [tx, rx] = state.map.sensors;
+  const { desiredTxIds: _desiredTxIds, ...legacyRx } = rx;
+  return { ...state, schemaVersion: 4, map: { ...state.map, sensors: [tx, { ...legacyRx, intendedTxId: 'auto', ...receiver }] } };
+};
+const v5WithReceiver = (receiver: Record<string, unknown>) => {
+  const state = freshDefaultState();
+  const [tx, rx] = state.map.sensors;
+  return { ...state, map: { ...state.map, sensors: [tx, { ...rx, ...receiver }] } };
+};
 /** A pre-1.4.0 save: no workspace at all. */
 const v1 = (distanceM: number) => { const rest = base(); return { ...rest, inputs: { ...rest.inputs, distanceM } }; };
 
 describe('scenario state', () => {
   it('returns defaults when nothing is saved', () => {
     expect(normalizeState()).toEqual(DEFAULT_STATE);
-    expect(DEFAULT_STATE.schemaVersion).toBe(4);
+    expect(DEFAULT_STATE.schemaVersion).toBe(5);
     expect(DEFAULT_STATE.map.sensors.map((s) => s.role)).toEqual(['tx', 'rx']);
     expect(DEFAULT_STATE.map.useTerrainElevation).toBe(true);
+  });
+
+  it('defaults new receivers to auto', () => {
+    expect(DEFAULT_STATE.map.sensors.every((s) => s.desiredTxIds === 'auto' || s.role === 'tx')).toBe(true);
+  });
+
+  it('migrates a saved intendedTxId string to a one-item list', () => {
+    const state = normalizeState(v4WithReceiver({ intendedTxId: 'sensor-1' }) as unknown as Partial<AppState>);
+    expect(state.map.sensors.find((s) => s.role === 'rx')?.desiredTxIds).toEqual(['sensor-1']);
+  });
+
+  it('opens a saved receiver with an empty intendedTxId on auto instead of rejecting the map', () => {
+    const state = normalizeState(v4WithReceiver({ intendedTxId: '' }) as unknown as Partial<AppState>);
+    expect(state.map.sensors).toHaveLength(2);
+    expect(state.map.sensors.find((s) => s.role === 'rx')?.desiredTxIds).toBe('auto');
+  });
+
+  it('drops unknown transmitters and falls back to auto when nothing is left', () => {
+    const state = normalizeState(v5WithReceiver({ desiredTxIds: ['missing-id'] }) as unknown as Partial<AppState>);
+    expect(state.map.sensors.find((s) => s.role === 'rx')?.desiredTxIds).toBe('auto');
+  });
+
+  it('removes duplicate ids', () => {
+    const state = normalizeState(v5WithReceiver({ desiredTxIds: ['sensor-1', 'sensor-1'] }) as unknown as Partial<AppState>);
+    expect(state.map.sensors.find((s) => s.role === 'rx')?.desiredTxIds).toEqual(['sensor-1']);
   });
 
   it('migrates a 1.4.0 workspace without changing its result', () => {
     const workspace: LinkWorkspace = { tx: { xM: 300, yM: 400, aglM: 12 }, rx: { xM: 0, yM: 0, aglM: 10 }, terrain: { ...DEFAULT_TERRAIN, enabled: true } };
     const state = normalizeState(v2(workspace) as unknown as Partial<AppState>);
-    expect(state.schemaVersion).toBe(4);
+    expect(state.schemaVersion).toBe(5);
     expect(state.map.sensors).toHaveLength(2);
     expect(state.map.useTerrainElevation).toBe(false);
     expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(separation3dM(workspace), 6);

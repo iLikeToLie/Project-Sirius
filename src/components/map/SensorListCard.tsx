@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronLeft, List, Plus, Trash2 } from 'lucide-react';
-import { MAX_SENSORS, type PairResult, receiverSummary } from '../../lib/sensors';
+import { MAX_SENSORS, type PairResult, receiverSummary, worstLink } from '../../lib/sensors';
 import type { Sensor } from '../../types';
 import { statusTone } from '../ui';
 
@@ -9,7 +9,8 @@ function sensorStatus(sensor: Sensor, pairs: PairResult[]): { text: string; tone
     const served = pairs.filter((p) => p.txId === sensor.id && p.intended).length;
     return { text: served === 1 ? 'serves 1' : `serves ${served}`, tone: 'neutral' };
   }
-  const { link, interferersAbove } = receiverSummary(pairs, sensor.id);
+  const { links, interferersAbove } = receiverSummary(pairs, sensor.id);
+  const link = worstLink(links);
   if (!link) return { text: interferersAbove ? `${interferersAbove} interferer(s)` : 'No intended link', tone: interferersAbove ? 'danger' : 'safe' };
   const base = link.result.status === 'Acceptable link' ? 'OK' : link.result.status === 'Weak link' ? 'Weak' : link.result.status === 'No link' ? 'No link' : 'Invalid';
   return interferersAbove
