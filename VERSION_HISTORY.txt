@@ -331,7 +331,7 @@ redistribution terms); missing tiles flag the link as unknown. Elevation
 
 -------------------------------------------------------------------------------
 Web Version 1.7.0 (based on workbook Version 3)
-Deployment: https://iliketolie.github.io/friis-rf-calculator/
+Deployment: https://iliketolie.github.io/Project-Sirius/
 Date: 2026-10-28
 
 Function:
@@ -359,3 +359,26 @@ Calculation scope:
 Unchanged from 1.6.0. The Version 3 Friis engine and the Bullington terrain
 diffraction model are unchanged. The coverage style changes only how the
 coverage map is drawn, not the computed received power.
+
+-------------------------------------------------------------------------------
+Web Version 1.7.1 (based on workbook Version 3)
+Deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-10-28
+
+Function:
+Gave the Link workspace more room.
+
+Key changes:
+- Full screen button in the map toolbar: the workspace, with all cards, fills
+  the screen; Esc leaves it. Browsers without the Fullscreen API cover the
+  window instead.
+- Link budget drawer: drag its top edge to resize (keyboard: arrow keys, Page
+  Up/Down, Home/End; double-click resets), or Expand to fill the workspace.
+  The legend and selected-sensor card stay clear of the drawer at any size.
+- Wider pan margin (about 33 km beyond Singapore), so a setup near the coast
+  can be centred in view.
+- The live site moved to https://iliketolie.github.io/Project-Sirius/ after the
+  repository rename; the old friis-rf-calculator address no longer resolves.
+
+Calculation scope:
+Unchanged from 1.7.0.

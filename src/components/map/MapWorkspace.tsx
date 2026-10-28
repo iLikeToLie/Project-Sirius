@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, EyeOff, Maximize2, Minus, Plus, SlidersHorizontal } from 'lucide-react';
+import { Expand, Eye, EyeOff, Maximize2, Minus, Plus, Shrink, SlidersHorizontal } from 'lucide-react';
 import { activePair, applyInputEdit, zoneReceiver, type LinkPin } from '../../lib/activeLink';
 import { coverageZones } from '../../lib/coverage';
 import { signalRange } from '../../lib/signalColour';
@@ -12,7 +12,7 @@ import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
 import { statusTone } from '../ui';
 import { CoverageLegend, type CoverageStyle } from './CoverageLegend';
-import { LinkBudgetDrawer } from './LinkBudgetDrawer';
+import { type DrawerSize, LinkBudgetDrawer } from './LinkBudgetDrawer';
 import { LinkSettingsCard } from './LinkSettingsCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
 import { SensorListCard } from './SensorListCard';
@@ -36,7 +36,29 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const [showAll, setShowAll] = useState(false);
   const [coverageStyle, setCoverageStyle] = useState<CoverageStyle>('gradient');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Drawer height in px once dragged, 'max' to fill the workspace, null for the default.
+  const [drawerSize, setDrawerSize] = useState<DrawerSize>(null);
+  const root = useRef<HTMLDivElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const { map } = state;
+
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement !== null && document.fullscreenElement === root.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+  // Without the Fullscreen API (iOS Safari) the workspace covers the window instead; Escape leaves it.
+  useEffect(() => {
+    if (!fullscreen || document.fullscreenElement) return undefined;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
+  const toggleFullscreen = () => {
+    if (!document.fullscreenEnabled) setFullscreen((f) => !f);
+    else if (document.fullscreenElement) void document.exitFullscreen();
+    else void root.current?.requestFullscreen();
+  };
   const groundAt: GroundAt = elevation.groundAt;
   const dragging = Object.keys(draft).length > 0;
 
@@ -185,7 +207,11 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   }));
 
   return (
-    <div className={`map-workspace${dragging ? ' dragging-sensor' : ''}${hidePanels ? ' panels-hidden' : ''}${drawerOpen ? ' drawer-open' : ''}`}>
+    <div
+      ref={root}
+      className={`map-workspace${dragging ? ' dragging-sensor' : ''}${hidePanels ? ' panels-hidden' : ''}${drawerOpen ? ' drawer-open' : ''}${drawerOpen && drawerSize !== null ? ' drawer-sized' : ''}${drawerOpen && drawerSize === 'max' ? ' drawer-max' : ''}${fullscreen ? ' map-fullscreen' : ''}`}
+      style={typeof drawerSize === 'number' ? { '--drawer-h': `${drawerSize}px` } as React.CSSProperties : undefined}
+    >
       <SensorMap
         sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
         onSelect={select}
@@ -214,6 +240,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
         </label>
         <button type="button" className={`tool tool-group${showSettings ? ' active' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={14} /> Link settings</button>
         <button type="button" className="tool tool-group" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? <Eye size={14} /> : <EyeOff size={14} />}{hidePanels ? 'Show panels' : 'Hide panels'}</button>
+        <button type="button" className="tool tool-group" aria-pressed={fullscreen} title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'} onClick={toggleFullscreen}>{fullscreen ? <Shrink size={14} /> : <Expand size={14} />}{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
         {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
@@ -224,7 +251,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
 
-      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={setPin} />
+      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={setPin} size={drawerSize} onResize={setDrawerSize} />
 
       {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} />}
 

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { activePair, type LinkPin } from '../../lib/activeLink';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
@@ -10,11 +11,25 @@ import { RxMeterStack } from './RxMeterStack';
 
 const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location / identifier', rxId: 'Rx location / identifier' } as const;
 
+/** Drawer height in px after a drag, 'max' to fill the workspace, or null for the default. */
+export type DrawerSize = number | 'max' | null;
+const MIN_DRAWER_PX = 120;
+const STEP_PX = 40;
+
+/** Height limits for the drawer inside its workspace: the workspace height minus the 10 px margins. */
+function drawerLimits(drawer: HTMLElement | null) {
+  const parent = drawer?.offsetParent as HTMLElement | null;
+  const rect = parent?.getBoundingClientRect();
+  return { bottom: (rect?.bottom ?? window.innerHeight) - 10, max: Math.max(MIN_DRAWER_PX, (rect?.height ?? window.innerHeight) - 20) };
+}
+
 /** The Calculator's inputs, results and Rx meter for the active link, writing back through `onEdit`. */
-export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin, onPin }: {
+export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin, onPin, size, onResize }: {
   state: AppState;
   open: boolean;
   onToggle: (open: boolean) => void;
+  size: DrawerSize;
+  onResize: (size: DrawerSize) => void;
   groundAt: GroundAt;
   pin: LinkPin | null;
   onPin: (pin: LinkPin | null) => void;
@@ -48,11 +63,44 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin,
   );
   const tone = statusTone(result.status);
 
+  const clamp = (px: number, max: number) => Math.round(Math.min(max, Math.max(MIN_DRAWER_PX, px)));
+  const currentPx = (drawer: HTMLElement | null) => drawer?.getBoundingClientRect().height ?? MIN_DRAWER_PX;
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const handle = e.currentTarget;
+    const { bottom, max } = drawerLimits(handle.parentElement);
+    handle.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => onResize(clamp(bottom - ev.clientY, max));
+    const end = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end); };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  };
+  const nudge = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const drawer = e.currentTarget.parentElement;
+    const { max } = drawerLimits(drawer);
+    const steps: Record<string, number> = { ArrowUp: STEP_PX, ArrowDown: -STEP_PX, PageUp: STEP_PX * 4, PageDown: -STEP_PX * 4 };
+    if (e.key in steps) { e.preventDefault(); onResize(clamp(currentPx(drawer) + steps[e.key], max)); }
+    else if (e.key === 'Home') { e.preventDefault(); onResize(MIN_DRAWER_PX); }
+    else if (e.key === 'End') { e.preventDefault(); onResize('max'); }
+  };
+
   return (
     <section className={`map-card link-budget-drawer${open ? '' : ' collapsed'} link-tone-${tone}`} aria-label="Link budget">
+      {open && (
+        <div
+          className="drawer-resize" role="separator" aria-orientation="horizontal" aria-label="Resize link budget" tabIndex={0}
+          title="Drag to resize · double-click to reset · arrow keys to adjust"
+          onPointerDown={startDrag} onKeyDown={nudge} onDoubleClick={() => onResize(null)}
+        />
+      )}
       <div className="drawer-bar">
         <button type="button" className="ghost" aria-expanded={open} onClick={() => onToggle(!open)}>{open ? 'Link budget −' : 'Link budget +'}</button>
         <span className="drawer-summary">{inputs.txId} → {inputs.rxId} · <b>{formatNumber(result.receivedPowerDbm)} dBm</b></span>
+        {open && (
+          <button type="button" className="ghost drawer-expand" aria-pressed={size === 'max'} onClick={() => onResize(size === 'max' ? null : 'max')}>
+            {size === 'max' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}{size === 'max' ? 'Restore' : 'Expand'}
+          </button>
+        )}
         <StatusBadge status={result.status} />
       </div>
       {open && (
