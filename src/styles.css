@@ -815,8 +815,11 @@ tbody tr:hover { background: var(--surface-elevated); }
   .map-workspace { --drawer-h: min(40%, 380px); }
   .map-workspace.drawer-max { --drawer-h: calc(100% - 20px); }
   .link-budget-drawer { max-height: var(--drawer-h); }
-  .drawer-sized .link-budget-drawer:not(.collapsed) { height: var(--drawer-h); }
+  .drawer-sized .link-budget-drawer:not(.collapsed) { height: min(var(--drawer-h), calc(100% - 20px)); }
   .drawer-open .coverage-legend { bottom: calc(var(--drawer-h) + 22px); }
+  /* The sensor list stops above the legend (about 130 px tall) so a tall drawer never pushes the legend under it. */
+  .drawer-open .sensor-list-card { max-height: calc(100% - var(--drawer-h) - 220px); overflow-y: auto; }
+  .coverage-legend { z-index: 3; }
   .drawer-open .selected-sensor-card { max-height: calc(100% - var(--drawer-h) - 80px); }
   .drawer-max .map-card:not(.link-budget-drawer), .drawer-max .coverage-legend { visibility: hidden; }
 }
@@ -824,3 +827,15 @@ tbody tr:hover { background: var(--surface-elevated); }
   .drawer-resize, .drawer-expand { display: none; }
   .map-workspace.map-fullscreen, .map-workspace:fullscreen { overflow: auto; padding: 10px; background: var(--canvas); }
 }
+
+/* Link settings: readable number fields and a log-true frequency scale */
+.map-workspace input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.map-workspace input[type="number"]::-webkit-inner-spin-button, .map-workspace input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.range-scale.log-scale { position: relative; display: block; height: 14px; }
+.range-scale.log-scale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.range-scale.log-scale span:first-child { transform: none; }
+.range-scale.log-scale span:last-child { transform: translateX(-100%); }
+
+/* Distance labels on desired links */
+.link-distance-label { padding: 2px 5px; border: 1px solid var(--hairline); border-radius: 4px; background: var(--surface-card); color: var(--ink); font-size: 10px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.link-distance-label.faint { opacity: .55; }

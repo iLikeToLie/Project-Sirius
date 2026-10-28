@@ -10,16 +10,21 @@ import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective,
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
+import { isBoolean, oneOf, usePref } from '../usePref';
 import { statusTone } from '../ui';
 import { CoverageLegend, type CoverageStyle } from './CoverageLegend';
 import { type DrawerSize, LinkBudgetDrawer } from './LinkBudgetDrawer';
 import { LinkSettingsCard } from './LinkSettingsCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
 import { SensorListCard } from './SensorListCard';
-import { type MapLink, type MapView, SensorMap, type SensorMapHandle } from './SensorMap';
+import { type Basemap, type MapLink, type MapView, SensorMap, type SensorMapHandle } from './SensorMap';
 import type { useElevationTiles } from './useElevationTiles';
 
 type Elevation = ReturnType<typeof useElevationTiles>;
+
+/** Link length as the range rings show it: metres below 1 km, else km. */
+const formatDistance = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(0)} m`);
+const isDrawerSize = (v: unknown): v is DrawerSize => v === null || v === 'max' || (typeof v === 'number' && Number.isFinite(v) && v >= 120);
 
 /** Elevation tile zoom whose pixels are no coarser than one zone grid cell. */
 function zoomForCell(cellM: number, lat: number) {
@@ -32,12 +37,14 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const [view, setView] = useState<MapView | null>(null);
   const [draft, setDraft] = useState<Record<string, LatLon>>({});
   const [showSettings, setShowSettings] = useState(false);
-  const [hidePanels, setHidePanels] = useState(false);
-  const [showAll, setShowAll] = useState(false);
-  const [coverageStyle, setCoverageStyle] = useState<CoverageStyle>('gradient');
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // View preferences are remembered on this device; scenario data stays in the app state.
+  const [hidePanels, setHidePanels] = usePref('hidePanels', false, isBoolean);
+  const [showAll, setShowAll] = usePref('showAllBands', false, isBoolean);
+  const [coverageStyle, setCoverageStyle] = usePref<CoverageStyle>('coverageStyle', 'gradient', oneOf('gradient', 'bands'));
+  const [basemap, setBasemap] = usePref<Basemap>('basemap', 'onemap', oneOf('onemap', 'plain'));
+  const [drawerOpen, setDrawerOpen] = usePref('drawerOpen', false, isBoolean);
   // Drawer height in px once dragged, 'max' to fill the workspace, null for the default.
-  const [drawerSize, setDrawerSize] = useState<DrawerSize>(null);
+  const [drawerSize, setDrawerSize] = usePref<DrawerSize>('drawerSize', null, isDrawerSize);
   const root = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const { map } = state;
@@ -54,6 +61,16 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [fullscreen]);
+  // F toggles full screen unless the user is typing in a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key.toLowerCase() !== 'f' || e.ctrlKey || e.metaKey || e.altKey || t?.closest('input, select, textarea, [contenteditable]')) return;
+      e.preventDefault(); toggleFullscreen();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const toggleFullscreen = () => {
     if (!document.fullscreenEnabled) setFullscreen((f) => !f);
     else if (document.fullscreenElement) void document.exitFullscreen();
@@ -198,6 +215,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
       kind: p.intended ? 'intended' : 'interference',
       tone: statusTone(p.result.status),
       emphasis: !selected || p.txId === selected.id || p.rxId === selected.id,
+      label: p.intended ? formatDistance(p.distanceM) : undefined,
     }));
   const tones: Record<string, string> = Object.fromEntries(sensors.map((s) => {
     if (s.role === 'tx') return [s.id, 'tx'];
@@ -213,7 +231,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
       style={typeof drawerSize === 'number' ? { '--drawer-h': `${drawerSize}px` } as React.CSSProperties : undefined}
     >
       <SensorMap
-        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
+        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} basemap={basemap} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
         onSelect={select}
         onDrag={(id, at) => setDraft((d) => ({ ...d, [id]: at }))}
         onDragEnd={(id, at) => { updateSensor(id, at); setDraft((d) => { const { [id]: _done, ...rest } = d; return rest; }); }}
@@ -238,9 +256,12 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
           <input type="checkbox" aria-label="Use terrain elevation" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
           <span>Terrain elevation</span>
         </label>
+        <label className="tool-group select-group" title="OneMap street map, or a plain background with terrain shading only"><span className="tool-label">Map</span>
+          <select aria-label="Basemap" value={basemap} onChange={e => setBasemap(e.target.value as Basemap)}><option value="onemap">OneMap</option><option value="plain">Plain terrain</option></select>
+        </label>
         <button type="button" className={`tool tool-group${showSettings ? ' active' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={14} /> Link settings</button>
         <button type="button" className="tool tool-group" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? <Eye size={14} /> : <EyeOff size={14} />}{hidePanels ? 'Show panels' : 'Hide panels'}</button>
-        <button type="button" className="tool tool-group" aria-pressed={fullscreen} title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'} onClick={toggleFullscreen}>{fullscreen ? <Shrink size={14} /> : <Expand size={14} />}{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
+        <button type="button" className="tool tool-group" aria-pressed={fullscreen} title={fullscreen ? 'Exit full screen (Esc or F)' : 'Full screen (F)'} onClick={toggleFullscreen}>{fullscreen ? <Shrink size={14} /> : <Expand size={14} />}{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
         {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>

@@ -3,6 +3,9 @@ import { formatFrequency, FREQUENCY_SLIDER_MAX, frequencyFromSlider, parseFreque
 import type { LinkInputs } from '../../types';
 import { NumberField } from '../ui';
 
+// Labels sit where the logarithmic slider puts each frequency (1 GHz is at 60 %, not the middle).
+const SCALE_MARKS = [{ ghz: 0.001, label: '1 MHz' }, { ghz: 1, label: '1 GHz' }, { ghz: 100, label: '100 GHz' }];
+
 function FrequencyControl({ frequencyGhz, onChange }: { frequencyGhz: number; onChange: (ghz: number) => void }) {
   const valid = Number.isFinite(frequencyGhz) && frequencyGhz >= 0.001 && frequencyGhz <= 100;
   const [text, setText] = useState(valid ? formatFrequency(frequencyGhz) : '');
@@ -35,7 +38,7 @@ function FrequencyControl({ frequencyGhz, onChange }: { frequencyGhz: number; on
         value={valid ? sliderFromFrequency(frequencyGhz) : 0} aria-valuetext={valid ? formatFrequency(frequencyGhz) : 'Invalid frequency'}
         onChange={(event) => { setError(''); onChange(Number(frequencyFromSlider(Number(event.target.value)).toPrecision(6))); }}
       />
-      <div className="range-scale"><span>1 MHz</span><span>1 GHz</span><span>100 GHz</span></div>
+      <div className="range-scale log-scale" aria-hidden="true">{SCALE_MARKS.map((m) => <span key={m.label} style={{ left: `${(sliderFromFrequency(m.ghz) / FREQUENCY_SLIDER_MAX) * 100}%` }}>{m.label}</span>)}</div>
       {error && <small className="field-error" role="alert">{error}</small>}
     </div>
   );

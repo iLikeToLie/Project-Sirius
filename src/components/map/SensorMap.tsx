@@ -16,7 +16,8 @@ const ELEVATION_ATTRIBUTION = '©JAXA, ALOS World 3D-30m (AW3D30)';
 // Pan margin beyond Singapore (about 33 km), so a setup near the coast can still be centred in view.
 const PAD = 0.3;
 
-export interface MapLink { from: LatLon; to: LatLon; kind: 'intended' | 'interference'; tone: string; emphasis: boolean }
+export interface MapLink { from: LatLon; to: LatLon; kind: 'intended' | 'interference'; tone: string; emphasis: boolean; label?: string }
+export type Basemap = 'onemap' | 'plain';
 export interface MapZones {
   result: ZoneResult;
   /** Grid corners: north-west, north-east, south-east, south-west. */
@@ -62,13 +63,14 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
   return canvas.toDataURL();
 }
 
-export function SensorMap({ sensors, selectedId, tones, links, zones, rings, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
+export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
   sensors: Sensor[];
   selectedId: string | null;
   tones: Record<string, string>;
   links: MapLink[];
   zones: MapZones | null;
   rings: { id: string; points: LatLon[]; label: string }[];
+  basemap: Basemap;
   frequencyGhz: number;
   handleRef: React.MutableRefObject<SensorMapHandle | null>;
   onSelect: (id: string) => void;
@@ -272,5 +274,23 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, fre
     });
     return () => labels.forEach(m => m.remove());
   }, [rings, loaded]);
+
+  // Distance labels at the midpoint of each labelled link; keyed on text and position so unrelated renders keep them.
+  const linkLabels = links.filter((l) => l.label).map((l) => ({ text: l.label!, lon: (l.from.lon + l.to.lon) / 2, lat: (l.from.lat + l.to.lat) / 2, faint: !l.emphasis }));
+  const linkLabelKey = linkLabels.map((l) => `${l.lon.toFixed(6)},${l.lat.toFixed(6)},${l.text},${l.faint}`).join(';');
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!loaded || !map) return undefined;
+    const markers = linkLabels.map((l) => {
+      const el = document.createElement('span'); el.className = `link-distance-label${l.faint ? ' faint' : ''}`; el.textContent = l.text;
+      return new maplibregl.Marker({ element: el, offset: [0, -14] }).setLngLat([l.lon, l.lat]).addTo(map);
+    });
+    return () => markers.forEach((m) => m.remove());
+  }, [linkLabelKey, loaded]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (loaded && map?.getLayer('onemap')) map.setLayoutProperty('onemap', 'visibility', basemap === 'plain' ? 'none' : 'visible');
+  }, [basemap, loaded]);
   return <><div ref={containerRef} className="map-canvas" />{loaded && mapRef.current && <SignalOverlay map={mapRef.current} links={links} frequencyGhz={frequencyGhz} />}</>;
 }
