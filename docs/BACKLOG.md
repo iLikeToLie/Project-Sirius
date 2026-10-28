@@ -7,7 +7,7 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
 - **Item 1:** keep one OneMap map with labels hidden if OneMap offers a label-free style. If it does not, switch to another basemap, visually only. The JAXA elevation data must remain in either case.
 - **Item 3:** the Rx meter shows one bar per desired transmitter, sorted from best to worst link.
 
-## 1. Restyle the basemap
+## 1. Restyle the basemap — partly done in 1.8.0 (Plain terrain option; a label-free street basemap is still open)
 
 - **Problem:** the OneMap Grey basemap shows road names and MRT lines, which clutter the workspace.
 - **Want:** a cleaner map aesthetic without labels or transit lines. Keep one OneMap map if possible. Otherwise use another basemap, visually only. JAXA elevation must remain as the terrain source and hillshade.
@@ -42,7 +42,7 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
   - Rx meter: one bar per desired transmitter, sorted from best to worst link.
   - Decide whether a transmitter heard by a receiver counts as desired or interference when it is in the desired set.
 
-## 4. Show distance on desired-link lines
+## 4. Show distance on desired-link lines — done in 1.8.0
 
 - **Want:** in desired-communication mode, each link line drawn on the map shows its distance as a label.
 - **Notes:** the lines are the `intended` links from `MapLink` in `SensorMap.tsx`. Show the label at the midpoint, in the same units the workspace already uses (check the existing distance formatting before choosing km or m).
@@ -57,7 +57,7 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
   - Labels under the bar: "Sensitivity -85.00 dBm" in blue on the left, "Interference -65.00 dBm" in red on the right.
 - **Notes:** this is the same meter that already exists for the active link. Check that the link budget drawer's meter matches the reference, including the objective-aware reference lines (desired vs avoidance). The screenshot file is in a temporary folder that the session cannot read, so it is not copied into the repo.
 
-## 6. Link settings: number fields and frequency scale
+## 6. Link settings: number fields and frequency scale — done in 1.8.0
 
 - **Problem:** in the Link settings card, the spinner arrows of the number inputs sit on top of the values, so the Polarization, Environment and Other dB fields cannot show their numbers (the first digit is hidden). The fields are too narrow for the value plus the unit and spinner.
 - **Problem:** the operating frequency slider's scale labels (1 MHz, 1 GHz, 100 GHz) do not match the slider's position. The 2 GHz thumb sits well past the midpoint, so the scale looks wrong. Check whether the slider is logarithmic and, if so, label it to match.

@@ -382,3 +382,29 @@ Key changes:
 
 Calculation scope:
 Unchanged from 1.7.0.
+
+-------------------------------------------------------------------------------
+Web Version 1.8.0 (based on workbook Version 3)
+Deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-10-28
+
+Function:
+Readability and upkeep for the Link workspace.
+
+Key changes:
+- Distance labels at the midpoint of each desired link.
+- Map select: OneMap or Plain terrain (hillshade only, no road or MRT labels).
+- View preferences remembered on this device: coverage style, basemap, Show
+  all bands, hidden panels, and the drawer open state and size.
+- F toggles full screen (ignored while typing in a field).
+- Link settings: number fields no longer hide their first digit under the
+  spinner arrows; the frequency scale labels sit where the logarithmic slider
+  puts each frequency (1 GHz at 60 %).
+- A tall Link budget drawer no longer pushes the legend under the sensor
+  list; the list scrolls instead.
+- Build: libraries in separate cached chunks (MapLibre, charts, React); app
+  code is about 120 kB. Deploy workflow on current action versions (Node 24)
+  and a pinned ubuntu-24.04 runner.
+
+Calculation scope:
+Unchanged from 1.7.0.
