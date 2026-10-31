@@ -54,3 +54,15 @@ The repository retains the four Excel releases and [VERSION_HISTORY.txt](VERSION
 ## Engineering scope
 
 This calculator is for preliminary engineering analysis. Friis assumes free-space propagation and antenna gains in the direction of the other antenna. The map needs an internet connection; map data ©OneMap Singapore ODL v1.0, elevation ©JAXA, ALOS World 3D-30m (AW3D30). In terrain mode a single Bullington knife-edge diffraction loss is added per path; building heights, clutter, foliage, rain and multipath are not modelled. It does not replace detailed propagation modelling, antenna-pattern analysis, coordination studies, or field measurements. A threshold exceedance is a screening flag, not proof of harmful interference.
+
+### Light basemap
+
+The map selector offers **Light**, **OneMap** (the default), and **Plain terrain**.
+Light uses a locally maintained, recoloured copy of [OpenFreeMap Liberty](https://tiles.openfreemap.org/styles/liberty), copied on 31 October 2026 to `public/styles/sirius-light.json`.
+Vector tiles and fonts are served by OpenFreeMap; the original sprite URL is retained as provenance, but icons are removed and no sprite download is needed.
+The map credits OpenFreeMap, OpenMapTiles and OpenStreetMap while Light is visible.
+Light's geometry sits below hillshade and RF overlays; its labels sit above them.
+Parks are muted to distinguish them from RF coverage. Buildings are flat footprints.
+The preference is remembered on this device. Repeated provider errors (three per selection),
+or a source still loading after 15 seconds, switch to OneMap and display a notice.
+Selecting Light again retries it. Elevation data and RF calculations are independent of this choice.
