@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCoverage, type CoverageRequest } from './coverage';
+import { computeCoverage, gridGroundNear, type CoverageRequest } from './coverage';
 import { sampleGrid } from './contours';
 import { DEFAULT_STATE } from '../data/defaults';
 import { SG_REFERENCE } from './geo';
@@ -27,6 +27,14 @@ describe('radial coverage', () => {
   it('marks downstream samples unknown after missing ground', () => {
     const out = computeCoverage(request((x, y) => y > 800 && y < 1000 ? NaN : 0));
     expect(out.unknown[49]).toBe(1); expect(out.powerDbm[49]).toBeNaN(); expect(out.unknown[150]).toBe(1);
+  });
+  it('keeps ground known within half a step beyond the grid edge, and unknown past that', () => {
+    const grid = sampleGrid({ minX: -100, maxX: 100, minY: -100, maxY: 100 }, 20, 20, () => 7);
+    expect(gridGroundNear(grid, 108, 0, 10.2)).toBe(7);
+    expect(gridGroundNear(grid, 115, 0, 10.2)).toBeNaN();
+    const out = computeCoverage({ ...request(), maxRangeM: 140, stepM: 35, radials: 4, ground: { origin: SG_REFERENCE, grid } });
+    expect(out.unknown[2]).toBe(0); // 105 m, 5 m past the 100 m edge
+    expect(out.unknown[3]).toBe(1); // 140 m, well past it
   });
   it('computes 720 × 400 within 300 ms', () => {
     const req = { ...request(), radials: 720, stepM: 10 };

@@ -21,6 +21,17 @@ export function gridGroundAt(grid: ScalarGrid, x: number, y: number): number {
   return (v[k] * (1 - a) + v[k + 1] * a) * (1 - b) + (v[k + grid.cols + 1] * (1 - a) + v[k + grid.cols + 2] * a) * b;
 }
 
+/**
+ * Ground just outside the grid takes the nearest edge value, within `slack` metres. Each map cell
+ * reads its nearest ray step, whose sample can lie up to half a step beyond the grid; without this
+ * those cells at the map edge would read as unknown ground.
+ */
+export function gridGroundNear(grid: ScalarGrid, x: number, y: number, slack: number): number {
+  const clamp = (v: number, lo: number, hi: number) => (v < lo - slack || v > hi + slack ? NaN : Math.min(hi, Math.max(lo, v)));
+  const cx = clamp(x, grid.x0, grid.x0 + grid.cols * grid.dx), cy = clamp(y, grid.y0, grid.y0 + grid.rows * grid.dy);
+  return Number.isNaN(cx) || Number.isNaN(cy) ? NaN : gridGroundAt(grid, cx, cy);
+}
+
 /** Incremental horizon edge: constant work per receiver, without rebuilding each path profile. */
 export function computeCoverage(req: CoverageRequest): CoverageResult {
   if (!Number.isInteger(req.radials) || req.radials < 1 || req.radials > 1440 || !Number.isFinite(req.stepM) || req.stepM <= 0 || !Number.isFinite(req.maxRangeM) || req.maxRangeM <= 0) throw new Error('Invalid coverage dimensions');
@@ -36,7 +47,7 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
     let missing = !Number.isFinite(req.tx.elevationM) || !Number.isFinite(gridGroundAt(req.ground.grid, tx.xM, tx.yM));
     for (let s = 0; s < steps; s++) {
       const d = (s + 1) * req.stepM, index = r * steps + s;
-      const ground = gridGroundAt(req.ground.grid, tx.xM + sx * d, tx.yM + sy * d);
+      const ground = gridGroundNear(req.ground.grid, tx.xM + sx * d, tx.yM + sy * d, req.stepM * 0.51);
       missing ||= !Number.isFinite(ground);
       if (missing) { unknown[index] = 1; powerDbm[index] = NaN; continue; }
       const rxElevation = ground + req.rxAglM;
