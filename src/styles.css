@@ -839,3 +839,10 @@ tbody tr:hover { background: var(--surface-elevated); }
 /* Distance labels on desired links */
 .link-distance-label { padding: 2px 5px; border: 1px solid var(--hairline); border-radius: 4px; background: var(--surface-card); color: var(--ink); font-size: 10px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .link-distance-label.faint { opacity: .55; }
+
+/* Keep data credits readable on Light and above the collapsed link-budget bar. */
+.map-workspace .map-canvas .maplibregl-ctrl-attrib { background-color: var(--surface-card); color: var(--body); }
+.map-workspace .maplibregl-ctrl-bottom-right { bottom: 52px; }
+@media (max-width: 900px) {
+  .map-workspace .maplibregl-ctrl-bottom-right { bottom: 0; }
+}

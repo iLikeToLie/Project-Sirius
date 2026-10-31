@@ -6,6 +6,8 @@ import { type LatLon, SG_REFERENCE } from '../../lib/geo';
 import { signalColour } from '../../lib/signalColour';
 import { ZONE, type ZoneResult } from '../../lib/zones';
 import type { Sensor } from '../../types';
+import { lightStyle, lightSourceIds, installLightBasemap, showBasemap, type Basemap } from './lightBasemap';
+export type { Basemap } from './lightBasemap';
 import { SignalOverlay } from './SignalOverlay';
 import type { LinkObjective } from '../../types';
 import { SG_BOUNDS } from './SelectedSensorCard';
@@ -17,7 +19,6 @@ const ELEVATION_ATTRIBUTION = '©JAXA, ALOS World 3D-30m (AW3D30)';
 const PAD = 0.3;
 
 export interface MapLink { from: LatLon; to: LatLon; kind: 'intended' | 'interference'; tone: string; emphasis: boolean; label?: string }
-export type Basemap = 'onemap' | 'plain';
 export interface MapZones {
   result: ZoneResult;
   /** Grid corners: north-west, north-east, south-east, south-west. */
@@ -63,7 +64,7 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
   return canvas.toDataURL();
 }
 
-export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
+export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
   sensors: Sensor[];
   selectedId: string | null;
   tones: Record<string, string>;
@@ -71,6 +72,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
   zones: MapZones | null;
   rings: { id: string; points: LatLon[]; label: string }[];
   basemap: Basemap;
+  onBasemapFallback: () => void;
   frequencyGhz: number;
   handleRef: React.MutableRefObject<SensorMapHandle | null>;
   onSelect: (id: string) => void;
@@ -83,8 +85,8 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
   const mapRef = useRef<MapLibreMap | null>(null);
   const markers = useRef(new Map<string, { marker: Marker; element: HTMLDivElement; baseClass: string }>());
   const dragging = useRef<string | null>(null);
-  const callbacks = useRef({ onSelect, onDrag, onDragEnd, onNudge, onView });
-  callbacks.current = { onSelect, onDrag, onDragEnd, onNudge, onView };
+  const callbacks = useRef({ onSelect, onDrag, onDragEnd, onNudge, onView, onBasemapFallback });
+  callbacks.current = { onSelect, onDrag, onDragEnd, onNudge, onView, onBasemapFallback };
   const sensorsRef = useRef(sensors);
   sensorsRef.current = sensors;
   const [loaded, setLoaded] = useState(false);
@@ -109,6 +111,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       fadeDuration: reduceMotion ? 0 : 300,
       style: {
         version: 8,
+        glyphs: lightStyle.glyphs,
         sources: {
           onemap: { type: 'raster', tiles: [ONEMAP_TILE_URL], tileSize: 256, minzoom: 11, maxzoom: 19, bounds: [SG_BOUNDS.minLon, SG_BOUNDS.minLat, SG_BOUNDS.maxLon, SG_BOUNDS.maxLat], attribution: ONEMAP_ATTRIBUTION },
           dem: { type: 'raster-dem', tiles: [ELEVATION_TILE_URL], encoding: 'terrarium', tileSize: 256, maxzoom: 14, bounds: [103.596, 1.1443, 104.4309, 1.4835], attribution: ELEVATION_ATTRIBUTION },
@@ -290,7 +293,28 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
 
   useEffect(() => {
     const map = mapRef.current;
-    if (loaded && map?.getLayer('onemap')) map.setLayoutProperty('onemap', 'visibility', basemap === 'plain' ? 'none' : 'visible');
+    if (!loaded || !map) return;
+    let failures = 0;
+    let fallbackSent = false;
+    const fallback = () => {
+      if (fallbackSent) return;
+      fallbackSent = true;
+      showBasemap(map, 'onemap');
+      callbacks.current.onBasemapFallback();
+    };
+    const onError = (event: { sourceId?: string }) => {
+      if (event.sourceId && lightSourceIds.includes(event.sourceId) && ++failures >= 3) fallback();
+    };
+    if (basemap === 'light') {
+      map.on('error', onError);
+      installLightBasemap(map);
+    }
+    showBasemap(map, basemap);
+    // A failed TileJSON request can emit only one error. Also cover stalled tile requests.
+    const timeout = basemap === 'light' ? window.setTimeout(() => {
+      if (lightSourceIds.some(id => !map.isSourceLoaded(id))) fallback();
+    }, 15000) : undefined;
+    return () => { map.off('error', onError); window.clearTimeout(timeout); };
   }, [basemap, loaded]);
   return <><div ref={containerRef} className="map-canvas" />{loaded && mapRef.current && <SignalOverlay map={mapRef.current} links={links} frequencyGhz={frequencyGhz} />}</>;
 }

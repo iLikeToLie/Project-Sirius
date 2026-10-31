@@ -41,7 +41,8 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const [hidePanels, setHidePanels] = usePref('hidePanels', false, isBoolean);
   const [showAll, setShowAll] = usePref('showAllBands', false, isBoolean);
   const [coverageStyle, setCoverageStyle] = usePref<CoverageStyle>('coverageStyle', 'gradient', oneOf('gradient', 'bands'));
-  const [basemap, setBasemap] = usePref<Basemap>('basemap', 'onemap', oneOf('onemap', 'plain'));
+  const [basemapNotice, setBasemapNotice] = useState(false);
+  const [basemap, setBasemap] = usePref<Basemap>('basemap', 'onemap', oneOf('onemap', 'plain', 'light'));
   const [drawerOpen, setDrawerOpen] = usePref('drawerOpen', false, isBoolean);
   // Drawer height in px once dragged, 'max' to fill the workspace, null for the default.
   const [drawerSize, setDrawerSize] = usePref<DrawerSize>('drawerSize', null, isDrawerSize);
@@ -231,7 +232,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
       style={typeof drawerSize === 'number' ? { '--drawer-h': `${drawerSize}px` } as React.CSSProperties : undefined}
     >
       <SensorMap
-        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} basemap={basemap} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
+        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} basemap={basemap} onBasemapFallback={() => { setBasemap('onemap'); setBasemapNotice(true); }} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
         onSelect={select}
         onDrag={(id, at) => setDraft((d) => ({ ...d, [id]: at }))}
         onDragEnd={(id, at) => { updateSensor(id, at); setDraft((d) => { const { [id]: _done, ...rest } = d; return rest; }); }}
@@ -256,12 +257,13 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
           <input type="checkbox" aria-label="Use terrain elevation" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
           <span>Terrain elevation</span>
         </label>
-        <label className="tool-group select-group" title="OneMap street map, or a plain background with terrain shading only"><span className="tool-label">Map</span>
-          <select aria-label="Basemap" value={basemap} onChange={e => setBasemap(e.target.value as Basemap)}><option value="onemap">OneMap</option><option value="plain">Plain terrain</option></select>
+        <label className="tool-group select-group" title="Light vector map, OneMap street map, or plain terrain"><span className="tool-label">Map</span>
+          <select aria-label="Basemap" value={basemap} onChange={e => { setBasemap(e.target.value as Basemap); setBasemapNotice(false); }}><option value="light">Light</option><option value="onemap">OneMap</option><option value="plain">Plain terrain</option></select>
         </label>
         <button type="button" className={`tool tool-group${showSettings ? ' active' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={14} /> Link settings</button>
         <button type="button" className="tool tool-group" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? <Eye size={14} /> : <EyeOff size={14} />}{hidePanels ? 'Show panels' : 'Hide panels'}</button>
         <button type="button" className="tool tool-group" aria-pressed={fullscreen} title={fullscreen ? 'Exit full screen (Esc or F)' : 'Full screen (F)'} onClick={toggleFullscreen}>{fullscreen ? <Shrink size={14} /> : <Expand size={14} />}{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
+        {basemapNotice && <span role="status" className="map-notice">Light map unavailable. Switched to OneMap.</span>}
         {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
