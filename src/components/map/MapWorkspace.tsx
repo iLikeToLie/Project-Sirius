@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Expand, Eye, EyeOff, Maximize2, Minus, Plus, Shrink, SlidersHorizontal } from 'lucide-react';
 import { activePair, applyInputEdit, zoneReceiver, type LinkPin } from '../../lib/activeLink';
 import { coverageZones } from '../../lib/coverage';
+import { groundForCoverage } from '../../lib/coverageGround';
 import { signalRange } from '../../lib/signalColour';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
@@ -173,8 +174,17 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     const req = zoneRequest.request, g = req.ground;
     const maxView = Math.max(...[[g.x0, g.y0], [g.x0 + g.cols * g.dx, g.y0 + g.rows * g.dy]].map(([x,y]) => Math.hypot(x - req.tx.xM, y - req.tx.yM)));
     const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM * 2));
-    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairInputs(state.inputs, zoneTx, zone.rx, 1), maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: g } };
-  }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs]);
+    // The rays start at the transmitter, which may be off-screen when zoomed in: give them ground that reaches it.
+    const sampler = elevation.samplerAt(zoneRequest.z);
+    const rayGround = groundForCoverage(g, req.tx, (xM, yM) => (map.useTerrainElevation ? sampler(toLatLon({ xM, yM })) ?? NaN : 0));
+    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairInputs(state.inputs, zoneTx, zone.rx, 1), maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: rayGround } };
+  }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs, elevation.samplerAt]);
+  useEffect(() => {
+    const grid = coverageRequest?.ground.grid;
+    if (!grid || !coverageRequest || !zoneRequest || !map.useTerrainElevation) return;
+    const sw = toLatLon({ xM: grid.x0, yM: grid.y0 }), ne = toLatLon({ xM: grid.x0 + grid.cols * grid.dx, yM: grid.y0 + grid.rows * grid.dy });
+    elevation.ensureBox(sw, ne, zoneRequest.z);
+  }, [coverageRequest?.ground.grid]);
   const free = useZoneWorker(!terrain ? zoneRequest?.request ?? null : null, `${terrain}|${zoneRequest?.key}`);
   const coverage = useCoverageWorker(coverageRequest, `${terrain}|${zoneRequest?.key}`);
   const zoneResult = useMemo(() => terrain ? coverage.result && coverageRequest && zoneRequest ? coverageZones(coverage.result, coverageRequest, zoneRequest.request.ground) : null : free.result, [terrain, coverage.result, coverageRequest, zoneRequest, free.result]);
