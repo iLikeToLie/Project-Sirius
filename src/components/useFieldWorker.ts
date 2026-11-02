@@ -6,7 +6,9 @@ import type { FieldRequest } from '../workers/fieldWorker';
 
 /** One running request plus one replaceable pending request; stale jobs never paint. */
 function useFieldWorker<T extends ZoneResult | CoverageResult | MultiFieldResult>(request: Omit<FieldRequest, 'jobId'> | null, key: string) {
-  const [result, setResult] = useState<T | null>(null);
+  const [completed, setCompleted] = useState<{ value: T; key: string } | null>(null);
+  const keyRef = useRef(key); keyRef.current = key;
+  const runningKey = useRef(key);
   const [refining, setRefining] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const jobRef = useRef(0), busy = useRef(false);
@@ -14,10 +16,11 @@ function useFieldWorker<T extends ZoneResult | CoverageResult | MultiFieldResult
   const requestRef = useRef(request); requestRef.current = request;
   const dispatch = useRef<(req: FieldRequest) => void>(() => {});
   dispatch.current = req => {
+    runningKey.current = keyRef.current;
     if (workerRef.current) { busy.current = true; workerRef.current.postMessage(req); }
     else {
       const out = req.kind === 'multi' ? computeMultiField(req) : req.kind === 'coverage' ? computeCoverage(req) : computeZones(req);
-      if (out.jobId === jobRef.current) { setResult(out as T); setRefining(false); }
+      if (out.jobId === jobRef.current) { setCompleted({ value: out as T, key: runningKey.current }); setRefining(false); }
     }
   };
   useEffect(() => {
@@ -26,7 +29,7 @@ function useFieldWorker<T extends ZoneResult | CoverageResult | MultiFieldResult
     workerRef.current = worker;
     worker.onmessage = (event: MessageEvent<T>) => {
       busy.current = false;
-      if (event.data.jobId === jobRef.current) { setResult(event.data); setRefining(false); }
+      if (event.data.jobId === jobRef.current) { setCompleted({ value: event.data, key: runningKey.current }); setRefining(false); }
       const next = pending.current; pending.current = null;
       if (next && next.jobId === jobRef.current) dispatch.current(next);
     };
@@ -40,7 +43,7 @@ function useFieldWorker<T extends ZoneResult | CoverageResult | MultiFieldResult
   useEffect(() => {
     const jobId = ++jobRef.current;
     pending.current = null;
-    if (!requestRef.current) { setResult(null); setRefining(false); return; }
+    if (!requestRef.current) { setCompleted(null); setRefining(false); return; }
     setRefining(true);
     const frame = requestAnimationFrame(() => {
       const req = { ...requestRef.current, jobId } as FieldRequest;
@@ -49,7 +52,7 @@ function useFieldWorker<T extends ZoneResult | CoverageResult | MultiFieldResult
     });
     return () => cancelAnimationFrame(frame);
   }, [key]);
-  return { result, refining };
+  return { result: completed?.value ?? null, resultKey: completed?.key, refining };
 }
 export function useZoneWorker(request: Omit<ZoneRequest, 'jobId'> | null, key: string) {
   return useFieldWorker<ZoneResult>(request ? { ...request, kind: 'zones' } : null, key);

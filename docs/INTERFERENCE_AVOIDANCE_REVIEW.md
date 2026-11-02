@@ -196,3 +196,36 @@ Validation:
   unchanged from main; App.tsx unchanged by this task. The new hook is not yet
   wired into map controls, so browser UI validation belongs to Tasks 13/14.
 - Task 13 remains pending; no push or merge performed.
+
+## Task 13 — Total interference map layer
+
+The remembered layer selector offers Range and Interference. Placement is visible
+and disabled until Task 14. Range retains its existing behavior; interference
+hides range rings and uses the selected receiver, then the zone receiver, then
+the first receiver. Its legend names that receiver and aggregate/worst single mode.
+
+The existing multi-source worker receives every non-desired transmitter with
+the reference receiver's height, pair-specific channel rejection, polarization
+and losses. Its ground grid includes off-screen sources. Known powers combine
+in linear power when aggregate applies, otherwise by maximum. Bands paint
+at/above the threshold red, the protected interval amber, and below it clear.
+Gradient uses the existing avoidance signal range. Unknown paths remain hatched;
+no-interferer cells are clear where ground is known. Results carry the request
+key so old rasters cannot be interpreted with a new grid or receiver settings.
+
+Validation:
+
+- Calculation/source tests failed for the missing module, then passed. The legend
+  regression failed for the missing selector, then passed.
+- `corepack pnpm test`: 285/285 tests across 29 files pass.
+- `corepack pnpm build`: passes without warnings.
+- Chrome `scripts/e2e/interference-layer.mjs` checks actual worker sources and
+  receiver height, source exclusion, selected receiver changes, terrain/free-space
+  dispatch, red/amber/clear rendering, gradient, disabled Placement, remembered
+  layer/style, and range ring restoration. No uncaught page errors.
+- Every rendered band pixel is checked against the worker powers in both
+  aggregate and worst single modes, including the north/south image orientation.
+- The browser fixture threshold was adjusted from a view containing red/amber
+  only to one spanning all three bands; no product change was needed.
+- `git diff --check` clean; RF engine unchanged from main; App.tsx unchanged.
+- Task 14 remains pending; no push or merge performed.

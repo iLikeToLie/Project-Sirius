@@ -281,14 +281,14 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** `MapWorkspace.tsx`, `CoverageLegend.tsx`, `SensorMap.tsx`, `src/styles.css`
 
-- [ ] Layer selector in `CoverageLegend`: **Range** (today's behaviour), **Interference** and **Placement** (Task 14). Remember it with `usePref('coverageLayer', 'range', oneOf(...))`. Hide the range rings when the layer is not Range.
-- [ ] **Interference:**
+- [x] Layer selector in `CoverageLegend`: **Range** (today's behaviour), **Interference** and **Placement** (Task 14). Remember it with `usePref('coverageLayer', 'range', oneOf(...))`. Hide the range rings when the layer is not Range.
+- [x] **Interference:**
   - Reference receiver R is the selected receiver, else the zone receiver, else the first receiver.
   - Sources are every Tx that R does not desire, each with inputs `pairLinkInputs(map, shared, tx, R, 1)` and `rxAglM = R.aglM`.
   - Per cell, combine with `sumDbm` when `usesAggregate(map, R)`, else take the maximum.
   - Bands: ≥ T red, [L, T) amber, below L clear. The Gradient style uses `signalColour` with the avoidance `signalRange`.
   - Legend: "Total interference at R1's settings (aggregate)".
-- [ ] Commit: `Add total interference map layer`.
+- [x] Commit: `Add total interference map layer`.
 
 ### Task 14: Safe placement layer for a transmitter
 

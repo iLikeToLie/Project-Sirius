@@ -772,6 +772,9 @@ tbody tr:hover { background: var(--surface-elevated); }
 
 /* Legend */
 .coverage-legend { left: 10px; bottom: 56px; width: 220px; padding: 8px 10px; gap: 6px; }
+.coverage-layers { display: flex; }
+.coverage-layers button { flex: 1; padding: 5px 4px; font-size: 10px; }
+.coverage-layers button:disabled { opacity: .45; cursor: default; }
 .drawer-open .coverage-legend { bottom: calc(40% + 22px); }
 .legend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .legend-head b { color: var(--ink); font-size: 11px; }
