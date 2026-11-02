@@ -64,6 +64,8 @@ Verified Task 1: 171 unit tests pass; `corepack pnpm build` passes. Migration, c
 
 ### Task 2: Receiver assessment (aggregate, margin, C/I)
 
+Completed: receiver assessment and worst assessed link selection implemented in `src/lib/interference.ts`; severity updated in `sensors.ts`. All named cases plus numeric stability, contributor shares, no-interferer parity, invalid pairs, and receiver isolation covered by 16 new tests. Full suite: 187/187; production build passes; `rf.ts` unchanged. Commit: `Assess receivers for aggregate interference, margin and C/I`.
+
 **Files:** new `src/lib/interference.ts`, new `src/lib/interference.test.ts`
 
 - [ ] Implement:

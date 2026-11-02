@@ -174,7 +174,7 @@ export function receiverSummary(pairs: PairResult[], rxId: string) {
   return { links, worstInterferer, interferersAbove: interferers.length };
 }
 
-const STATUS_SEVERITY: Record<string, number> = { 'No link': 3, 'Weak link': 2, 'Invalid input': 1 };
+const STATUS_SEVERITY: Record<string, number> = { 'No link': 4, 'Interfered link': 3, 'Weak link': 2, 'Invalid input': 1 };
 
 /** The desired link with the worst status, ignoring links whose ground elevation is still unknown; ties keep the strongest. */
 export const worstLink = (links: PairResult[]): PairResult | undefined => {
