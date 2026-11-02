@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
 import type { ScreeningStatus } from '../types';
 import { calculateLink } from './rf';
-import { receiverSummary, type PairResult } from './sensors';
-import { assessAll, assessReceiver, effectiveMarginDb, pairVerdict, sumDbm, usesAggregate, worstAssessedLink } from './interference';
+import { evaluatePairs, receiverSummary, type PairResult } from './sensors';
+import { assessAll, assessReceiver, effectiveMarginDb, pairVerdict, sumDbm, transmitterPowerRange, usesAggregate, worstAssessedLink } from './interference';
 
 const state = freshDefaultState();
 const rx = { ...state.map.sensors[1], objective: 'avoidance' as const };
@@ -11,6 +11,82 @@ const pair = (txId: string, power: number, intended = false, status: ScreeningSt
   txId, txName: txId, rxId: rx.id, intended, elevationKnown: true, distanceM: 100,
   propagationLossDb: 0, clearance: 'unknown',
   result: { ...calculateLink(state.inputs, intended ? 'desired' : 'avoidance'), receivedPowerDbm: power, status },
+});
+
+describe('transmitter power range', () => {
+  const tx = { ...state.map.sensors[0], id: 'target', powerDbm: 30 };
+  const map = { ...state.map, sensors: [tx, rx], aggregateInterference: 'never' as const };
+
+  it('limits a single victim at the protected boundary', () => {
+    const p = pair(tx.id, -60);
+    const range = transmitterPowerRange(map, tx.id, [p]);
+    expect(range).toMatchObject({ maxDbm: 22, limitedBy: rx.id, limitKind: 'threshold', minDbm: null, minFor: null, unknownPaths: 0 });
+    const at = (powerDbm: number) => ({ ...p, result: { ...p.result, receivedPowerDbm: p.result.receivedPowerDbm + powerDbm - tx.powerDbm } });
+    expect(pairVerdict(at(range.maxDbm), rx, 3)).toBe('Below interference threshold');
+    expect(pairVerdict(at(range.maxDbm + 0.01), rx, 3)).toBe('Marginal interference');
+  });
+
+  it('subtracts other aggregate interference in linear power', () => {
+    const range = transmitterPowerRange({ ...map, aggregateInterference: 'always' }, tx.id, [pair(tx.id, -70), pair('other', -72)]);
+    const allowed = 10 * Math.log10(10 ** (-68 / 10) - 10 ** (-72 / 10));
+    expect(range.maxDbm).toBeCloseTo(30 + allowed + 70, 10);
+  });
+
+  it('reports no finite power when other sources already reach the protected limit', () => {
+    for (const power of [-68, -67]) {
+      expect(transmitterPowerRange({ ...map, aggregateInterference: 'always' }, tx.id, [pair(tx.id, -70), pair('other', power)]))
+        .toMatchObject({ maxDbm: -Infinity, limitedBy: rx.id, limitKind: 'threshold' });
+    }
+  });
+
+  it('uses the weakest known desired link for a C/I limit', () => {
+    const desired = { ...rx, objective: 'desired' as const };
+    const range = transmitterPowerRange({ ...map, sensors: [tx, desired] }, tx.id, [pair(tx.id, -60), pair('wanted1', -55, true), pair('wanted2', -65, true)]);
+    expect(range).toMatchObject({ maxDbm: 15, limitedBy: rx.id, limitKind: 'ci' });
+  });
+
+  it('subtracts aggregate others from the C/I allowance too', () => {
+    const desired = { ...rx, objective: 'desired' as const };
+    const range = transmitterPowerRange({ ...map, sensors: [tx, desired], aggregateInterference: 'always' }, tx.id, [pair(tx.id, -60), pair('wanted', -65, true), pair('other', -80)]);
+    expect(range.limitKind).toBe('ci');
+    expect(range.maxDbm).toBeCloseTo(30 + 10 * Math.log10(10 ** (-75 / 10) - 10 ** (-80 / 10)) + 60, 10);
+  });
+
+  it('finds the largest served-link minimum and reports conflicting bounds', () => {
+    const served = { ...rx, id: 'served', objective: 'desired' as const };
+    const range = transmitterPowerRange({ ...map, sensors: [tx, rx, served] }, tx.id, [pair(tx.id, -60), { ...pair(tx.id, -85, true), rxId: served.id }]);
+    expect(range.minDbm).toBe(45);
+    expect(range.minFor).toBe(served.id);
+    expect(range.minDbm!).toBeGreaterThan(range.maxDbm);
+  });
+
+  it('returns unbounded maximum without victims and null minimum without served links', () => {
+    expect(transmitterPowerRange(map, tx.id, [])).toMatchObject({ maxDbm: Infinity, limitedBy: null, minDbm: null, minFor: null });
+    expect(transmitterPowerRange(map, tx.id, [pair(tx.id, -70, true)])).toMatchObject({ maxDbm: Infinity, minDbm: 30 });
+  });
+
+  it('omits and counts unknown target, desired and aggregate-other paths once', () => {
+    const desired = { ...rx, objective: 'desired' as const };
+    const unknown = (p: PairResult) => ({ ...p, elevationKnown: false });
+    expect(transmitterPowerRange(map, tx.id, [unknown(pair(tx.id, -30))])).toMatchObject({ maxDbm: Infinity, unknownPaths: 1 });
+    const range = transmitterPowerRange({ ...map, sensors: [tx, desired], aggregateInterference: 'always' }, tx.id,
+      [pair(tx.id, -60), unknown(pair('wanted', -40, true)), unknown(pair('other', -30))]);
+    expect(range).toMatchObject({ maxDbm: 22, limitKind: 'threshold', unknownPaths: 2 });
+  });
+
+  it('preserves the reported boundary with actual terrain diffraction when power changes', () => {
+    const terrainMap = { ...state.map, defaultObjective: 'avoidance' as const, useTerrainElevation: true, propagationModel: 'terrain' as const };
+    const ground = (at: { lon: number }) => Math.abs(at.lon - (terrainMap.sensors[0].lon + terrainMap.sensors[1].lon) / 2) < 0.0002 ? 80 : 0;
+    const txId = terrainMap.sensors[0].id;
+    const before = evaluatePairs(terrainMap, state.inputs, ground);
+    expect(before[0].propagationLossDb).toBeGreaterThan(0);
+    const range = transmitterPowerRange(terrainMap, txId, before);
+    const at = (powerDbm: number) => evaluatePairs({ ...terrainMap, sensors: terrainMap.sensors.map(s => s.id === txId ? { ...s, powerDbm } : s) }, state.inputs, ground);
+    const boundary = at(range.maxDbm);
+    expect(boundary[0].propagationLossDb).toBe(before[0].propagationLossDb);
+    expect(assessReceiver(terrainMap, terrainMap.sensors[1], boundary).status).toBe('Below interference threshold');
+    expect(assessReceiver(terrainMap, terrainMap.sensors[1], at(range.maxDbm + 0.01)).status).toBe('Marginal interference');
+  });
 });
 const three = () => ['a', 'b', 'c'].map((id) => pair(id, -67));
 

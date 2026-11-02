@@ -46,4 +46,13 @@ describe('interference workspace display', () => {
     const html = renderToStaticMarkup(<LinkSettingsCard inputs={state.inputs} map={state.map} setMap={noop} onChange={noop} />);
     for (const text of ['Protection margin', 'Avoidance receivers only', 'All receivers', 'Off']) expect(html).toContain(text);
   });
+
+  it('shows conflicting transmitter bounds and prevents applying an infeasible maximum', () => {
+    const served = { ...rx, id: 'served', name: 'Served receiver', objective: 'desired' as const, sensitivityDbm: -50 };
+    const map = { ...state.map, sensors: [...state.map.sensors, served] };
+    const results = evaluatePairs(map, state.inputs, () => 0);
+    const html = renderToStaticMarkup(<SelectedSensorCard sensor={map.sensors[0]} map={map} pairs={results} assessments={assessAll(map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    for (const text of ['Power range:', 'Limited by', 'protected limit', 'No power level satisfies both; move or retune', 'Set to max']) expect(html).toContain(text);
+    expect(html).toMatch(/disabled=""[^>]*>Set to max/);
+  });
 });

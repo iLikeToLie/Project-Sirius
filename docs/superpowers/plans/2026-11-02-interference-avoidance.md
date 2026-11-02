@@ -122,22 +122,24 @@ Completed: memoised receiver assessments drive map markers/lines, sensor summari
 
 ### Task 4: Transmitter power range
 
+Completed: power bounds account for protected thresholds, C/I requirements, aggregate remaining allowance, and served-link minima. The transmitter Link tab identifies the limiting receiver and can set a finite feasible maximum rounded down to 0.1 dBm. Unknown paths and infeasible bounds disable the action. Verified 202 unit tests, production build, and the interference-workspace Chrome checks including actual power updates and disabled actions. Terrain diffraction boundary tested with real pair evaluation.
+
 **Files:** `src/lib/interference.ts` (+ tests), `SelectedSensorCard.tsx`
 
-- [ ] Implement `transmitterPowerRange(map, txId, pairs): { maxDbm: number; limitedBy: string | null; limitKind: 'threshold' | 'ci' | null; minDbm: number | null; minFor: string | null; unknownPaths: number }`.
+- [x] Implement `transmitterPowerRange(map, txId, pairs): { maxDbm: number; limitedBy: string | null; limitKind: 'threshold' | 'ci' | null; minDbm: number | null; minFor: string | null; unknownPaths: number }`.
   - **Victims** are receivers `r` for which `txId` is not desired. Let `P_t` = power from t at r, and `others` = `sumDbm` of r's other known interferers (aggregate on) or nothing (aggregate off).
   - **Threshold allowance:** `L` with aggregate off. With aggregate on it is `10·log10(10^(L/10) − 10^(others/10))`, or `-Infinity` when `others ≥ L` (already exceeded by other transmitters).
   - **C/I allowance** (desired receivers with known links): `C_min − requiredCiDb`. With aggregate on, subtract `others` the same way.
   - `headroom_r = min(allowances) − P_t`. `maxDbm = tx.powerDbm + min_r headroom_r`. `limitedBy` = the binding receiver, and `limitKind` says which allowance bound it.
   - **Served receivers** (t is desired): `minDbm = tx.powerDbm + max_s (S_s + F_s − P_t,s)`, so every served link stays Acceptable.
   - No victims gives `maxDbm = Infinity`. No served receivers gives `minDbm = null`.
-- [ ] Tests:
+- [x] Tests:
   - Single victim. `maxDbm` equals current power + `(L − P)`. Setting the Tx to `maxDbm` gives `'Below interference threshold'`, and `maxDbm + 0.01` gives `'Marginal interference'`.
   - Aggregate case where others already exceed `L` → `-Infinity`, with a reason.
   - `minDbm > maxDbm` is reported. The UI shows "No power level satisfies both; move or retune".
   - Power scales linearly in dB with terrain loss present (diffraction does not depend on power).
-- [ ] UI: Tx card Link tab shows "Power range: −3.2 to 14.6 dBm" and "Limited by R3 (protected limit)", with a button "Set to max" that writes `powerDbm = floor(maxDbm·10)/10`.
-- [ ] Commit: `Show each transmitter's allowed power range`.
+- [x] UI: Tx card Link tab shows "Power range: −3.2 to 14.6 dBm" and "Limited by R3 (protected limit)", with a button "Set to max" that writes `powerDbm = floor(maxDbm·10)/10`.
+- [x] Commit: `Show each transmitter's allowed power range`.
 
 ---
 

@@ -33,7 +33,8 @@ async function open(s, unknown = false) {
   const card = page.locator('.selected-sensor-card');
   await card.getByRole('tab', { name: 'Link', exact: true }).click();
   const drawer = page.locator('.link-budget-drawer');
-  if (!(await drawer.getByRole('button', { name: /^Link budget/ }).getAttribute('aria-expanded') === 'true')) await drawer.getByRole('button', { name: /^Link budget/ }).click();
+  const drawerToggle = drawer.getByRole('button', { name: /^Link budget/ });
+  if (await drawerToggle.count() && await drawerToggle.getAttribute('aria-expanded') !== 'true') await drawerToggle.click();
   await page.getByRole('button', { name: 'Link settings', exact: true }).click();
   return { page, card, drawer, settings: page.locator('.link-settings-card') };
 }
@@ -78,9 +79,44 @@ try {
   await card.locator('.status-acceptable-link').waitFor();
   console.log('PASS C/I status updates in card, list and drawer');
 
-  ({ card, drawer } = await open(scenario(false, true), true));
+  const single = scenario();
+  single.map.sensors = single.map.sensors.filter(s => s.role === 'rx' || s.id === 'tx-0');
+  single.map.selectedId = 'tx-0';
+  ({ page, card } = await open(single));
+  const powerCard = card.getByLabel('Transmitter power range');
+  assert.match(await powerCard.innerText(), /Limited by .*protected limit/);
+  const expectedMax = Math.floor((single.map.sensors[0].powerDbm - 1) * 10) / 10;
+  await powerCard.getByRole('button', { name: 'Set to max' }).click();
+  await page.waitForFunction(expected => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')).map.sensors.find(s => s.id === 'tx-0').powerDbm === expected, expectedMax);
+  await page.locator('.sensor-list-card .sensor-row').filter({ hasText: single.map.sensors[1].name }).click();
+  await card.locator('.status-below-interference-threshold').waitFor();
+  console.log('PASS Set to max rounds down and clears interference');
+
+  const impossible = scenario();
+  impossible.map.selectedId = 'tx-0';
+  ({ card } = await open(impossible));
+  assert.match(await card.getByLabel('Transmitter power range').innerText(), /other transmitters already reach this limit/);
+  assert.equal(await card.getByRole('button', { name: 'Set to max' }).isDisabled(), true);
+  const conflict = structuredClone(single);
+  const served = { ...conflict.map.sensors[1], id: 'served-rx', name: 'Served', objective: 'desired', sensitivityDbm: -50 };
+  conflict.map.sensors.push(served);
+  ({ card } = await open(conflict));
+  await card.getByText('No power level satisfies both; move or retune.').waitFor();
+  assert.equal(await card.getByRole('button', { name: 'Set to max' }).isDisabled(), true);
+  console.log('PASS exhausted aggregate allowance and conflicting bounds disable Set to max');
+
+  const ciLimited = scenario(true);
+  ciLimited.map.selectedId = 'tx-1';
+  ({ card } = await open(ciLimited));
+  assert.match(await card.getByLabel('Transmitter power range').innerText(), /C\/I requirement/);
+  console.log('PASS limiting receiver identifies the C/I requirement');
+
+  ({ page, card, drawer } = await open(scenario(false, true), true));
   await card.getByText('3 paths unknown; excluded from interference assessment.').waitFor();
   assert.match(await drawer.locator('.rx-meter-stack').innerText(), /Unknown/);
+  await page.locator('.sensor-list-card .sensor-row').filter({ hasText: 'T1' }).click();
+  assert.match(await card.getByLabel('Transmitter power range').innerText(), /paths unknown; power range is incomplete/);
+  assert.equal(await card.getByRole('button', { name: 'Set to max' }).isDisabled(), true);
   console.log('PASS unknown paths remain visible and excluded');
   assert.deepEqual(errors, []);
 } finally { await context?.close(); await browser.close(); }

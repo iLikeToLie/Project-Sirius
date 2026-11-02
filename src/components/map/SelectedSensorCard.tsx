@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { formatNumber } from '../../lib/rf';
-import { pairVerdict, type ReceiverAssessment } from '../../lib/interference';
+import { pairVerdict, transmitterPowerRange, type ReceiverAssessment } from '../../lib/interference';
 import { effectiveObjective, groundOf, type PairResult, receiverSummary, toggleDesired } from '../../lib/sensors';
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
@@ -41,6 +41,10 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
   const nearestTx = sensor.role === 'rx' ? link && sensor.desiredTxIds === 'auto' ? name(link.txId) : null : null;
   const num = (key: keyof Sensor, v: number, check?: (v: number) => string | undefined) => check?.(v) ?? onChange({ [key]: v });
   const nonNegative = (label: string) => (v: number) => (v < 0 ? `${label} cannot be negative.` : undefined);
+  const powerRange = sensor.role === 'tx' ? transmitterPowerRange(map, sensor.id, pairs) : null;
+  const roundedMax = powerRange ? Math.floor(powerRange.maxDbm * 10) / 10 : NaN;
+  const infeasible = powerRange !== null && (powerRange.maxDbm === -Infinity || (powerRange.minDbm !== null && powerRange.minDbm > powerRange.maxDbm));
+  const roundedBelowMin = powerRange?.minDbm !== null && powerRange?.minDbm !== undefined && roundedMax < powerRange.minDbm;
 
   return (
     <section className={`map-card selected-sensor-card${collapsed ? ' collapsed' : ''}`} aria-label={`Selected sensor ${sensor.name}`}>
@@ -116,6 +120,16 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
 
         {sensor.role === 'tx' && (
           <>
+            {powerRange && <div className="transmitter-power-range" aria-label="Transmitter power range">
+              <p><b>Power range:</b> {powerRange.minDbm === null ? '−∞' : formatNumber(powerRange.minDbm, 1)} to {powerRange.maxDbm === Infinity ? '+∞' : powerRange.maxDbm === -Infinity ? '−∞' : formatNumber(powerRange.maxDbm, 1)} dBm</p>
+              {powerRange.limitedBy && <p className="field-note">Limited by {name(powerRange.limitedBy)} ({powerRange.limitKind === 'ci' ? 'C/I requirement' : 'protected limit'}){powerRange.maxDbm === -Infinity ? '; other transmitters already reach this limit.' : '.'}</p>}
+              {powerRange.minFor && <p className="field-note">Minimum required by {name(powerRange.minFor)} for sensitivity plus fade margin.</p>}
+              {powerRange.maxDbm === Infinity && <p className="field-note">No upper limit from known receiver paths.</p>}
+              {infeasible && <p className="field-note danger" role="status">No power level satisfies both; move or retune.</p>}
+              {!infeasible && roundedBelowMin && <p className="field-note" role="status">Rounding the maximum down to 0.1 dBm would fall below the required minimum.</p>}
+              {powerRange.unknownPaths > 0 && <p className="field-note" role="status">{powerRange.unknownPaths} paths unknown; power range is incomplete.</p>}
+              <button type="button" className="ghost" disabled={!Number.isFinite(roundedMax) || infeasible || roundedBelowMin || powerRange.unknownPaths > 0} onClick={() => onChange({ powerDbm: roundedMax })}>Set to max</button>
+            </div>}
             <p className="field-note">{served.length ? `Serves ${served.map((p) => `${name(p.rxId)} (${assessments.get(p.rxId)!.links.find(l => l.txId === sensor.id)!.status.toLowerCase()})`).join(', ')}.` : 'No receiver has this transmitter as its intended link.'}</p>
             {interferes.length > 0 && <p className="field-note danger">Interferes with {interferes.map((p) => `${name(p.rxId)} at ${formatNumber(p.result.receivedPowerDbm, 1)} dBm`).join(', ')}.</p>}
           </>

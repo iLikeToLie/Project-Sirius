@@ -82,3 +82,55 @@ export function worstAssessedLink(assessment: ReceiverAssessment, links: PairRes
   const worst = worstLink(assessed);
   return worst ? links.find((p) => p.txId === worst.txId && p.rxId === worst.rxId) : undefined;
 }
+
+export interface TransmitterPowerRange {
+  maxDbm: number;
+  limitedBy: string | null;
+  limitKind: 'threshold' | 'ci' | null;
+  minDbm: number | null;
+  minFor: string | null;
+  unknownPaths: number;
+}
+
+/** Power left for one source after subtracting the other sources in linear units. */
+function remainingPowerDbm(limit: number, others: number): number {
+  if (others === -Infinity) return limit;
+  if (others >= limit) return -Infinity;
+  return limit + 10 * Math.log10(-Math.expm1((others - limit) * Math.LN10 / 10));
+}
+
+/** Bounds for one transmitter, holding geometry and every other transmitter fixed. */
+export function transmitterPowerRange(map: MapScenario, txId: string, pairs: PairResult[]): TransmitterPowerRange {
+  const tx = map.sensors.find(s => s.id === txId && s.role === 'tx');
+  if (!tx) throw new Error('Power range requires a transmitter in this scenario.');
+  const range: TransmitterPowerRange = { maxDbm: Infinity, limitedBy: null, limitKind: null, minDbm: null, minFor: null, unknownPaths: 0 };
+  const unknown = new Set<PairResult>();
+  const known = (p: PairResult) => {
+    const valid = p.elevationKnown && p.result.valid && Number.isFinite(p.result.receivedPowerDbm);
+    if (!valid) unknown.add(p);
+    return valid;
+  };
+  for (const rx of map.sensors.filter(s => s.role === 'rx')) {
+    const mine = pairs.filter(p => p.rxId === rx.id);
+    const target = mine.find(p => p.txId === txId);
+    if (!target || !known(target)) continue;
+    if (target.intended) {
+      const min = tx.powerDbm + rx.sensitivityDbm + rx.fadeMarginTargetDb - target.result.receivedPowerDbm;
+      if (range.minDbm === null || min > range.minDbm) {
+        range.minDbm = min; range.minFor = rx.id;
+      }
+      continue;
+    }
+    const others = usesAggregate(map, rx) ? sumDbm(mine.filter(p => !p.intended && p.txId !== txId).filter(known).map(p => p.result.receivedPowerDbm)) : -Infinity;
+    const threshold = remainingPowerDbm(rx.interferenceThresholdDbm - effectiveMarginDb(map, rx), others);
+    const desired = effectiveObjective(map, rx) === 'desired' ? mine.filter(p => p.intended).filter(known) : [];
+    const weakest = desired.reduce((power, p) => Math.min(power, p.result.receivedPowerDbm), Infinity);
+    const ci = weakest === Infinity ? Infinity : remainingPowerDbm(weakest - rx.requiredCiDb, others);
+    const max = tx.powerDbm + Math.min(threshold, ci) - target.result.receivedPowerDbm;
+    if (max < range.maxDbm) {
+      range.maxDbm = max; range.limitedBy = rx.id; range.limitKind = ci < threshold ? 'ci' : 'threshold';
+    }
+  }
+  range.unknownPaths = unknown.size;
+  return range;
+}
