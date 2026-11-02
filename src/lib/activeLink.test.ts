@@ -162,6 +162,11 @@ describe('pinned transmitter', () => {
   const m = map([T1, { ...T2, powerDbm: T2.powerDbm + 30 }, { ...R1, desiredTxIds: [T1.id, T2.id] }], { selectedId: R1.id });
   const pin = { rxId: R1.id, txId: T2.id };
 
+  it('keeps a comparison pair available when a selected transmitter serves no receiver', () => {
+    const avoidance = map([T1, { ...R1, objective: 'avoidance' }], { selectedId: T1.id });
+    expect(activePair(avoidance, flat, DEFAULT_STATE.inputs)).toMatchObject({ tx: T1, rx: { id: R1.id } });
+  });
+
   it('keeps editing the pinned transmitter after the edit would re-rank the strongest link', () => {
     const first = applyInputEdit(state(m), 'transmitPowerDbm', -40, flat, pin);
     expect(first.ok).toBe(true);
@@ -181,6 +186,16 @@ describe('pinned transmitter', () => {
 
   it('ignores a pin held for a different receiver', () => {
     expect(activePair(m, flat, DEFAULT_STATE.inputs, { rxId: R2.id, txId: T1.id })?.tx.id).toBe(T2.id);
+  });
+
+  it('lets a matrix pair pin inspect and edit an interferer outside the desired set', () => {
+    const only1 = map([T1, T2, { ...R1, desiredTxIds: [T1.id] }], { selectedId: R1.id });
+    const matrixPin = { ...pin, scope: 'pair' as const };
+    expect(activePair(only1, flat, DEFAULT_STATE.inputs, matrixPin)?.tx.id).toBe(T2.id);
+    const edited = applyInputEdit(state(only1), 'transmitPowerDbm', -30, flat, matrixPin);
+    expect(edited.ok && edited.state.map.sensors.find(s => s.id === T2.id)?.powerDbm).toBe(-30);
+    const removed = { ...only1, sensors: only1.sensors.filter(s => s.id !== T2.id) };
+    expect(activePair(removed, flat, DEFAULT_STATE.inputs, matrixPin)?.tx.id).toBe(T1.id);
   });
 });
 

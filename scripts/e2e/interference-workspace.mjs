@@ -118,5 +118,60 @@ try {
   assert.match(await card.getByLabel('Transmitter power range').innerText(), /paths unknown; power range is incomplete/);
   assert.equal(await card.getByRole('button', { name: 'Set to max' }).isDisabled(), true);
   console.log('PASS unknown paths remain visible and excluded');
+
+  await drawer.getByRole('tab', { name: 'Matrix', exact: true }).click();
+  const unknownCell = drawer.getByRole('button', { name: /T1 to .*Elevation unavailable/ });
+  assert.equal(await unknownCell.innerText(), '—');
+  assert.match(await unknownCell.getAttribute('title'), /Elevation unavailable/);
+  assert.match(await drawer.locator('tfoot').innerText(), /3 paths unknown/);
+  console.log('PASS matrix unknown cells and incomplete totals');
+
+  const matrixScenario = scenario(true);
+  matrixScenario.map.sensors.at(-1).requiredCiDb = 12;
+  const secondRx = { ...matrixScenario.map.sensors.at(-1), id: 'second-rx', name: 'Second receiver', objective: 'avoidance' };
+  matrixScenario.map.sensors.push(secondRx);
+  ({ page, drawer } = await open(matrixScenario));
+  await drawer.getByRole('tab', { name: 'Matrix', exact: true }).click();
+  assert.equal(await drawer.locator('tbody tr').count(), 3);
+  assert.equal(await drawer.locator('tbody td').count(), 6);
+  const desiredCell = drawer.getByRole('button', { name: /T1 to .*desired link margin.*Interfered link/ });
+  assert.match(await desiredCell.innerText(), /dB C\/I$/);
+  assert.match(await desiredCell.getAttribute('class'), /tone-danger/);
+  assert.match(await drawer.locator('tfoot').innerText(), /Total interference: -67\.99 dBm/);
+  const targetCell = drawer.getByRole('button', { name: /T2 to Second receiver: protected margin 3\.00 dB/ });
+  assert.match(await targetCell.getAttribute('class'), /tone-safe/);
+  await targetCell.click();
+  assert.equal(await drawer.getByRole('tab', { name: 'Link budget', exact: true }).getAttribute('aria-selected'), 'true');
+  assert.equal(await drawer.getByLabel('Tx location / identifier').inputValue(), 'T2');
+  assert.equal(await drawer.getByLabel('Rx location / identifier').inputValue(), secondRx.name);
+  const selectedId = await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')).map.selectedId);
+  assert.equal(selectedId, secondRx.id);
+  const originalTxPower = matrixScenario.map.sensors[0].powerDbm;
+  await drawer.getByLabel('Transmit power', { exact: false }).fill('12');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')).map.sensors.find(s => s.id === 'tx-1').powerDbm === 12);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')).map.sensors.find(s => s.id === 'tx-0').powerDbm), originalTxPower);
+  console.log('PASS matrix grid, C/I tone, totals, receiver selection and pinned transmitter edit');
+
+  await drawer.getByRole('tab', { name: 'Matrix', exact: true }).click();
+  await drawer.getByRole('button', { name: new RegExp(`T2 to ${matrixScenario.map.sensors[3].name}: protected margin`) }).click();
+  assert.equal(await drawer.getByLabel('Tx location / identifier').inputValue(), 'T2');
+  assert.match(await drawer.locator('.status').innerText(), /Below interference threshold/i);
+  await drawer.getByLabel('Transmit power', { exact: false }).fill('13');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')).map.sensors.find(s => s.id === 'tx-1').powerDbm === 13);
+  assert.equal(await drawer.getByLabel('Tx location / identifier').inputValue(), 'T2');
+  console.log('PASS interferer pin and verdict on a desired receiver');
+
+  const matrixTab = drawer.getByRole('tab', { name: 'Matrix', exact: true });
+  await matrixTab.click();
+  await matrixTab.press('ArrowLeft');
+  assert.equal(await drawer.getByRole('tab', { name: 'Link budget', exact: true }).getAttribute('aria-selected'), 'true');
+  await drawer.getByRole('tab', { name: 'Link budget', exact: true }).press('End');
+  await page.reload();
+  await page.getByRole('button', { name: 'Link workspace', exact: true }).click();
+  await drawer.getByRole('tab', { name: 'Matrix', exact: true, selected: true }).waitFor();
+  await page.setViewportSize({ width: 600, height: 900 });
+  await drawer.getByRole('table').waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+  console.log('PASS drawer tab keyboard navigation, remembered view and narrow layout');
   assert.deepEqual(errors, []);
 } finally { await context?.close(); await browser.close(); }

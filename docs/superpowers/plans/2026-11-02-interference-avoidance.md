@@ -147,17 +147,19 @@ Completed: power bounds account for protected thresholds, C/I requirements, aggr
 
 ### Task 5: Interference matrix
 
+Completed: accessible Tx × Rx matrix with remembered drawer tabs, pair margins, C/I warnings, receiver totals, unknown-path notes and pinned click-through. Verified 209 unit tests, production build, matrix browser interactions and existing drawer regressions.
+
 **Files:** new `src/components/map/InterferenceMatrix.tsx`, `LinkBudgetDrawer.tsx`, `src/styles.css`
 
-- [ ] Add two views to the drawer, "Link budget" (today's body) and "Matrix", with a `role="tablist"` like the sensor card. Remember the chosen view with `usePref('drawerView', …)`.
-- [ ] Grid: rows are transmitters, columns are receivers.
+- [x] Add two views to the drawer, "Link budget" (today's body) and "Matrix", with a `role="tablist"` like the sensor card. Remember the chosen view with `usePref('drawerView', …)`.
+- [x] Grid: rows are transmitters, columns are receivers.
   - Desired cell: link margin `P − (S + F)` in dB, toned by the assessed link status ("C/I" suffix when Interfered).
   - Interferer cell: protected margin `L − P` in dB, toned by `pairVerdict`.
   - Unknown elevation: "—" with a tooltip.
   - Column footer: receiver assessment status and aggregate I.
-- [ ] Clicking a cell selects the receiver and pins the pair (`onPin({ rxId, txId })`), so the Link budget view shows it.
-- [ ] Accessible: a real `<table>`, with each cell's `aria-label` giving the full sentence.
-- [ ] Commit: `Add Tx × Rx interference matrix to the drawer`.
+- [x] Clicking a cell selects the receiver and pins the pair (`onPin({ rxId, txId })`), so the Link budget view shows it.
+- [x] Accessible: a real `<table>`, with each cell's `aria-label` giving the full sentence.
+- [x] Commit: `Add Tx × Rx interference matrix to the drawer`.
 
 ### Task 6: Fix suggestions
 

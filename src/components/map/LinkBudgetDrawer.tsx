@@ -9,6 +9,8 @@ import type { AppState, LinkInputs } from '../../types';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from '../ui';
 import { PathProfileChart } from './PathProfileChart';
 import { RxMeterStack } from './RxMeterStack';
+import { InterferenceMatrix } from './InterferenceMatrix';
+import { oneOf, usePref } from '../usePref';
 
 const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location / identifier', rxId: 'Rx location / identifier' } as const;
 
@@ -39,17 +41,18 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
   onEdit: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => string | undefined;
 }) {
   const { map } = state;
+  const [view, setView] = usePref<'budget' | 'matrix'>('drawerView', 'budget', oneOf('budget', 'matrix'));
   const pair = useMemo(() => activePair(map, groundAt, state.inputs, pin), [map, groundAt, state.inputs, pin]);
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);
     const inputs = pairInputs(state.inputs, pair.tx, pair.rx, distanceM);
     const propagation = pairPropagation(map, pair.tx, pair.rx, inputs.frequencyGhz, groundAt);
-    const objective = effectiveObjective(map, pair.rx);
+    const objective = pairs.find(p => p.txId === pair.tx.id && p.rxId === pair.rx.id)?.intended === false ? 'avoidance' : effectiveObjective(map, pair.rx);
     const result = calculateLink({ ...inputs, otherLossDb: inputs.otherLossDb + propagation.lossDb }, objective);
     const known = [pair.tx, pair.rx].every((s) => groundOf(s, groundAt, map.useTerrainElevation) !== null) && Number.isFinite(propagation.lossDb);
     return { inputs, propagation, objective, result, known };
-  }, [pair, map, state.inputs, groundAt]);
+  }, [pair, map, state.inputs, groundAt, pairs]);
 
   const rxPairs = pair ? pairs.filter(p => p.rxId === pair.rx.id) : [];
 
@@ -109,14 +112,28 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
         )}
         <StatusBadge status={status} />
       </div>
-      {open && (
-        <div className="drawer-body">
+      {open && <div className="tabs drawer-tabs" role="tablist" aria-label="Drawer views">
+        {(['budget', 'matrix'] as const).map(v => <button key={v} id={`drawer-tab-${v}`} type="button" role="tab" aria-selected={view === v} aria-controls={`drawer-panel-${v}`} tabIndex={view === v ? 0 : -1}
+          onClick={() => setView(v)} onKeyDown={e => {
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+              e.preventDefault();
+              const next = e.key === 'Home' ? 'budget' : e.key === 'End' ? 'matrix' : v === 'budget' ? 'matrix' : 'budget';
+              setView(next); document.getElementById(`drawer-tab-${next}`)?.focus();
+            }
+          }}>{v === 'budget' ? 'Link budget' : 'Matrix'}</button>)}
+      </div>}
+      {open && view === 'matrix' && <div id="drawer-panel-matrix" role="tabpanel" aria-labelledby="drawer-tab-matrix" className="drawer-matrix-panel" tabIndex={0}>
+        <InterferenceMatrix sensors={map.sensors} pairs={pairs} assessments={assessments} onPin={p => { onPin({ ...p, scope: 'pair' }); setView('budget'); document.getElementById('drawer-tab-budget')?.focus(); }} />
+      </div>}
+      {open && view === 'budget' && (
+        <div className="drawer-body" id="drawer-panel-budget" role="tabpanel" aria-labelledby="drawer-tab-budget">
           <div className="drawer-inputs">
             <p className="field-note"><b>{objective === 'desired' ? 'Desired communication' : 'Interference avoidance'}.</b> {objective === 'desired' ? 'Tx and Rx should communicate. Received power above sensitivity with the required fade margin is desirable.' : 'Tx and Rx should remain isolated. Received power below the interference threshold is desirable.'}</p>
-            {links.length > 1 && (
+            {(links.length > 1 || displayedPair?.intended === false) && (
               <label className="field link-pin"><span>Showing link from</span>
                 <select value={pin?.rxId === pair.rx.id && pin.txId === pair.tx.id ? pair.tx.id : ''} onChange={(e) => onPin(e.target.value ? { rxId: pair.rx.id, txId: e.target.value } : null)}>
                   <option value="">Strongest (re-ranks as you edit)</option>
+                  {displayedPair?.intended === false && <option value={pair.tx.id}>{pair.tx.name} (interferer)</option>}
                   {links.map((l) => <option key={l.txId} value={l.txId}>{l.txName}</option>)}
                 </select>
               </label>

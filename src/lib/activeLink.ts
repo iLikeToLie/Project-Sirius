@@ -9,8 +9,8 @@ export interface LinkState { inputs: LinkInputs; map: MapScenario }
 
 type Pair = { tx: Sensor; rx: Sensor };
 
-/** A transmitter the user chose to keep showing for a receiver, so edits cannot re-rank the link away from it. */
-export interface LinkPin { rxId: string; txId: string }
+/** Keep a transmitter active across edits. Matrix pins use pair scope to include interferers. */
+export interface LinkPin { rxId: string; txId: string; scope?: 'pair' }
 
 const receivers = (map: MapScenario) => map.sensors.filter((s) => s.role === 'rx');
 const nearest = (from: Sensor, candidates: Sensor[], map: MapScenario, groundAt: GroundAt) => candidates.reduce<Sensor | null>((best, s) =>
@@ -19,11 +19,13 @@ const servedBy = (map: MapScenario, txId: string, groundAt: GroundAt) => receive
 
 /**
  * The link the Calculator, sweeps and placements show: the selected receiver's strongest desired pair,
- * else the selected transmitter's nearest served receiver, else the first receiver's pair.
+ * else the selected transmitter's nearest served (or comparison) receiver, else the first receiver's pair.
  */
 export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs, pin: LinkPin | null = null): Pair | null {
   const strongestTx = (rx: Sensor) => {
-    const pinned = pin?.rxId === rx.id ? resolveDesiredTxs(map, rx, groundAt).find((s) => s.id === pin.txId) : undefined;
+    // Matrix pins can inspect any pair; legacy link-selector pins remain in the desired set.
+    const candidates = pin?.scope === 'pair' ? map.sensors.filter(s => s.role === 'tx') : resolveDesiredTxs(map, rx, groundAt);
+    const pinned = pin?.rxId === rx.id ? candidates.find((s) => s.id === pin.txId) : undefined;
     if (pinned) return pinned;
     const own = { ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === rx.id) };
     const links = receiverSummary(evaluatePairs(own, shared, groundAt), rx.id).links;
@@ -36,7 +38,7 @@ export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInp
     return tx ? { tx, rx: selected } : null;
   }
   if (selected?.role === 'tx') {
-    const rx = nearest(selected, servedBy(map, selected.id, groundAt), map, groundAt);
+    const rx = nearest(selected, servedBy(map, selected.id, groundAt), map, groundAt) ?? nearest(selected, receivers(map), map, groundAt);
     if (rx) return { tx: selected, rx };
   }
   for (const rx of receivers(map)) {

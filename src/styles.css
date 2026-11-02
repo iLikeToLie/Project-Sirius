@@ -698,6 +698,15 @@ tbody tr:hover { background: var(--surface-elevated); }
 .drawer-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
 .drawer-summary b { color: var(--link-accent, var(--ink)); }
 .drawer-body { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; padding: 0 12px 12px; overflow: auto; }
+.drawer-tabs { flex: none; margin: 0 12px 8px; }
+.drawer-matrix-panel { overflow: auto; min-height: 0; padding: 0 12px 12px; }
+.interference-matrix table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.interference-matrix caption { text-align: left; color: var(--mute); padding-bottom: 8px; }
+.interference-matrix th, .interference-matrix td { border: 1px solid var(--hairline); padding: 8px; text-align: left; min-width: 145px; }
+.interference-matrix th { font-weight: 600; }
+.matrix-cell { width: 100%; padding: 8px; white-space: nowrap; background: transparent; border: 1px solid currentColor; border-radius: 5px; }
+.matrix-cell:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.interference-matrix tfoot td span { display: block; margin-bottom: 4px; }
 .drawer-inputs, .drawer-results { display: grid; gap: 10px; align-content: start; min-width: 0; }
 .drawer-metrics { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 .drawer-metrics .metric { min-height: 0; padding: 9px 11px; }

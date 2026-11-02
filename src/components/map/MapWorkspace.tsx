@@ -104,7 +104,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
 
   const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
     const shown = activePair(state.map, groundAt, state.inputs, pin);
-    const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id } : null;
+    const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id, scope: pin?.scope } : null;
     const edited = applyInputEdit(state, key, value, groundAt, held);
     if (!edited.ok) return edited.reason;
     setPin(held);
@@ -298,7 +298,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
 
-      <LinkBudgetDrawer state={{ ...state, map: liveMap }} pairs={pairs} assessments={assessments} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={setPin} size={drawerSize} onResize={setDrawerSize} />
+      <LinkBudgetDrawer state={{ ...state, map: liveMap }} pairs={pairs} assessments={assessments} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={p => { if (p) select(p.rxId); setPin(p); }} size={drawerSize} onResize={setDrawerSize} />
 
       {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} map={map} setMap={setMap} />}
 
