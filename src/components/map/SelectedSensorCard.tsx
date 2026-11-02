@@ -71,6 +71,9 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
       <div className="tabs" role="tablist" aria-label="Sensor details">{['Sensor', 'Link', 'Coverage'].map(t => <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>)}</div>
       <div hidden={tab !== 'Sensor'}>
       <div className="form-grid two">
+        <label className="field"><span>Polarization</span><select aria-label="Sensor polarization" value={sensor.polarization} onChange={e => onChange({ polarization: e.target.value as Sensor['polarization'] })}>
+          <option value="V">V (vertical)</option><option value="H">H (horizontal)</option><option value="RHCP">RHCP (right circular)</option><option value="LHCP">LHCP (left circular)</option>
+        </select></label>
         <CommitField label="Latitude" unit="°" value={sensor.lat} onCommit={(v) => num('lat', v, (x) => (x < SG_BOUNDS.minLat || x > SG_BOUNDS.maxLat ? 'Keep within the Singapore map area.' : undefined))} />
         <CommitField label="Longitude" unit="°" value={sensor.lon} onCommit={(v) => num('lon', v, (x) => (x < SG_BOUNDS.minLon || x > SG_BOUNDS.maxLon ? 'Keep within the Singapore map area.' : undefined))} />
         <CommitField label="Height above ground" unit="m" value={sensor.aglM} onCommit={(v) => num('aglM', v, nonNegative('Height above ground'))} />

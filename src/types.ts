@@ -101,6 +101,7 @@ export interface Sensor {
   bandwidthMhz: number;
   acrDb: number;
   rejectionMask: RejectionStep[];
+  polarization: 'V' | 'H' | 'RHCP' | 'LHCP';
 }
 
 export interface MapScenario {
@@ -113,6 +114,7 @@ export interface MapScenario {
   protectionMarginDb: number;
   aggregateInterference: 'objective' | 'always' | 'never';
   rejectionModel: 'simple' | 'mask';
+  crossPolarDiscriminationDb: number;
 }
 
 export interface AppState {

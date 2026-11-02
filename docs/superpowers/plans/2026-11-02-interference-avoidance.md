@@ -242,12 +242,12 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** `src/types.ts`, `src/lib/state.ts` (+ tests), `src/lib/isolation.ts` (+ tests), `src/lib/sensors.ts`, `SelectedSensorCard.tsx`, `LinkSettingsCard.tsx`, `LinkBudgetDrawer.tsx`
 
-- [ ] Schema 6 additions: `Sensor.polarization: 'V' | 'H' | 'RHCP' | 'LHCP'` (default `'V'`) and `MapScenario.crossPolarDiscriminationDb: number` (default `15`, ≥ 0).
-- [ ] `polarizationMismatchDb(a, b, xpdDb)`: same → 0. V↔H → xpd. RHCP↔LHCP → xpd. Linear↔circular → 3.0103 (`10·log10 2`).
-- [ ] `pairLinkInputs` adds it to `otherLossDb` and reports `polarizationDb`.
-- [ ] The existing shared Polarization field stays as an extra loss on every pair. Change its help text to say the per-sensor mismatch is added on top. Add the XPD field to the Interference section of `LinkSettingsCard`, with help text saying XPD falls in cluttered urban paths and 15 dB is a cautious default.
-- [ ] Tests: the mismatch table, parity with every sensor at `'V'`, and a V Tx to H Rx lowering received power by exactly XPD.
-- [ ] Commit: `Add per-sensor polarization with cross-polar discrimination`.
+- [x] Schema 6 additions: `Sensor.polarization: 'V' | 'H' | 'RHCP' | 'LHCP'` (default `'V'`) and `MapScenario.crossPolarDiscriminationDb: number` (default `15`, ≥ 0).
+- [x] `polarizationMismatchDb(a, b, xpdDb)`: same → 0. V↔H → xpd. RHCP↔LHCP → xpd. Linear↔circular → 3.0103 (`10·log10 2`).
+- [x] `pairLinkInputs` adds it to `otherLossDb` and reports `polarizationDb`.
+- [x] The existing shared Polarization field stays as an extra loss on every pair. Change its help text to say the per-sensor mismatch is added on top. Add the XPD field to the Interference section of `LinkSettingsCard`, with help text saying XPD falls in cluttered urban paths and 15 dB is a cautious default.
+- [x] Tests: the mismatch table, parity with every sensor at `'V'`, and a V Tx to H Rx lowering received power by exactly XPD.
+- [x] Commit: `Add per-sensor polarization with cross-polar discrimination`.
 
 ### Task 11: Isolation-based fix suggestions
 

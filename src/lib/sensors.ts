@@ -3,7 +3,7 @@ import type { GroundAt } from './elevation';
 import { type LatLon, toLocalM } from './geo';
 import { buildProfile, bullingtonLossDb, type Clearance } from './propagation';
 import { calculateLink, type LinkResult } from './rf';
-import { centreMhz, defaultRejectionMask, frequencyRejectionDb } from './isolation';
+import { centreMhz, defaultRejectionMask, frequencyRejectionDb, polarizationMismatchDb } from './isolation';
 
 export const MAX_SENSORS = 12;
 
@@ -43,6 +43,7 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     bandwidthMhz: 20,
     acrDb: 30,
     rejectionMask: defaultRejectionMask(),
+    polarization: 'V',
   };
 }
 
@@ -133,8 +134,9 @@ export function pairLinkInputs(map: MapScenario, shared: LinkInputs, tx: Sensor,
     { fMhz: centreMhz(tx, shared), bwMhz: tx.bandwidthMhz },
     { fMhz: centreMhz(rx, shared), bwMhz: rx.bandwidthMhz, acrDb: rx.acrDb, mask: rx.rejectionMask }, map.rejectionModel,
   );
-  inputs.otherLossDb += rejectionDb;
-  return { inputs, rejectionDb, polarizationDb: 0 };
+  const polarizationDb = polarizationMismatchDb(tx.polarization, rx.polarization, map.crossPolarDiscriminationDb);
+  inputs.otherLossDb += rejectionDb + polarizationDb;
+  return { inputs, rejectionDb, polarizationDb };
 }
 
 export interface PairResult { txId: string; txName: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; rejectionDb: number; polarizationDb: number; clearance: Clearance | 'unknown' }

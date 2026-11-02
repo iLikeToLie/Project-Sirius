@@ -85,6 +85,8 @@ function readSensor(value: unknown): Sensor | undefined {
   sensor.frequencyGhz = value.frequencyGhz as Sensor['frequencyGhz'] ?? 'default';
   sensor.bandwidthMhz = value.bandwidthMhz as number ?? 20;
   sensor.acrDb = value.acrDb as number ?? 30;
+  if (value.polarization !== undefined && !['V', 'H', 'RHCP', 'LHCP'].includes(value.polarization as string)) return undefined;
+  sensor.polarization = value.polarization as Sensor['polarization'] ?? 'V';
   sensor.rejectionMask = isRejectionMask(value.rejectionMask) ? value.rejectionMask.map(s => ({ ...s })) : defaultRejectionMask();
   return valid ? sensor : undefined;
 }
@@ -97,6 +99,7 @@ function readMap(value: unknown): MapScenario | undefined {
   if (value.protectionMarginDb !== undefined && (!isFiniteNumber(value.protectionMarginDb) || value.protectionMarginDb < 0)) return undefined;
   if (value.aggregateInterference !== undefined && !['objective', 'always', 'never'].includes(value.aggregateInterference as string)) return undefined;
   if (value.rejectionModel !== undefined && !['simple', 'mask'].includes(value.rejectionModel as string)) return undefined;
+  if (value.crossPolarDiscriminationDb !== undefined && (!isFiniteNumber(value.crossPolarDiscriminationDb) || value.crossPolarDiscriminationDb < 0)) return undefined;
   const sensors = value.sensors.map(readSensor);
   if (sensors.some((s) => !s)) return undefined;
   const list = sensors as Sensor[];
@@ -117,6 +120,7 @@ function readMap(value: unknown): MapScenario | undefined {
     protectionMarginDb: value.protectionMarginDb as number ?? 3,
     aggregateInterference: value.aggregateInterference as MapScenario['aggregateInterference'] ?? 'objective',
     rejectionModel: value.rejectionModel as MapScenario['rejectionModel'] ?? 'simple',
+    crossPolarDiscriminationDb: value.crossPolarDiscriminationDb as number ?? 15,
   };
 }
 

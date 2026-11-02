@@ -8,6 +8,7 @@ import { RxMeterStack } from './RxMeterStack';
 import { SensorListCard } from './SensorListCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
 import { LinkSettingsCard } from './LinkSettingsCard';
+import { LinkBudgetDrawer } from './LinkBudgetDrawer';
 
 const noop = () => undefined;
 const state = freshDefaultState();
@@ -20,6 +21,32 @@ const rx = state.map.sensors[1];
 const assessment = assessments.get(rx.id)!;
 
 describe('interference workspace display', () => {
+  it('offers all four polarization choices for transmitters and receivers', () => {
+    for (const sensor of state.map.sensors) {
+      const html = renderToStaticMarkup(<SelectedSensorCard defaultFrequencyGhz={state.inputs.frequencyGhz} sensor={sensor} map={state.map} pairs={pairs} assessments={assessments} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+      expect(html).toContain('aria-label="Sensor polarization"');
+      for (const value of ['V', 'H', 'RHCP', 'LHCP']) expect(html).toContain(`value="${value}"`);
+    }
+  });
+
+  it('explains additive shared polarization loss and cautious urban XPD settings', () => {
+    const html = renderToStaticMarkup(<LinkSettingsCard inputs={state.inputs} map={state.map} setMap={noop} onChange={noop} />);
+    for (const text of ['Cross-polar discrimination (XPD)', '15 dB', 'cluttered urban', 'per-sensor mismatch is added on top']) expect(html).toContain(text);
+  });
+
+  it('reports the per-sensor mismatch separately while keeping shared loss editable in the drawer', () => {
+    const custom = freshDefaultState();
+    custom.map.useTerrainElevation = false;
+    custom.map.propagationModel = 'free-space';
+    custom.map.sensors[1].polarization = 'H';
+    const results = evaluatePairs(custom.map, custom.inputs, () => 0);
+    const html = renderToStaticMarkup(<LinkBudgetDrawer state={custom} pairs={results} assessments={assessAll(custom.map, results)} groundAt={() => 0} open onToggle={noop} onEdit={noop} pin={null} onPin={noop} size={null} onResize={noop} />);
+    expect(html).toContain('Per-sensor polarization mismatch');
+    expect(html).toContain('15.00');
+    expect(html).toContain('per-sensor mismatch is added on top');
+    expect(html).toMatch(/<span>Polarization mismatch<\/span>.*?value="0.5"/);
+  });
+
   it('offers a collapsed noise-floor derivation only for receivers', () => {
     const render = (sensor: typeof rx) => renderToStaticMarkup(<SelectedSensorCard defaultFrequencyGhz={state.inputs.frequencyGhz} sensor={sensor} map={state.map} pairs={pairs} assessments={assessments} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
     const html = render(rx);

@@ -46,12 +46,12 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);
-    const { inputs, rejectionDb } = pairLinkInputs(map, state.inputs, pair.tx, pair.rx, distanceM);
+    const { inputs, rejectionDb, polarizationDb } = pairLinkInputs(map, state.inputs, pair.tx, pair.rx, distanceM);
     const propagation = pairPropagation(map, pair.tx, pair.rx, inputs.frequencyGhz, groundAt);
     const objective = pairs.find(p => p.txId === pair.tx.id && p.rxId === pair.rx.id)?.intended === false ? 'avoidance' : effectiveObjective(map, pair.rx);
     const result = calculateLink({ ...inputs, otherLossDb: inputs.otherLossDb + propagation.lossDb }, objective);
     const known = [pair.tx, pair.rx].every((s) => groundOf(s, groundAt, map.useTerrainElevation) !== null) && Number.isFinite(propagation.lossDb);
-    return { inputs, propagation, objective, result, known, rejectionDb };
+    return { inputs, propagation, objective, result, known, rejectionDb, polarizationDb };
   }, [pair, map, state.inputs, groundAt, pairs]);
 
   const rxPairs = pair ? pairs.filter(p => p.rxId === pair.rx.id) : [];
@@ -148,7 +148,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
               <NumberField label="Rx antenna gain" unit="dBi" value={inputs.rxGainDbi} onChange={num('rxGainDbi')} />
               <NumberField label="Tx cable & connector loss" unit="dB" min={0} value={inputs.txLossDb} onChange={num('txLossDb')} />
               <NumberField label="Rx cable & connector loss" unit="dB" min={0} value={inputs.rxLossDb} onChange={num('rxLossDb')} />
-              <NumberField label="Polarization mismatch" unit="dB" min={0} value={inputs.polarizationLossDb} onChange={num('polarizationLossDb')} />
+              <NumberField label="Polarization mismatch" unit="dB" min={0} value={inputs.polarizationLossDb} onChange={num('polarizationLossDb')} help="Extra loss on every pair; per-sensor mismatch is added on top." />
               <NumberField label="Obstruction / environment" unit="dB" min={0} value={inputs.obstructionLossDb} onChange={num('obstructionLossDb')} />
               <NumberField label="Other miscellaneous loss" unit="dB" min={0} value={state.inputs.otherLossDb} onChange={num('otherLossDb')} />
               <NumberField label="Receiver sensitivity" unit="dBm" value={inputs.sensitivityDbm} onChange={num('sensitivityDbm')} />
@@ -164,6 +164,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
               <Metric label="Free-space path loss" value={formatNumber(result.fsplDb)} unit="dB" />
               <Metric label="Diffraction loss" value={map.propagationModel === 'terrain' ? formatNumber(propagation.lossDb) : 'off'} unit={map.propagationModel === 'terrain' ? 'dB' : ''} note={map.propagationModel === 'terrain' ? `Clearance: ${propagation.clearance}` : 'Free-space model'} />
               {model.rejectionDb > 0 && <Metric label="Frequency rejection" value={formatNumber(model.rejectionDb)} unit="dB" />}
+              <Metric label="Per-sensor polarization mismatch" value={formatNumber(model.polarizationDb)} unit="dB" note={`${pair.tx.polarization} → ${pair.rx.polarization}`} />
               <Metric label="Total system losses" value={formatNumber(result.totalLossDb)} unit="dB" />
               <Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" />
             </div>

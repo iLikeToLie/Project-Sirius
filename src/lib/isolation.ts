@@ -1,5 +1,12 @@
 import type { LinkInputs, RejectionStep, Sensor } from '../types';
 
+/** Fixed XPD for orthogonal antennas; ideal linear/circular coupling loses half the power. */
+export function polarizationMismatchDb(a: Sensor['polarization'], b: Sensor['polarization'], xpdDb: number): number {
+  if (a === b) return 0;
+  const linear = (p: Sensor['polarization']) => p === 'V' || p === 'H';
+  return linear(a) === linear(b) ? xpdDb : 10 * Math.log10(2);
+}
+
 /** Thermal noise at -174 dBm/Hz, integrated across the receiver bandwidth. */
 export const noiseFloorDbm = (bandwidthMhz: number, noiseFigureDb: number): number => -174 + 10 * Math.log10(bandwidthMhz * 1e6) + noiseFigureDb;
 

@@ -93,3 +93,41 @@ Validation:
   for transmitters and no uncaught page errors.
 - `git diff --check`: clean. RF engine unchanged from main; App.tsx unchanged
   by this task. No schema or persistence changes. Task 10 is pending.
+
+## Task 10: Per-sensor polarization (2026-11-02)
+
+Every sensor now stores V, H, RHCP or LHCP polarization (default V). The
+scenario stores cross-polar discrimination (XPD), default 15 dB and constrained
+to a finite non-negative value. Missing fields in older saves get these defaults;
+invalid explicit values reject imports. Role changes retain polarization.
+
+The pair budget adds zero for matching polarizations, XPD for orthogonal
+linear or circular polarizations, and 10 log10(2) dB for linear/circular pairs.
+This loss enters otherLossDb once, alongside frequency rejection and terrain
+loss. The shared polarization loss remains an extra loss on every pair.
+The drawer reports per-sensor mismatch separately, including the Tx/Rx types.
+Sensor cards expose all four choices, and Link settings explains additive
+losses and the cautious 15 dB urban XPD default. XPD remains a fixed path
+approximation rather than a terrain-dependent estimate.
+
+Validation:
+
+- Six new calculation/state tests failed before implementation, then passed;
+  three new UI tests likewise failed before implementation, then passed.
+  A parity regression also verifies unchanged results for all-V sensors.
+- `corepack pnpm test`: 253/253 tests pass. Coverage includes all 16 ordered
+  polarization combinations at four XPD values, old schema 5/6 defaults,
+  new sensors, import validation, zero/custom XPD, role/save retention,
+  desired/interferer power and margin parity, exact V/H attenuation, combined
+  frequency/shared losses, and active-link edits without double counting.
+- `corepack pnpm build`: passes without warnings.
+- `node scripts/e2e/polarization.mjs`: passes in headless installed Chrome
+  against production preview. Verifies legacy power parity, all four choices,
+  XPD validation and zero, linear/circular and circular/circular mismatch,
+  role retention, shared-loss edits, free-space range recomputation, terrain
+  worker inputs updating after XPD edits, saved values after reload, and no
+  uncaught page errors.
+- Existing `node scripts/e2e/channel-rejection.mjs` also passes, including
+  channel model persistence, overlap/rejection, worker updates and drawer edits.
+- `git diff --check`: clean. RF engine unchanged from main; App.tsx unchanged
+  by this task. Task 11 is pending.

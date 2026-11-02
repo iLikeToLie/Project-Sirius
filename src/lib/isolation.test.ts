@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
-import { centreMhz, frequencyRejectionDb, noiseFloorDbm } from './isolation';
+import { centreMhz, frequencyRejectionDb, noiseFloorDbm, polarizationMismatchDb } from './isolation';
+
+describe('polarization mismatch', () => {
+  it('covers every ordered polarization pairing with adjustable XPD', () => {
+    const polarizations = ['V', 'H', 'RHCP', 'LHCP'] as const;
+    for (const xpd of [0, 7, 15, 30]) for (const a of polarizations) for (const b of polarizations) {
+      const sameFamily = (a === 'V' || a === 'H') === (b === 'V' || b === 'H');
+      expect(polarizationMismatchDb(a, b, xpd), `${a} to ${b}, XPD ${xpd}`).toBeCloseTo(a === b ? 0 : sameFamily ? xpd : 10 * Math.log10(2), 10);
+    }
+  });
+});
 
 const mask = [{ offsetMhz: 20, rejectionDb: 30 }, { offsetMhz: 40, rejectionDb: 45 }, { offsetMhz: 60, rejectionDb: 60 }];
 const rx = { fMhz: 5800, bwMhz: 20, acrDb: 27, mask };

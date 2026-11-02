@@ -45,6 +45,7 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     frequencyGhz: 'default' as const,
     bandwidthMhz: 20,
     acrDb: 30,
+    polarization: 'V' as const,
   };
   return {
     sensors: [
@@ -59,6 +60,7 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     protectionMarginDb: 3,
     aggregateInterference: 'objective',
     rejectionModel: 'simple',
+    crossPolarDiscriminationDb: 15,
   };
 }
 

@@ -51,11 +51,15 @@ export function LinkSettingsCard({ inputs, onChange, map, setMap }: { inputs: Li
       <h3>Link settings</h3>
       <FrequencyControl frequencyGhz={inputs.frequencyGhz} onChange={(ghz) => onChange('frequencyGhz', ghz)} />
       <div className="loss-rows">
-        <NumberField label="Polarization" unit="dB" min={0} value={inputs.polarizationLossDb} onChange={(v) => onChange('polarizationLossDb', v)} />
+        <NumberField label="Polarization" unit="dB" min={0} value={inputs.polarizationLossDb} onChange={(v) => onChange('polarizationLossDb', v)} help="Extra loss on every pair; per-sensor mismatch is added on top." />
         <NumberField label="Environment" unit="dB" min={0} value={inputs.obstructionLossDb} onChange={(v) => onChange('obstructionLossDb', v)} />
         <NumberField label="Other" unit="dB" min={0} value={inputs.otherLossDb} onChange={(v) => onChange('otherLossDb', v)} />
       </div>
       <h4>Interference</h4>
+      <CommitField label="Cross-polar discrimination (XPD)" unit="dB" value={map.crossPolarDiscriminationDb} help="XPD falls in cluttered urban paths; 15 dB is a cautious default." onCommit={v => {
+        if (v < 0) return 'Cross-polar discrimination cannot be negative.';
+        setMap(m => ({ ...m, crossPolarDiscriminationDb: v })); return undefined;
+      }} />
       <label className="field"><span>Rejection model</span><select aria-label="Rejection model" value={map.rejectionModel} onChange={e => { const value = e.target.value as MapScenario['rejectionModel']; setMap(m => ({ ...m, rejectionModel: value })); }}>
         <option value="simple">Simple (ACR)</option><option value="mask">Stepped mask</option>
       </select></label>
