@@ -268,14 +268,14 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** new `src/lib/multiField.ts` (+ tests), `src/lib/coverage.ts`, `src/workers/fieldWorker.ts`, `src/components/useFieldWorker.ts`
 
-- [ ] Move the polar-to-raster reprojection out of `coverageZones` into `reprojectPowers(out: CoverageResult, source: {xM,yM}, raster: ScalarGrid): Float64Array`. `coverageZones` keeps its output exactly; its existing tests must pass unchanged.
-- [ ] `computeMultiField(req: { jobId; raster: ScalarGrid; rayGround: ScalarGrid; origin: LatLon; mode: 'free-space' | 'terrain'; rxAglM: number; sources: { lat; lon; elevationM; inputs: LinkInputs }[]; radials: number }): { jobId; powers: Float32Array[] }`. It returns one raster of received power per source, so combining results stays on the main thread and toggles need no recompute.
+- [x] Move the polar-to-raster reprojection out of `coverageZones` into `reprojectPowers(out: CoverageResult, source: {xM,yM}, raster: ScalarGrid): Float64Array`. `coverageZones` keeps its output exactly; its existing tests must pass unchanged.
+- [x] `computeMultiField(req: { jobId; raster: ScalarGrid; rayGround: ScalarGrid; origin: LatLon; mode: 'free-space' | 'terrain'; rxAglM: number; sources: { lat; lon; elevationM; inputs: LinkInputs }[]; radials: number }): { jobId; powers: Float32Array[] }`. It returns one raster of received power per source, so combining results stays on the main thread and toggles need no recompute.
   - Free space: `basePower − 20·log10(3D distance)` per cell, with the same base as `computeCoverage`.
   - Terrain: `computeCoverage` per source, then `reprojectPowers`.
   - At most 12 sources. 360 radials, or 180 while dragging.
-- [ ] Add worker kind `'multi'` and a `useMultiFieldWorker(request, key)` hook following `useCoverageWorker`.
-- [ ] Tests: a single-source free-space field matches `computeZones`' separation-derived power within 0.01 dB, and source order is kept.
-- [ ] Commit: `Compute multi-source power fields in the worker`.
+- [x] Add worker kind `'multi'` and a `useMultiFieldWorker(request, key)` hook following `useCoverageWorker`.
+- [x] Tests: a single-source free-space field matches `computeZones`' separation-derived power within 0.01 dB, and source order is kept.
+- [x] Commit: `Compute multi-source power fields in the worker`.
 
 ### Task 13: Total interference layer
 

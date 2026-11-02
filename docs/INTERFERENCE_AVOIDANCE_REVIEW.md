@@ -157,3 +157,42 @@ Validation:
 - `git diff --check`: clean. RF engine unchanged from main; App.tsx unchanged
   by this task. No browser check added for this pure calculation change.
 - Task 12 remains pending; no push or merge performed.
+
+## Task 12: Multi-source power fields (2026-11-02)
+
+`computeMultiField` returns one independent Float32 power raster per source in
+request order, with the request's job id. Free-space powers use the same 1 m
+link-budget base as radial coverage and the zone model's 3D separation.
+Terrain powers run the existing radial sweep per source and use the extracted
+`reprojectPowers` helper. The terrain sweep reaches all four raster corners,
+with a 30 m minimum step or about 400 steps for a larger view. Its caller can
+request 360 radials normally and 180 while dragging.
+
+Missing source elevations yield an unknown field; missing free-space ground
+or missing terrain paths yield NaN at the affected nodes. A zero-length
+free-space path is unknown rather than infinite power. Empty source lists
+return no fields; the shared sensor cap rejects requests above 12 sources.
+Combining fields and adding their map controls remain Tasks 13 and 14.
+
+The worker accepts `kind: 'multi'`. `useMultiFieldWorker` shares the existing
+queue, job id checks, cleanup, and synchronous fallback with the other hooks.
+React lifecycle documentation was fetched using Context7 after one transient
+fetch failure; no scheduling behavior was changed.
+
+Validation:
+
+- Nine missing-calculation/reprojection failures RED, then GREEN. The existing
+  nearest-ray parity fixture passed before refactoring and still passes.
+- Worker routing failed for a multi request before implementation, then passed;
+  existing coverage and zone routing also pass. The worker fixture's extra loss
+  was corrected to add to the default loss rather than replace it.
+- `corepack pnpm test`: 280/280 tests across 27 files pass. New tests cover
+  3D free-space parity within 0.01 dB, source order and independent buffers,
+  missing ground/elevations, the zero-length path, 180/360 terrain radials,
+  off-screen sources, ridge shadows, the source cap, reprojection offsets and
+  unknown/out-of-range samples, and all three worker request kinds.
+- `corepack pnpm build`: passes without warnings and emits the updated worker.
+- `git diff --check`: clean. Existing coverage tests unchanged; RF engine
+  unchanged from main; App.tsx unchanged by this task. The new hook is not yet
+  wired into map controls, so browser UI validation belongs to Tasks 13/14.
+- Task 13 remains pending; no push or merge performed.
