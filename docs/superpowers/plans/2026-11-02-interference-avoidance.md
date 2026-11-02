@@ -313,9 +313,11 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 ### Task 15: Documentation and version
 
-- [ ] `package.json` → `1.9.0`. Add a `VERSION_HISTORY.txt` entry for web 1.9.0: functions, key changes, the accepted behaviour changes from *Global Constraints*, and limitations (reciprocity approximation, in-band-only overlap model, XPD as a fixed value, the Calculator tab unchanged).
-- [ ] Update `README.md` features, `docs/HANDOFF.md` (code map: `interference.ts`, `isolation.ts`, `multiField.ts`; tests count; branch state) and `docs/BACKLOG.md` (mark items 7a–7k done).
-- [ ] Commit: `Release notes for web 1.9.0`.
+- [x] `package.json` → `1.9.0`. Add a `VERSION_HISTORY.txt` entry for web 1.9.0: functions, key changes, the accepted behaviour changes from *Global Constraints*, and limitations (reciprocity approximation, in-band-only overlap model, XPD as a fixed value, the Calculator tab unchanged).
+- [x] Update `README.md` features, `docs/HANDOFF.md` (code map: `interference.ts`, `isolation.ts`, `multiField.ts`; tests count; branch state) and `docs/BACKLOG.md` (mark items 7a–7k done).
+- [x] Commit: `Release notes for web 1.9.0`.
+
+Verified Task 15: 295/295 tests across 30 files pass; production build passes without warnings. RF engine unchanged from main; no source edits in this task. App.tsx version labels and guide remain at 1.8.0 under the explicit scope constraint, recorded in the handoff and release notes. Task 16 remains pending; no push or merge performed.
 
 ### Task 16: Whole-branch review
 

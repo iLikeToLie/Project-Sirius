@@ -408,3 +408,51 @@ Key changes:
 
 Calculation scope:
 Unchanged from 1.7.0.
+
+-------------------------------------------------------------------------------
+Web Version 1.9.0 (based on workbook Version 3)
+Target deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-11-02
+Status: feature/interference-avoidance; not deployed; whole-branch review pending.
+
+Function:
+Multi-transmitter interference screening and placement planning in the Singapore
+Link workspace, for up to twelve transmitters and receivers.
+
+Key changes:
+- Receiver assessments combine known interference powers in linear power or use
+  the worst single interferer, with contributor shares and unknown-path counts.
+- Adjustable protection margin (default 3 dB), receiver overrides, and a C/I
+  requirement (default 10 dB) that flags desired links as Interfered link.
+- Allowed transmit-power ranges, binding receiver limits, fix suggestions and
+  a clickable Tx x Rx matrix in the Link budget drawer.
+- Per-sensor frequency, bandwidth and V/H/RHCP/LHCP polarization. Simple ACR
+  and stepped-mask rejection models retain both receiver settings when toggled.
+- Noise-floor helper derives an interference threshold from receiver bandwidth,
+  noise figure and the chosen interference-to-noise allowance.
+- Multi-source worker fields drive total Interference and transmitter Placement
+  map layers. Placement shows Recommended, Safe, Marginal, Unsafe and Unknown.
+- Schema 6; schema 5 and older scenarios load new fields with their defaults.
+  The existing localStorage key is retained; no new dependencies or network calls.
+
+Accepted behaviour changes:
+- With the default 3 dB protection margin, interference above the protected limit
+  but below the threshold reads Marginal interference. Equality at the protected
+  limit is safe; equality at the threshold reads Possible interference.
+- Avoidance receivers use aggregate interference by default; desired receivers
+  use the worst single interferer unless aggregation is explicitly enabled.
+- Unknown-elevation pairs are omitted from sums and confident limits and flagged
+  as unknown. A default desired Tx/Rx pair without interferers retains its powers,
+  margins and statuses. Default frequency and matching polarization add zero loss.
+
+Calculation scope and limitations:
+The Version 3 Friis engine is unchanged. The Calculator tab is unchanged: it
+keeps raw single-link statuses and has no workspace protection margin. Its
+version labels and guide text remain at 1.8.0 because src/App.tsx is out of scope.
+Placement uses reciprocal terrain paths computed from the receiver side, an
+approximation. Channel rejection models rectangular in-band overlap and applies
+ACR or a stepped mask outside overlap; transmitter spectral leakage is omitted.
+Cross-polar discrimination (XPD) is a fixed user value, default 15 dB; real urban
+paths can have less isolation. Directional antenna patterns remain future work.
+Terrain limitations from 1.6.0 still apply. Whole-branch release verification is
+tracked separately as Task 16; this entry does not claim deployment or approval.

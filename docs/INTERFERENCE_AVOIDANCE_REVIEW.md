@@ -272,3 +272,25 @@ Validation:
 - Existing Chrome `scripts/e2e/interference-layer.mjs` regression passes.
 - `git diff --check` clean; RF engine unchanged from main; App.tsx unchanged.
 - Task 15 remains pending; no push or merge performed.
+
+## Task 15 — Documentation and version
+
+Package version is 1.9.0. README and release history cover the implemented
+workspace features, schema 6 migration, default aggregate interference for
+avoidance receivers, the 3 dB protection margin and Marginal interference,
+unknown paths, and unchanged no-interferer/default-isolation results. Limitations
+include reciprocal placement terrain, rectangular in-band overlap without
+spectral leakage, fixed XPD, and unchanged Calculator calculations/statuses.
+The handoff updates the code map, test count and local branch state; backlog
+items 7a–7k are checked as implemented, pending whole-branch review/deployment.
+
+Validation:
+
+- `corepack pnpm test`: 295/295 tests across 30 files pass.
+- `corepack pnpm build`: passes without warnings.
+- `git diff --check`: clean; `git diff main -- src/lib/rf.ts`: empty.
+- No source changes in Task 15. Existing pair-pin integration changes in
+  App.tsx predate this task; its 1.8.0 version chips and guide text remain under
+  the plan's scope constraint and are disclosed in the handoff/release notes.
+- Task 16 remains pending. No browser checks were rerun for this documentation
+  task; no push or merge performed.
