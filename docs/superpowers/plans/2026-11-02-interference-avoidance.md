@@ -51,14 +51,16 @@ These formulas are used across tasks. Implement them once.
 
 **Files:** `src/types.ts`, `src/lib/state.ts`, `src/lib/state.test.ts`, `src/data/defaults.ts`, `src/lib/sensors.ts` (`createSensor`)
 
-- [ ] Add to `ScreeningStatus`: `'Marginal interference'` and `'Interfered link'`.
-- [ ] Add to `Sensor`: `protectionMarginDb: 'default' | number` (default `'default'`) and `requiredCiDb: number` (default `10`).
-- [ ] Add to `MapScenario`: `protectionMarginDb: number` (default `3`) and `aggregateInterference: 'objective' | 'always' | 'never'` (default `'objective'`).
-- [ ] Bump `schemaVersion` to `6` in `AppState` and `normalizeState`.
-- [ ] Update `readSensor` and `readMap`. A missing field takes its default. A present but invalid field (a negative number, an unknown enum value) rejects that sensor or map, matching the current strict style.
-- [ ] Update `createSensor` and `mapForPlacements` to set the defaults.
-- [ ] Tests: a schema 5 fixture loads with the defaults. A saved schema 6 file round-trips. A negative `requiredCiDb` or margin is rejected. An unknown `aggregateInterference` is rejected.
-- [ ] Commit: `Add schema 6 interference settings`.
+- [x] Add to `ScreeningStatus`: `'Marginal interference'` and `'Interfered link'`.
+- [x] Add to `Sensor`: `protectionMarginDb: 'default' | number` (default `'default'`) and `requiredCiDb: number` (default `10`).
+- [x] Add to `MapScenario`: `protectionMarginDb: number` (default `3`) and `aggregateInterference: 'objective' | 'always' | 'never'` (default `'objective'`).
+- [x] Bump `schemaVersion` to `6` in `AppState` and `normalizeState`.
+- [x] Update `readSensor` and `readMap`. A missing field takes its default. A present but invalid field (a negative number, an unknown enum value) rejects that sensor or map, matching the current strict style.
+- [x] Update `createSensor` and `mapForPlacements` to set the defaults.
+- [x] Tests: a schema 5 fixture loads with the defaults. A saved schema 6 file round-trips. A negative `requiredCiDb` or margin is rejected. An unknown `aggregateInterference` is rejected.
+- [x] Commit: `Add schema 6 interference settings`.
+
+Verified Task 1: 171 unit tests pass; `corepack pnpm build` passes. Migration, custom settings (including zero), sensor defaults, and invalid input rejection were tested RED then GREEN. `git diff main -- src/lib/rf.ts` is empty. The settings are stored only; assessment behavior starts in Task 2.
 
 ### Task 2: Receiver assessment (aggregate, margin, C/I)
 

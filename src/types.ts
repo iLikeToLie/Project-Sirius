@@ -1,5 +1,7 @@
 export type ScreeningStatus =
   | 'Possible interference'
+  | 'Marginal interference'
+  | 'Interfered link'
   | 'Acceptable link'
   | 'Weak link'
   | 'No link'
@@ -92,6 +94,8 @@ export interface Sensor {
   interferenceThresholdDbm: number;
   desiredTxIds: 'auto' | string[];
   objective: 'default' | LinkObjective;
+  protectionMarginDb: 'default' | number;
+  requiredCiDb: number;
 }
 
 export interface MapScenario {
@@ -101,10 +105,12 @@ export interface MapScenario {
   useTerrainElevation: boolean;
   defaultObjective: LinkObjective;
   propagationModel: 'free-space' | 'terrain';
+  protectionMarginDb: number;
+  aggregateInterference: 'objective' | 'always' | 'never';
 }
 
 export interface AppState {
-  schemaVersion: 5;
+  schemaVersion: 6;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;

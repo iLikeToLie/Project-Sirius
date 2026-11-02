@@ -36,6 +36,8 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     interferenceThresholdDbm: defaults.interferenceThresholdDbm,
     desiredTxIds: 'auto',
     objective: 'default',
+    protectionMarginDb: 'default',
+    requiredCiDb: 10,
   };
 }
 
