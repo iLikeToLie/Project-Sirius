@@ -63,3 +63,26 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
 - **Problem:** the operating frequency slider's scale labels (1 MHz, 1 GHz, 100 GHz) do not match the slider's position. The 2 GHz thumb sits well past the midpoint, so the scale looks wrong. Check whether the slider is logarithmic and, if so, label it to match.
 - **Want:** every value is fully readable, with the spinners hidden or moved clear of the digits and the unit kept visible. The frequency slider and its labels agree, so a reader can place any value on the scale.
 - **Notes:** the card is `src/components/map/LinkSettingsCard.tsx` (the scale labels are the `range-scale` element). Check the same fields in the Link budget drawer and the Calculator tab for the same overlap.
+
+## 7. Interference avoidance for multi-transmitter planning — planned (web 1.9.0)
+
+- **Want:** someone placing several transmitters can keep their own receivers free of interference and avoid pushing other receivers over their limits.
+- **Plan:** `docs/superpowers/plans/2026-11-02-interference-avoidance.md`, on branch `feature/interference-avoidance`.
+- **Decisions (2 Nov):** aggregate interference is on by default for avoidance receivers only; the protection margin defaults to 3 dB and is user-adjustable; both frequency rejection models are built behind a toggle; polarization is in Phase 3.
+- **Items:**
+  - 7a. Aggregate interference (power sum per receiver).
+  - 7b. Protection margin and a Marginal interference status.
+  - 7c. C/I check on desired links (Interfered link status).
+  - 7d. Allowed power range per transmitter.
+  - 7e. Tx × Rx interference matrix in the drawer.
+  - 7f. Fix suggestions (power, distance, later frequency and polarization).
+  - 7g. Sensor cap raised from 6 to 12.
+  - 7h. Per-sensor frequency and bandwidth, with simple ACR and stepped-mask rejection models.
+  - 7i. Interference threshold derived from the noise floor.
+  - 7j. Per-sensor polarization with cross-polar discrimination.
+  - 7k. Map layers: total interference, and safe placement for a transmitter.
+
+## 8. Directional antennas — future
+
+- **Want:** azimuth, beamwidth and front-to-back ratio per sensor, so antennas can be pointed away from victim receivers.
+- **Notes:** pattern loss would apply per Tx–Rx pair and per coverage radial in `computeCoverage`. The web app deliberately left out the workbook Version 4 antenna patterns, so this needs its own design pass before it is planned. Kept out of item 7 by decision on 2 Nov.
