@@ -3,7 +3,8 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 import { activePair, type LinkPin } from '../../lib/activeLink';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
-import { effectiveObjective, evaluatePairs, groundOf, pairInputs, pairPropagation, receiverSummary, separationM } from '../../lib/sensors';
+import { effectiveObjective, groundOf, pairInputs, pairPropagation, receiverSummary, separationM, type PairResult } from '../../lib/sensors';
+import { pairVerdict, type ReceiverAssessment } from '../../lib/interference';
 import type { AppState, LinkInputs } from '../../types';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from '../ui';
 import { PathProfileChart } from './PathProfileChart';
@@ -24,8 +25,10 @@ function drawerLimits(drawer: HTMLElement | null) {
 }
 
 /** The Calculator's inputs, results and Rx meter for the active link, writing back through `onEdit`. */
-export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin, onPin, size, onResize }: {
+export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, open, onToggle, pin, onPin, size, onResize }: {
   state: AppState;
+  pairs: PairResult[];
+  assessments: Map<string, ReceiverAssessment>;
   open: boolean;
   onToggle: (open: boolean) => void;
   size: DrawerSize;
@@ -48,12 +51,15 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin,
     return { inputs, propagation, objective, result, known };
   }, [pair, map, state.inputs, groundAt]);
 
-  const rxPairs = useMemo(() => (pair ? evaluatePairs({ ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === pair.rx.id) }, state.inputs, groundAt) : []), [pair, map, state.inputs, groundAt]);
+  const rxPairs = pair ? pairs.filter(p => p.rxId === pair.rx.id) : [];
 
   if (!pair || !model) {
     return <section className="map-card link-budget-drawer collapsed" aria-label="Link budget"><div className="drawer-bar"><b>Link budget</b><span className="field-note">Add a transmitter and a receiver to see the link budget.</span></div></section>;
   }
   const { inputs, propagation, objective, result, known } = model;
+  const assessment = assessments.get(pair.rx.id)!;
+  const displayedPair = rxPairs.find(p => p.txId === pair.tx.id);
+  const status = objective === 'avoidance' ? displayedPair ? pairVerdict(displayedPair, pair.rx, assessment.marginDb) : 'Invalid input' : assessment.links.find(l => l.txId === pair.tx.id)?.status ?? result.status;
   const links = receiverSummary(rxPairs, pair.rx.id).links;
   // An avoidance receiver has no desired links, so its meter shows the shown pair against the interference threshold.
   const meterLinks = objective === 'avoidance' ? rxPairs.filter((p) => p.txId === pair.tx.id) : links;
@@ -61,7 +67,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin,
   const text = (key: keyof typeof TEXT_LABELS) => (
     <label className="field"><span>{TEXT_LABELS[key]}</span><input type="text" value={inputs[key]} onChange={(e) => { onEdit(key, e.target.value); }} /></label>
   );
-  const tone = statusTone(result.status);
+  const tone = statusTone(status);
 
   const clamp = (px: number, max: number) => Math.round(Math.min(max, Math.max(MIN_DRAWER_PX, px)));
   const currentPx = (drawer: HTMLElement | null) => drawer?.getBoundingClientRect().height ?? MIN_DRAWER_PX;
@@ -101,7 +107,7 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin,
             {size === 'max' ? <Minimize2 size={13} /> : <Maximize2 size={13} />}{size === 'max' ? 'Restore' : 'Expand'}
           </button>
         )}
-        <StatusBadge status={result.status} />
+        <StatusBadge status={status} />
       </div>
       {open && (
         <div className="drawer-body">
@@ -137,13 +143,14 @@ export function LinkBudgetDrawer({ state, groundAt, onEdit, open, onToggle, pin,
               <Metric label="Received power" value={formatNumber(result.receivedPowerDbm, 2)} unit="dBm" note={`${result.receivedPowerMw < 0.001 ? result.receivedPowerMw.toExponential(3) : formatNumber(result.receivedPowerMw, 6)} mW`} />
               <Metric label="Link margin" value={formatNumber(result.linkMarginDb)} unit="dB" note="Power above sensitivity" />
               <Metric label="Interference margin" value={formatNumber(result.interferenceMarginDb)} unit="dB" note="Threshold minus received power" />
+              {objective === 'avoidance' && <Metric label="Protected margin" value={known ? formatNumber(assessment.limitDbm - result.receivedPowerDbm) : 'Unknown'} unit="dB" note="Protected limit minus received power" />}
               <Metric label="Free-space path loss" value={formatNumber(result.fsplDb)} unit="dB" />
               <Metric label="Diffraction loss" value={map.propagationModel === 'terrain' ? formatNumber(propagation.lossDb) : 'off'} unit={map.propagationModel === 'terrain' ? 'dB' : ''} note={map.propagationModel === 'terrain' ? `Clearance: ${propagation.clearance}` : 'Free-space model'} />
               <Metric label="Total system losses" value={formatNumber(result.totalLossDb)} unit="dB" />
               <Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" />
             </div>
             {!known && map.useTerrainElevation && <p className="field-note" role="status">Elevation unavailable for this path; terrain prediction is unknown.</p>}
-            <RxMeterStack links={meterLinks} inputs={inputs} objective={objective} />
+            <RxMeterStack links={meterLinks} inputs={inputs} objective={objective} assessment={assessment} />
             {map.propagationModel === 'terrain' && <PathProfileChart tx={pair.tx} rx={pair.rx} groundAt={map.useTerrainElevation ? groundAt : () => 0} frequencyGhz={inputs.frequencyGhz} />}
           </div>
         </div>

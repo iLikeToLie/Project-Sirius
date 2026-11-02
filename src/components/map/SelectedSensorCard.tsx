@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { formatNumber } from '../../lib/rf';
+import { pairVerdict, type ReceiverAssessment } from '../../lib/interference';
 import { effectiveObjective, groundOf, type PairResult, receiverSummary, toggleDesired } from '../../lib/sensors';
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
@@ -11,10 +12,11 @@ export const SG_BOUNDS = { minLon: 103.596, minLat: 1.1443, maxLon: 104.4309, ma
 
 const formatDistance = (m: number) => !Number.isFinite(m) ? '—' : m >= 1000 ? `${formatNumber(m / 1000, 2)} km` : `${formatNumber(m, 1)} m`;
 
-export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onChange, onRoleChange, onZonesFor }: {
+export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, zoneInfo, onChange, onRoleChange, onZonesFor }: {
   sensor: Sensor;
   map: MapScenario;
   pairs: PairResult[];
+  assessments: Map<string, ReceiverAssessment>;
   groundAt: GroundAt;
   zoneInfo: { txName: string; rxName: string; reason: 'linked' | 'nearest'; aglM: number; linkedRxIds: string[] } | null;
   onChange: (patch: Partial<Sensor>) => string | undefined;
@@ -27,9 +29,15 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
   const name = (id: string) => map.sensors.find((s) => s.id === id)?.name ?? '—';
   const transmitters = map.sensors.filter((s) => s.role === 'tx');
   const summary = sensor.role === 'rx' ? receiverSummary(pairs, sensor.id) : null;
+  const assessment = assessments.get(sensor.id);
   const link = summary?.links[0];
   const served = pairs.filter((p) => p.txId === sensor.id && p.intended);
-  const interferes = pairs.filter((p) => p.txId === sensor.id && !p.intended && p.result.status === 'Possible interference');
+  const interferes = pairs.filter((p) => {
+    if (p.txId !== sensor.id || p.intended) return false;
+    const a = assessments.get(p.rxId)!;
+    const verdict = pairVerdict(p, map.sensors.find(s => s.id === p.rxId)!, a.marginDb);
+    return verdict === 'Possible interference' || verdict === 'Marginal interference' || (a.aggregate && a.status !== 'Below interference threshold' && a.contributors.some(c => c.txId === sensor.id && c.share >= 0.1));
+  });
   const nearestTx = sensor.role === 'rx' ? link && sensor.desiredTxIds === 'auto' ? name(link.txId) : null : null;
   const num = (key: keyof Sensor, v: number, check?: (v: number) => string | undefined) => check?.(v) ?? onChange({ [key]: v });
   const nonNegative = (label: string) => (v: number) => (v < 0 ? `${label} cannot be negative.` : undefined);
@@ -82,21 +90,33 @@ export function SelectedSensorCard({ sensor, map, pairs, groundAt, zoneInfo, onC
       )}
 
       <div className="sensor-results" aria-live="polite">
+        {sensor.role === 'rx' && assessment && <>
+          <div className="form-grid two interference-controls">
+            <CommitField label="Required C/I" unit="dB" value={sensor.requiredCiDb} onCommit={v => num('requiredCiDb', v, nonNegative('Required C/I'))} />
+            <CommitField label="Protection margin" unit="dB" value={assessment.marginDb} disabled={sensor.protectionMarginDb === 'default'} onCommit={v => num('protectionMarginDb', v, nonNegative('Protection margin'))} />
+          </div>
+          <label className="switch"><input type="checkbox" checked={sensor.protectionMarginDb === 'default'} onChange={e => onChange({ protectionMarginDb: e.target.checked ? 'default' : assessment.marginDb })} />Use scenario ({map.protectionMarginDb} dB)</label>
+          <dl className="readouts">
+            <div><dt>Interference ({assessment.aggregate ? `aggregate of ${assessment.contributors.length}` : 'worst single'})</dt><dd>{assessment.interferenceDbm === -Infinity ? 'None' : `${formatNumber(assessment.interferenceDbm)} dBm`}</dd></div>
+            <div><dt>Protected limit</dt><dd>{formatNumber(assessment.limitDbm)} dBm (threshold − {formatNumber(assessment.marginDb)} dB)</dd></div>
+          </dl>
+          <StatusBadge status={assessment.status} />
+          {assessment.contributors.length > 0 && <ul className="interference-contributors" aria-label="Interference contributors">{assessment.contributors.map(c => <li key={c.txId}>{name(c.txId)}: {formatNumber(c.powerDbm)} dBm · {formatNumber(c.share * 100, 0)}%</li>)}</ul>}
+          {assessment.unknownPaths > 0 && <p className="field-note" role="status">{assessment.unknownPaths} paths unknown; excluded from interference assessment.</p>}
+        </>}
         {sensor.role === 'rx' && summary && (link ? (
           <>
             {summary.links.map((desired) => <div key={desired.txId}>
-              <div className="result-line"><span>Link from {name(desired.txId)}</span><strong>{desired.elevationKnown ? `${formatNumber(desired.result.receivedPowerDbm)} dBm` : 'Unknown'}</strong>{desired.elevationKnown && <StatusBadge status={desired.result.status} />}</div>
+              <div className="result-line"><span>Link from {name(desired.txId)}</span><strong>{desired.elevationKnown ? `${formatNumber(desired.result.receivedPowerDbm)} dBm` : 'Unknown'}</strong>{desired.elevationKnown && <StatusBadge status={assessment!.links.find(l => l.txId === desired.txId)!.status} />}</div>
+              <p className="field-note">C/I {desired.elevationKnown ? assessment!.links.find(l => l.txId === desired.txId)!.ciDb === Infinity ? '∞' : formatNumber(assessment!.links.find(l => l.txId === desired.txId)!.ciDb) : 'Unknown'} dB · Required {formatNumber(sensor.requiredCiDb)} dB</p>
               <p className="field-note">{desired.clearance} · Diffraction {formatNumber(desired.propagationLossDb)} dB · {formatDistance(desired.distanceM)} 3D separation{desired.elevationKnown ? '' : '. Elevation unavailable for this path; terrain prediction is unknown.'}</p>
             </div>)}
-            {summary.worstInterferer
-              ? <div className="result-line danger"><span>Worst interferer {name(summary.worstInterferer.txId)}</span><strong>{formatNumber(summary.worstInterferer.result.receivedPowerDbm)} dBm</strong><StatusBadge status={summary.worstInterferer.result.status} /></div>
-              : <p className="field-note">No other transmitter reaches its {formatNumber(sensor.interferenceThresholdDbm, 1)} dBm interference threshold.</p>}
           </>
-        ) : <p className="field-note">{effectiveObjective(map, sensor) === 'avoidance' ? `Avoidance: ${summary.interferersAbove} transmitter(s) above interference threshold.` : 'No intended transmitter available.'}</p>)}
+        ) : <p className="field-note">{effectiveObjective(map, sensor) === 'avoidance' ? 'Avoidance: every transmitter is assessed as interference.' : 'No intended transmitter available.'}</p>)}
 
         {sensor.role === 'tx' && (
           <>
-            <p className="field-note">{served.length ? `Serves ${served.map((p) => `${name(p.rxId)} (${p.result.status.toLowerCase()})`).join(', ')}.` : 'No receiver has this transmitter as its intended link.'}</p>
+            <p className="field-note">{served.length ? `Serves ${served.map((p) => `${name(p.rxId)} (${assessments.get(p.rxId)!.links.find(l => l.txId === sensor.id)!.status.toLowerCase()})`).join(', ')}.` : 'No receiver has this transmitter as its intended link.'}</p>
             {interferes.length > 0 && <p className="field-note danger">Interferes with {interferes.map((p) => `${name(p.rxId)} at ${formatNumber(p.result.receivedPowerDbm, 1)} dBm`).join(', ')}.</p>}
           </>
         )}

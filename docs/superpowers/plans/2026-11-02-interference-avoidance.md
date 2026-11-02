@@ -100,23 +100,25 @@ Completed: receiver assessment and worst assessed link selection implemented in 
 
 ### Task 3: Use the assessment in the workspace UI
 
+Completed: memoised receiver assessments drive map markers/lines, sensor summaries, desired-link badges, receiver interference details, and the drawer. Added validated scenario/receiver settings, protected-limit markers and aggregate meters. Verified 192 unit tests, production build, the new interference-workspace browser checks, and existing multi-link and link-budget-drawer browser regressions. RF engine and Calculator source unchanged.
+
 **Files:** `src/components/ui.tsx`, `src/components/map/MapWorkspace.tsx`, `SensorListCard.tsx`, `SelectedSensorCard.tsx`, `LinkSettingsCard.tsx`, `RxMeterStack.tsx`, `LinkBudgetDrawer.tsx`, `src/styles.css`
 
-- [ ] `statusTone`: `'Marginal interference'` → `'warning'`, `'Interfered link'` → `'danger'`.
-- [ ] `MapWorkspace`: compute `assessments = assessAll(liveMap, pairs)` once (memoised) and pass it down.
+- [x] `statusTone`: `'Marginal interference'` → `'warning'`, `'Interfered link'` → `'danger'`.
+- [x] `MapWorkspace`: compute `assessments = assessAll(liveMap, pairs)` once (memoised) and pass it down.
   - Receiver tones use the assessment status and the worst assessed link.
   - Interference lines are drawn for pairs whose `pairVerdict` is Possible or Marginal. When a receiver's assessment is Possible or Marginal under aggregate, lines are also drawn for every contributor with `share ≥ 0.1`. Line tone comes from the verdict.
-- [ ] `SensorListCard.sensorStatus`: driven by the assessment. Examples: `"OK, marginal"`, `"Interfered"`, `"2 interferers (aggregate)"`.
-- [ ] `SelectedSensorCard`, receiver Link tab:
+- [x] `SensorListCard.sensorStatus`: driven by the assessment. Examples: `"OK, marginal"`, `"Interfered"`, `"2 interferers (aggregate)"`.
+- [x] `SelectedSensorCard`, receiver Link tab:
   - Show effective I with "aggregate of N" or "worst single".
   - List contributors with their share percentage.
   - Show the limit `T − M` and each link's C/I against its requirement.
   - Add fields: Required C/I (dB) and Protection margin. The margin field has a "Use scenario (3 dB)" checkbox that writes `'default'`.
   - Show the `unknownPaths` note when it is above 0.
-- [ ] `LinkSettingsCard`: add an **Interference** section with Protection margin (dB, ≥ 0) and an Aggregate interference select ("Avoidance receivers only", "All receivers", "Off"). It needs `map` and `setMap` props, so update the props and the call site. Change the card note to cover the scenario-wide interference settings.
-- [ ] `RxMeterStack`: for the avoidance meter, add a marker at `T − M` (amber, "Protected limit") beside the threshold marker. When aggregate applies, add a row "Total interference" showing `interferenceDbm`.
-- [ ] `LinkBudgetDrawer`: the status badge for an avoidance pair uses `pairVerdict`. Add a Metric "Protected margin" = `L − P`.
-- [ ] Commit: `Show aggregate interference, margin and C/I in the workspace`.
+- [x] `LinkSettingsCard`: add an **Interference** section with Protection margin (dB, ≥ 0) and an Aggregate interference select ("Avoidance receivers only", "All receivers", "Off"). It needs `map` and `setMap` props, so update the props and the call site. Change the card note to cover the scenario-wide interference settings.
+- [x] `RxMeterStack`: for the avoidance meter, add a marker at `T − M` (amber, "Protected limit") beside the threshold marker. When aggregate applies, add a row "Total interference" showing `interferenceDbm`.
+- [x] `LinkBudgetDrawer`: the status badge for an avoidance pair uses `pairVerdict`. Add a Metric "Protected margin" = `L − P`.
+- [x] Commit: `Show aggregate interference, margin and C/I in the workspace`.
 
 ### Task 4: Transmitter power range
 

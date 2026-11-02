@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { formatFrequency, FREQUENCY_SLIDER_MAX, frequencyFromSlider, parseFrequency, sliderFromFrequency } from '../../lib/viewport';
-import type { LinkInputs } from '../../types';
-import { NumberField } from '../ui';
+import type { LinkInputs, MapScenario } from '../../types';
+import { CommitField, NumberField } from '../ui';
 
 // Labels sit where the logarithmic slider puts each frequency (1 GHz is at 60 %, not the middle).
 const SCALE_MARKS = [{ ghz: 0.001, label: '1 MHz' }, { ghz: 1, label: '1 GHz' }, { ghz: 100, label: '100 GHz' }];
@@ -45,7 +45,7 @@ function FrequencyControl({ frequencyGhz, onChange }: { frequencyGhz: number; on
 }
 
 /** Settings every sensor shares: one operating frequency and the path losses. */
-export function LinkSettingsCard({ inputs, onChange }: { inputs: LinkInputs; onChange: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => void }) {
+export function LinkSettingsCard({ inputs, onChange, map, setMap }: { inputs: LinkInputs; onChange: <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => void; map: MapScenario; setMap: (update: (map: MapScenario) => MapScenario) => void }) {
   return (
     <section className="map-card link-settings-card" aria-label="Link settings">
       <h3>Link settings</h3>
@@ -55,7 +55,15 @@ export function LinkSettingsCard({ inputs, onChange }: { inputs: LinkInputs; onC
         <NumberField label="Environment" unit="dB" min={0} value={inputs.obstructionLossDb} onChange={(v) => onChange('obstructionLossDb', v)} />
         <NumberField label="Other" unit="dB" min={0} value={inputs.otherLossDb} onChange={(v) => onChange('otherLossDb', v)} />
       </div>
-      <p className="field-note">Shared by every transmitter–receiver pair. Antenna gains and cable losses belong to each sensor.</p>
+      <h4>Interference</h4>
+      <CommitField label="Protection margin" unit="dB" value={map.protectionMarginDb} onCommit={(v) => {
+        if (v < 0) return 'Protection margin cannot be negative.';
+        setMap(m => ({ ...m, protectionMarginDb: v })); return undefined;
+      }} />
+      <label className="field"><span>Aggregate interference</span><select value={map.aggregateInterference} onChange={e => { const value = e.target.value as MapScenario['aggregateInterference']; setMap(m => ({ ...m, aggregateInterference: value })); }}>
+        <option value="objective">Avoidance receivers only</option><option value="always">All receivers</option><option value="never">Off</option>
+      </select></label>
+      <p className="field-note">Frequency, path losses and interference settings apply across this scenario. Receivers can override the protection margin. Antenna gains and cable losses belong to each sensor.</p>
     </section>
   );
 }

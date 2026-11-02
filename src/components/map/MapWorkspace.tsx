@@ -7,7 +7,8 @@ import { signalRange } from '../../lib/signalColour';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor, worstLink } from '../../lib/sensors';
+import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor } from '../../lib/sensors';
+import { assessAll, pairVerdict, worstAssessedLink } from '../../lib/interference';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useZoneWorker } from '../useFieldWorker';
@@ -84,6 +85,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const sensors = useMemo(() => map.sensors.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s)), [map.sensors, draft]);
   const liveMap: MapScenario = useMemo(() => ({ ...map, sensors }), [map, sensors]);
   const pairs = useMemo(() => evaluatePairs(liveMap, state.inputs, groundAt), [liveMap, state.inputs, groundAt]);
+  const assessments = useMemo(() => assessAll(liveMap, pairs), [liveMap, pairs]);
   const selected = sensors.find((s) => s.id === map.selectedId) ?? null;
 
   useEffect(() => {
@@ -220,19 +222,31 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
 
   const byId = new Map(sensors.map((s) => [s.id, s]));
   const links: MapLink[] = pairs
-    .filter((p) => p.intended || p.result.status === 'Possible interference')
+    .filter((p) => {
+      if (p.intended) return true;
+      const a = assessments.get(p.rxId)!;
+      const verdict = pairVerdict(p, byId.get(p.rxId)!, a.marginDb);
+      return verdict === 'Possible interference' || verdict === 'Marginal interference' ||
+        (a.aggregate && a.status !== 'Below interference threshold' && a.contributors.some(c => c.txId === p.txId && c.share >= 0.1));
+    })
     .map((p) => ({
       from: byId.get(p.txId)!, to: byId.get(p.rxId)!,
       kind: p.intended ? 'intended' : 'interference',
-      tone: statusTone(p.result.status),
+      tone: statusTone(p.intended ? assessments.get(p.rxId)!.links.find(l => l.txId === p.txId)!.status : (() => {
+        const a = assessments.get(p.rxId)!;
+        const verdict = pairVerdict(p, byId.get(p.rxId)!, a.marginDb);
+        return verdict === 'Below interference threshold' ? a.status : verdict;
+      })()),
       emphasis: !selected || p.txId === selected.id || p.rxId === selected.id,
       label: p.intended ? formatDistance(p.distanceM) : undefined,
     }));
   const tones: Record<string, string> = Object.fromEntries(sensors.map((s) => {
     if (s.role === 'tx') return [s.id, 'tx'];
     const summary = receiverSummary(pairs, s.id);
-    const link = worstLink(summary.links);
-    return [s.id, summary.interferersAbove ? 'danger' : link ? statusTone(link.result.status) : 'neutral'];
+    const a = assessments.get(s.id)!;
+    const link = worstAssessedLink(a, summary.links);
+    const status = a.links.find(l => l.txId === link?.txId)?.status;
+    return [s.id, a.status === 'Possible interference' || status === 'Interfered link' || status === 'No link' ? 'danger' : a.status === 'Marginal interference' ? 'warning' : status ? statusTone(status) : a.unknownPaths ? 'neutral' : 'safe'];
   }));
 
   return (
@@ -280,17 +294,17 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
 
       <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} range={zones?.range} coverageStyle={coverageStyle} onCoverageStyle={setCoverageStyle} />
       <SensorListCard
-        sensors={sensors} pairs={pairs} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
+        sensors={sensors} pairs={pairs} assessments={assessments} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
 
-      <LinkBudgetDrawer state={{ ...state, map: liveMap }} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={setPin} size={drawerSize} onResize={setDrawerSize} />
+      <LinkBudgetDrawer state={{ ...state, map: liveMap }} pairs={pairs} assessments={assessments} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={setPin} size={drawerSize} onResize={setDrawerSize} />
 
-      {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} />}
+      {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} map={map} setMap={setMap} />}
 
       {selected && (
         <SelectedSensorCard
-          sensor={selected} map={liveMap} pairs={pairs} groundAt={groundAt}
+          sensor={selected} map={liveMap} pairs={pairs} assessments={assessments} groundAt={groundAt}
           zoneInfo={zoneTx && zone ? { txName: zoneTx.name, rxName: zone.rx.name, reason: zone.reason, aglM: zone.rx.aglM, linkedRxIds } : null}
           onChange={(patch) => { updateSensor(selected.id, patch); return undefined; }}
           onRoleChange={(role) => setMap((m) => ({ ...m, sensors: changeRole(m.sensors, selected.id, role) }))}

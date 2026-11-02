@@ -459,7 +459,12 @@ main { min-width: 0; }
 .status { font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
 .status-acceptable-link { color: #5be3ae; background: rgba(52, 211, 153, .09); border-color: rgba(52, 211, 153, .32); }
 .status-below-interference-threshold { color: #8cc9ff; background: rgba(114, 183, 255, .09); border-color: rgba(114, 183, 255, .32); }
-.status-weak-link { color: #ffc56f; background: rgba(255, 179, 71, .09); border-color: rgba(255, 179, 71, .32); }
+.status-weak-link, .status-marginal-interference { color: #ffc56f; background: rgba(255, 179, 71, .09); border-color: rgba(255, 179, 71, .32); }
+.status-interfered-link { color: var(--red); background: rgba(255, 107, 107, .09); border-color: rgba(255, 107, 107, .32); }
+.protected-marker { background: var(--yellow); }
+.protected-key { color: var(--yellow); font-size: 11px; margin: 5px 0; }
+.interference-controls { margin-top: 10px; }
+.interference-contributors { padding-left: 18px; font-size: 12px; overflow-wrap: anywhere; }
 .status-possible-interference { color: #ff8a8a; background: rgba(255, 107, 107, .09); border-color: rgba(255, 107, 107, .32); }
 
 .sweep-grid { gap: 18px; }

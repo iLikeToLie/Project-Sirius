@@ -73,13 +73,13 @@ try {
   console.log('PASS equal-power name order, strongest summary, shared scale and row markers');
 
   await card.getByLabel(/^Objective/).selectOption('avoidance');
-  await waitRows(page, 1);
-  assert.equal(await drawer.locator('.threshold-marker').count(), 1);
+  await waitRows(page, 2);
+  assert.equal(await drawer.locator('.threshold-marker').count(), 2);
   assert.equal(await drawer.locator('.required-marker').count(), 0);
   assert.deepEqual((await saved(page)).map.sensors.find(s => s.role === 'rx').desiredTxIds, rx.desiredTxIds);
   await card.getByLabel(/^Objective/).selectOption('desired');
   await waitRows(page, 3);
-  console.log('PASS avoidance shows one interference meter and preserves the list on return');
+  console.log('PASS avoidance shows pair and aggregate meters and preserves the list on return');
 
   for (const name of ['Alpha', 'Zulu', 'Weak']) await card.getByRole('checkbox', { name, exact: true }).uncheck();
   await waitRows(page, 1);

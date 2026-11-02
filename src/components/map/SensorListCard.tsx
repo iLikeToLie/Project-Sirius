@@ -1,25 +1,31 @@
 import { useState } from 'react';
 import { ChevronLeft, List, Plus, Trash2 } from 'lucide-react';
-import { MAX_SENSORS, type PairResult, receiverSummary, worstLink } from '../../lib/sensors';
+import { MAX_SENSORS, type PairResult, receiverSummary } from '../../lib/sensors';
+import { worstAssessedLink, type ReceiverAssessment } from '../../lib/interference';
 import type { Sensor } from '../../types';
 import { statusTone } from '../ui';
 
-function sensorStatus(sensor: Sensor, pairs: PairResult[]): { text: string; tone: string } {
+function sensorStatus(sensor: Sensor, pairs: PairResult[], assessments: Map<string, ReceiverAssessment>): { text: string; tone: string } {
   if (sensor.role === 'tx') {
     const served = pairs.filter((p) => p.txId === sensor.id && p.intended).length;
     return { text: served === 1 ? 'serves 1' : `serves ${served}`, tone: 'neutral' };
   }
-  const { links, interferersAbove } = receiverSummary(pairs, sensor.id);
-  const link = worstLink(links);
-  if (!link) return { text: interferersAbove ? `${interferersAbove} interferer(s)` : 'No intended link', tone: interferersAbove ? 'danger' : 'safe' };
-  const base = link.result.status === 'Acceptable link' ? 'OK' : link.result.status === 'Weak link' ? 'Weak' : link.result.status === 'No link' ? 'No link' : 'Invalid';
-  return interferersAbove
-    ? { text: `${base}, ${interferersAbove} interferer${interferersAbove > 1 ? 's' : ''}`, tone: 'danger' }
-    : { text: base, tone: statusTone(link.result.status) };
+  const a = assessments.get(sensor.id)!;
+  const { links } = receiverSummary(pairs, sensor.id);
+  const link = worstAssessedLink(a, links);
+  const status = a.links.find(l => l.txId === link?.txId)?.status;
+  const base = status === 'Acceptable link' ? 'OK' : status === 'Interfered link' ? 'Interfered' : status === 'Weak link' ? 'Weak' : status === 'No link' ? 'No link' : status ? 'Invalid' : 'No intended link';
+  const suffix = a.unknownPaths ? `, ${a.unknownPaths} paths unknown` : '';
+  if (a.status === 'Possible interference') {
+    const n = a.aggregate ? a.contributors.length : a.contributors.filter(c => c.powerDbm >= a.thresholdDbm).length;
+    return { text: `${link ? `${base}, ` : ''}${n} interferer${n === 1 ? '' : 's'}${a.aggregate ? ' (aggregate)' : ''}${suffix}`, tone: 'danger' };
+  }
+  const tone = status && ['No link', 'Interfered link'].includes(status) ? 'danger' : a.status === 'Marginal interference' ? 'warning' : status ? statusTone(status) : 'safe';
+  return { text: `${base}${a.status === 'Marginal interference' ? ', marginal' : ''}${suffix}`, tone };
 }
 
-export function SensorListCard({ sensors, pairs, selectedId, onSelect, onAdd, onRemove }: {
-  sensors: Sensor[]; pairs: PairResult[]; selectedId: string | null;
+export function SensorListCard({ sensors, pairs, assessments, selectedId, onSelect, onAdd, onRemove }: {
+  sensors: Sensor[]; pairs: PairResult[]; assessments: Map<string, ReceiverAssessment>; selectedId: string | null;
   onSelect: (id: string) => void; onAdd: () => void; onRemove: (id: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -28,7 +34,7 @@ export function SensorListCard({ sensors, pairs, selectedId, onSelect, onAdd, on
       <div className="map-card-heading"><button type="button" className="ghost" aria-label={collapsed ? 'Expand sensors' : 'Collapse sensors'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <List size={15} /> : <><ChevronLeft size={14} /> Sensors</>}</button><span className="tag">{sensors.length} of {MAX_SENSORS}</span></div>
       <ul className="sensor-rows">
         {sensors.map((sensor) => {
-          const status = sensorStatus(sensor, pairs);
+          const status = sensorStatus(sensor, pairs, assessments);
           return (
             <li key={sensor.id} className={sensor.id === selectedId ? 'selected' : ''}>
               <button type="button" className="sensor-row" aria-pressed={sensor.id === selectedId} onClick={() => onSelect(sensor.id)}>

@@ -151,7 +151,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
         'line-color': ['match', ['get', 'tone'], 'good', token('--green'), 'warning', token('--yellow'), 'danger', token('--red'), 'safe', token('--blue'), token('--mute')],
       } });
       map.addLayer({ id: 'links-interference', type: 'line', source: 'links', filter: ['==', ['get', 'kind'], 'interference'], layout: line, paint: {
-        'line-width': ['case', ['get', 'emphasis'], 2, 1.25], 'line-dasharray': [2, 2], 'line-color': token('--red'),
+        'line-width': ['case', ['get', 'emphasis'], 2, 1.25], 'line-dasharray': [2, 2], 'line-color': ['match', ['get', 'tone'], 'warning', token('--yellow'), token('--red')],
         'line-opacity': ['case', ['get', 'emphasis'], 0.95, 0.45],
       } });
       map.addSource('range-rings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
