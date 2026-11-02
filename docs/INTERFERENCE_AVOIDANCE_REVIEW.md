@@ -68,3 +68,28 @@ Validation:
 The Channel help describes the in-band-only rectangular overlap approximation:
 leakage outside the overlapping band is omitted. Polarization remains 0 dB in
 the new pair metadata until Task 10. Task 9 is pending.
+
+## Task 9: Threshold from noise floor (2026-11-02)
+
+Receiver cards offer a collapsed Derive from noise floor section in the Sensor
+tab. It uses the receiver's channel bandwidth with -174 dBm/Hz thermal noise,
+local noise figure (default 6 dB) and local I/N (default -6 dB). Only the explicit
+Use as interference threshold action saves the calculated threshold; the
+receiver's protection margin remains in effect. Readouts use one decimal place,
+while the applied threshold retains full calculation precision.
+
+Validation:
+
+- Four new tests failed before implementation, then passed.
+- `corepack pnpm test`: 243/243 tests pass. Coverage includes 20 MHz / NF 6
+  giving approximately -95.0 dBm noise and -101.0 dBm threshold with I/N -6,
+  bandwidth and noise-figure scaling, MHz units and receiver-only collapsed UI.
+- `corepack pnpm build`: passes without warnings.
+- `node scripts/e2e/noise-floor.mjs`: passes in headless installed Chrome
+  against production preview. Checks defaults, explicit threshold application,
+  rejection of negative noise figure, bandwidth-driven updates, no automatic
+  threshold change during edits, only the target threshold changing on apply,
+  local inputs resetting after reload, persisted applied threshold, no panel
+  for transmitters and no uncaught page errors.
+- `git diff --check`: clean. RF engine unchanged from main; App.tsx unchanged
+  by this task. No schema or persistence changes. Task 10 is pending.

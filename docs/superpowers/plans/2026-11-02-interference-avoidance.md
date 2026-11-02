@@ -233,10 +233,10 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** `src/lib/isolation.ts` (+ tests), `SelectedSensorCard.tsx`
 
-- [ ] `noiseFloorDbm(bandwidthMhz, noiseFigureDb) = −174 + 10·log10(bandwidthMhz·1e6) + noiseFigureDb`.
-- [ ] Receiver card: a collapsible "Derive from noise floor" section with Noise figure (default 6 dB) and I/N (default −6 dB) as local UI state, not saved. It shows N and the derived threshold, and a button "Use as interference threshold" writes `interferenceThresholdDbm = N + I/N`.
-- [ ] Test: 20 MHz, NF 6 → −95.0 dBm. Threshold with I/N −6 → −101.0 dBm.
-- [ ] Commit: `Derive interference threshold from the noise floor`.
+- [x] `noiseFloorDbm(bandwidthMhz, noiseFigureDb) = −174 + 10·log10(bandwidthMhz·1e6) + noiseFigureDb`.
+- [x] Receiver card: a collapsible "Derive from noise floor" section with Noise figure (default 6 dB) and I/N (default −6 dB) as local UI state, not saved. It shows N and the derived threshold, and a button "Use as interference threshold" writes `interferenceThresholdDbm = N + I/N`.
+- [x] Test: 20 MHz, NF 6 → −95.0 dBm. Threshold with I/N −6 → −101.0 dBm.
+- [x] Commit: `Derive interference threshold from the noise floor`.
 
 ### Task 10: Polarization per sensor
 

@@ -7,6 +7,7 @@ import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
 import { CommitField, StatusBadge } from '../ui';
 import { SensorChannel } from './SensorChannel';
+import { noiseFloorDbm } from '../../lib/isolation';
 
 /** OneMap coverage (Global Constraints bounds). */
 export const SG_BOUNDS = { minLon: 103.596, minLat: 1.1443, maxLon: 104.4309, maxLat: 1.4835 };
@@ -27,6 +28,10 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
 }) {
   const [tab, setTab] = useState('Sensor');
   const [collapsed, setCollapsed] = useState(false);
+  const [noiseFigureDb, setNoiseFigureDb] = useState(6);
+  const [interferenceToNoiseDb, setInterferenceToNoiseDb] = useState(-6);
+  const noiseDbm = noiseFloorDbm(sensor.bandwidthMhz, noiseFigureDb);
+  const derivedThresholdDbm = noiseDbm + interferenceToNoiseDb;
   const ground = groundOf(sensor, groundAt, map.useTerrainElevation);
   const name = (id: string) => map.sensors.find((s) => s.id === id)?.name ?? '—';
   const transmitters = map.sensors.filter((s) => s.role === 'tx');
@@ -81,6 +86,19 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
       </div>
 
       <SensorChannel sensor={sensor} model={map.rejectionModel} defaultFrequencyGhz={defaultFrequencyGhz} onChange={onChange} />
+      {sensor.role === 'rx' && <details className="noise-floor-derivation">
+        <summary>Derive from noise floor</summary>
+        <p className="field-note">Using this receiver’s {formatNumber(sensor.bandwidthMhz)} MHz bandwidth and −174 dBm/Hz thermal noise. The threshold is N + I/N; applying it keeps the receiver’s protection margin.</p>
+        <div className="form-grid two">
+          <CommitField label="Noise figure" unit="dB" value={noiseFigureDb} onCommit={v => { if (v < 0) return 'Noise figure cannot be negative.'; setNoiseFigureDb(v); return undefined; }} />
+          <CommitField label="I/N" unit="dB" value={interferenceToNoiseDb} help="Allowed interference relative to noise" onCommit={v => { setInterferenceToNoiseDb(v); return undefined; }} />
+        </div>
+        <dl className="readouts">
+          <div><dt>Noise floor (N)</dt><dd>{formatNumber(noiseDbm, 1)} dBm</dd></div>
+          <div><dt>Derived threshold (N + I/N)</dt><dd>{formatNumber(derivedThresholdDbm, 1)} dBm</dd></div>
+        </dl>
+        <button type="button" className="ghost" disabled={!Number.isFinite(derivedThresholdDbm)} onClick={() => onChange({ interferenceThresholdDbm: derivedThresholdDbm })}>Use as interference threshold</button>
+      </details>}
       <dl className="readouts">
         <div><dt>Ground elevation</dt><dd>{!map.useTerrainElevation ? '0 m (terrain off)' : ground === null ? 'Elevation unavailable' : `${formatNumber(ground, 1)} m`}</dd></div>
         <div><dt>Total antenna elevation</dt><dd>{formatNumber((ground ?? 0) + sensor.aglM, 1)} m{map.useTerrainElevation && ground === null ? ' (ground taken as 0)' : ''}</dd></div>

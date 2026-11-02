@@ -1,5 +1,8 @@
 import type { LinkInputs, RejectionStep, Sensor } from '../types';
 
+/** Thermal noise at -174 dBm/Hz, integrated across the receiver bandwidth. */
+export const noiseFloorDbm = (bandwidthMhz: number, noiseFigureDb: number): number => -174 + 10 * Math.log10(bandwidthMhz * 1e6) + noiseFigureDb;
+
 export const defaultRejectionMask = (): RejectionStep[] => [
   { offsetMhz: 20, rejectionDb: 30 }, { offsetMhz: 40, rejectionDb: 45 }, { offsetMhz: 60, rejectionDb: 60 },
 ];

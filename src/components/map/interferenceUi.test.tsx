@@ -20,6 +20,13 @@ const rx = state.map.sensors[1];
 const assessment = assessments.get(rx.id)!;
 
 describe('interference workspace display', () => {
+  it('offers a collapsed noise-floor derivation only for receivers', () => {
+    const render = (sensor: typeof rx) => renderToStaticMarkup(<SelectedSensorCard defaultFrequencyGhz={state.inputs.frequencyGhz} sensor={sensor} map={state.map} pairs={pairs} assessments={assessments} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    const html = render(rx);
+    for (const text of ['Derive from noise floor', 'Noise figure', 'I/N', '-95.0', '-101.0', 'Use as interference threshold']) expect(html).toContain(text);
+    expect(html).not.toMatch(/<details[^>]*\bopen/);
+    expect(render(state.map.sensors[0])).not.toContain('Derive from noise floor');
+  });
   it('uses warning and danger for the new statuses', () => {
     expect(statusTone('Marginal interference')).toBe('warning');
     expect(statusTone('Interfered link')).toBe('danger');

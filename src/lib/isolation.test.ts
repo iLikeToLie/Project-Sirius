@@ -1,9 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
-import { centreMhz, frequencyRejectionDb } from './isolation';
+import { centreMhz, frequencyRejectionDb, noiseFloorDbm } from './isolation';
 
 const mask = [{ offsetMhz: 20, rejectionDb: 30 }, { offsetMhz: 40, rejectionDb: 45 }, { offsetMhz: 60, rejectionDb: 60 }];
 const rx = { fMhz: 5800, bwMhz: 20, acrDb: 27, mask };
+describe('receiver noise floor', () => {
+  it('derives about -95 dBm noise and -101 dBm interference threshold for 20 MHz, NF 6 and I/N -6', () => {
+    const noise = noiseFloorDbm(20, 6);
+    expect(noise).toBeCloseTo(-95, 1);
+    expect(noise - 6).toBeCloseTo(-101, 1);
+  });
+  it('rises by 3.0103 dB for doubled bandwidth and one dB per dB of noise figure', () => {
+    expect(noiseFloorDbm(40, 6) - noiseFloorDbm(20, 6)).toBeCloseTo(3.0103, 4);
+    expect(noiseFloorDbm(20, 9) - noiseFloorDbm(20, 6)).toBeCloseTo(3, 10);
+  });
+  it('uses MHz as the input bandwidth unit', () => {
+    expect(noiseFloorDbm(1, 0)).toBe(-114);
+  });
+});
 describe('frequency rejection', () => {
   it('resolves inherited and explicit sensor centres in MHz', () => {
     const s = freshDefaultState();
