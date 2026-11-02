@@ -48,7 +48,7 @@ export function SensorListCard({ sensors, pairs, assessments, selectedId, onSele
         })}
       </ul>
       <button type="button" className="ghost add-sensor" onClick={onAdd} disabled={sensors.length >= MAX_SENSORS}>
-        <Plus size={15} /> {sensors.length >= MAX_SENSORS ? 'Six sensors placed' : 'Sensor'}
+        <Plus size={15} /> {sensors.length >= MAX_SENSORS ? `${MAX_SENSORS} sensors placed` : 'Sensor'}
       </button>
     </section>
   );

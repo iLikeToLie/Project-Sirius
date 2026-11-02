@@ -4,7 +4,7 @@ import { type LatLon, toLocalM } from './geo';
 import { buildProfile, bullingtonLossDb, type Clearance } from './propagation';
 import { calculateLink, type LinkResult } from './rf';
 
-export const MAX_SENSORS = 6;
+export const MAX_SENSORS = 12;
 
 const AUTO_NAME = /^[TR][1-9]\d*$/;
 

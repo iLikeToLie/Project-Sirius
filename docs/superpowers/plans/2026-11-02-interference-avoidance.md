@@ -180,10 +180,10 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** `src/lib/sensors.ts`, `SensorListCard.tsx`, `src/lib/sensors.test.ts`, `src/lib/state.test.ts`
 
-- [ ] `MAX_SENSORS = 12`. Replace the "Six sensors placed" text with `` `${MAX_SENSORS} sensors placed` ``.
-- [ ] Measure `evaluatePairs` in terrain mode with 6 Tx × 6 Rx, using a synthetic `groundAt`, with a small script under `scripts/`. Record the timing in the review doc. If it exceeds 50 ms per call, memoise `pairPropagation` per pair key (tx lat/lon/agl, rx lat/lon/agl, frequency, model, terrain flag, elevation version).
-- [ ] Check that the sensor list and matrix stay usable at 12 sensors (scrolling, no layout overflow) with `scripts/e2e/workspace-layout.mjs` or a new check.
-- [ ] Commit: `Allow up to 12 sensors`.
+- [x] `MAX_SENSORS = 12`. Replace the "Six sensors placed" text with `` `${MAX_SENSORS} sensors placed` ``.
+- [x] Measure `evaluatePairs` in terrain mode with 6 Tx × 6 Rx, using a synthetic `groundAt`, with a small script under `scripts/`. Record the timing in the review doc. If it exceeds 50 ms per call, memoise `pairPropagation` per pair key (tx lat/lon/agl, rx lat/lon/agl, frequency, model, terrain flag, elevation version).
+- [x] Check that the sensor list and matrix stay usable at 12 sensors (scrolling, no layout overflow) with `scripts/e2e/workspace-layout.mjs` or a new check.
+- [x] Commit: `Allow up to 12 sensors`.
 
 ---
 

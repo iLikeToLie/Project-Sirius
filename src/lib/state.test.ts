@@ -28,6 +28,18 @@ const v5WithReceiver = (receiver: Record<string, unknown>) => {
 const v1 = (distanceM: number) => { const rest = base(); return { ...rest, inputs: { ...rest.inputs, distanceM } }; };
 
 describe('scenario state', () => {
+  it('imports and restores twelve sensors, but rejects a thirteenth', () => {
+    const state = freshDefaultState();
+    state.map.sensors = [];
+    for (let i = 0; i < 12; i += 1) {
+      state.map.sensors.push(createSensor(state.map.sensors, i < 6 ? 'tx' : 'rx', { lat: 1.3, lon: 103.8 + i * 0.001 }, state.inputs));
+    }
+    expect(validateImport(state)?.map.sensors).toEqual(state.map.sensors);
+    expect(normalizeState(state).map.sensors).toEqual(state.map.sensors);
+    state.map.sensors.push(createSensor(state.map.sensors, 'rx', { lat: 1.3, lon: 103.9 }, state.inputs));
+    expect(validateImport(state)).toBeNull();
+    expect(normalizeState(state).map).toEqual(freshDefaultState().map);
+  });
   it('returns defaults when nothing is saved', () => {
     expect(normalizeState()).toEqual(DEFAULT_STATE);
     expect(DEFAULT_STATE.schemaVersion).toBe(6);
@@ -89,13 +101,13 @@ describe('scenario state', () => {
     expect(state.map.sensors.map((s) => s.name)).toEqual([DEFAULT_STATE.inputs.txId, DEFAULT_STATE.inputs.rxId]);
   });
 
-  it('rejects imports with more than six sensors, unknown roles or non-numeric fields', () => {
+  it('rejects imports with more than twelve sensors, unknown roles or non-numeric fields', () => {
     const good = freshDefaultState();
-    const seven = { ...good, map: { ...good.map, sensors: Array.from({ length: 7 }, (_, i) => ({ ...good.map.sensors[0], id: `s${i}` })) } };
+    const thirteen = { ...good, map: { ...good.map, sensors: Array.from({ length: 13 }, (_, i) => ({ ...good.map.sensors[0], id: `s${i}` })) } };
     const badRole = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], role: 'relay' }] } };
     const badNumber = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], lat: 'north' }] } };
     const negativeHeight = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], aglM: -1 }] } };
-    for (const raw of [seven, badRole, badNumber, negativeHeight, { inputs: good.inputs }, null, 'text']) expect(validateImport(raw)).toBeNull();
+    for (const raw of [thirteen, badRole, badNumber, negativeHeight, { inputs: good.inputs }, null, 'text']) expect(validateImport(raw)).toBeNull();
   });
 
   it('accepts a valid v3 scenario round trip', () => {

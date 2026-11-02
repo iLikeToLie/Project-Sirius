@@ -117,9 +117,19 @@ describe('sensor model', () => {
     sensors = place(sensors, 'tx', 100);
     sensors = place(sensors, 'rx', 200);
     expect(sensors.map((s) => s.name)).toEqual(['T1', 'T2', 'R1']);
-    for (let i = 0; i < 5; i += 1) sensors = place(sensors, 'rx', 300 + i);
+    for (let i = 0; i < 9; i += 1) sensors = place(sensors, 'rx', 300 + i);
+    expect(sensors).toHaveLength(12);
     expect(sensors).toHaveLength(MAX_SENSORS);
     expect(place(sensors, 'rx', 999)).toBe(sensors);
+  });
+
+  it('evaluates all 36 terrain paths for six transmitters and six receivers', () => {
+    let sensors: Sensor[] = [];
+    for (let i = 0; i < 12; i += 1) sensors = place(sensors, i < 6 ? 'tx' : 'rx', i * 200);
+    const pairs = evaluatePairs({ ...scenario(sensors, true), propagationModel: 'terrain' }, defaults, flat);
+    expect(pairs).toHaveLength(36);
+    expect(pairs.every(p => p.elevationKnown && p.result.valid)).toBe(true);
+    expect(new Set(pairs.map(p => `${p.txId}/${p.rxId}`)).size).toBe(36);
   });
 
   it('keeps role-specific values when toggling', () => {
