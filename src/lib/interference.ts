@@ -108,6 +108,32 @@ export interface Mitigation {
   estimate: boolean;
 }
 
+export const PLACEMENT = { unsafe: 0, marginal: 1, safe: 2, recommended: 3, unknown: 255 } as const;
+interface PlacementVictimPower { powerDbm: number; limitDbm: number; thresholdDbm: number }
+interface PlacementServedPower { powerDbm: number; requiredDbm: number }
+
+/** Equality at an allowance is permitted, matching the transmitter power bounds. */
+export function placementClass(victims: PlacementVictimPower[], served: PlacementServedPower[]): number {
+  if (victims.some(v => !Number.isFinite(v.powerDbm) || Number.isNaN(v.limitDbm) || Number.isNaN(v.thresholdDbm)) ||
+      served.some(s => !Number.isFinite(s.powerDbm) || !Number.isFinite(s.requiredDbm))) return PLACEMENT.unknown;
+  if (victims.some(v => v.powerDbm > v.thresholdDbm)) return PLACEMENT.unsafe;
+  if (victims.some(v => v.powerDbm > v.limitDbm)) return PLACEMENT.marginal;
+  return served.every(s => s.powerDbm >= s.requiredDbm) ? PLACEMENT.recommended : PLACEMENT.safe;
+}
+
+/** Fixed received-power allowance for a moving source. Its current path is deliberately excluded. */
+export function placementAllowance(map: MapScenario, rx: Sensor, txId: string, pairs: PairResult[], marginDb: number): number {
+  const fixed = pairs.filter(p => p.rxId === rx.id && p.txId !== txId);
+  if (fixed.some(p => !p.elevationKnown || !p.result.valid || !Number.isFinite(p.result.receivedPowerDbm))) return NaN;
+  const desired = effectiveObjective(map, rx) === 'desired' ? fixed.filter(p => p.intended) : [];
+  const ci = desired.reduce((limit, p) => Math.min(limit, p.result.receivedPowerDbm - rx.requiredCiDb), Infinity);
+  const limit = Math.min(rx.interferenceThresholdDbm - marginDb, ci);
+  const powers = fixed.filter(p => !p.intended).map(p => p.result.receivedPowerDbm);
+  if (usesAggregate(map, rx)) return remainingPowerDbm(limit, sumDbm(powers));
+  // An already violated fixed path cannot be repaired by moving this transmitter.
+  return powers.some(p => p > limit) ? -Infinity : limit;
+}
+
 /** Receiver-local advice, holding all other powers and settings fixed. No confident advice from incomplete paths. */
 export function mitigations(map: MapScenario, assessment: ReceiverAssessment, pairs: PairResult[]): Mitigation[] {
   const rx = map.sensors.find(s => s.id === assessment.rxId && s.role === 'rx');

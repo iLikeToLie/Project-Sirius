@@ -229,3 +229,46 @@ Validation:
   only to one spanning all three bands; no product change was needed.
 - `git diff --check` clean; RF engine unchanged from main; App.tsx unchanged.
 - Task 14 remains pending; no push or merge performed.
+
+## Task 14 — Safe transmitter placement layer
+
+Placement is enabled for a selected transmitter and remembers the layer choice.
+It fixes the current victim and served sets for the request, places worker ray
+origins at those receivers, uses their ground plus antenna heights, and uses the
+selected transmitter's height at each candidate cell. Pair budgets retain the
+original transmitter power, gains, frequency, rejection, polarization and losses.
+The legend lists both sets and explains the reciprocal terrain approximation.
+
+Each victim's threshold and C/I allowances exclude the moving transmitter's
+current contribution. Aggregate mode subtracts fixed interference in linear
+power; worst-single mode also prevents an already violated fixed path from
+being painted safe. Unknown fixed paths produce unknown allowances. Protection
+margin applies to the threshold, matching Task 4; C/I is unchanged. Equality at
+an allowance is permitted. A safe cell becomes Recommended when every served
+receiver reaches sensitivity plus fade margin, including an empty served set.
+
+Recommended is green, Safe light green, Marginal amber, Unsafe red, and Unknown
+uses existing hatching. Placement has categorical colours, hides range rings
+and gradient controls, and clears its overlay with a prompt when selection
+changes to a receiver. Result keys prevent old fields from being reclassified
+against changed inputs. No new dependencies or application network calls.
+
+Validation:
+
+- Eight calculation/integration tests and the legend test failed for missing
+  functionality, then passed. An additional numerical integration test compares
+  reversed field powers with forward `evaluatePairs` at every grid node, using
+  unequal heights and gains, channel rejection and polarization mismatch.
+- `corepack pnpm test`: 295/295 tests across 30 files pass.
+- `corepack pnpm build`: passes without warnings.
+- Chrome `scripts/e2e/placement-layer.mjs` checks worker origins, heights, budgets,
+  all five categories and every RGBA pixel including row orientation, selection
+  gating, persisted layer, terrain/free-space, isolation and restored range rings.
+  The test injects one missing worker ray to verify hatching alongside real
+  computed powers. Fixture counts: 43,335 Unsafe, 33,863 Marginal, 23,308 Safe,
+  23,309 Recommended, one Unknown. No uncaught page errors.
+- The terrain browser assertion waits for refined source elevations after the
+  initial unknown result while DEM tiles load. This was a test wait correction.
+- Existing Chrome `scripts/e2e/interference-layer.mjs` regression passes.
+- `git diff --check` clean; RF engine unchanged from main; App.tsx unchanged.
+- Task 15 remains pending; no push or merge performed.

@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { ELEVATION_TILE_URL } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE } from '../../lib/geo';
 import { signalColour } from '../../lib/signalColour';
+import { PLACEMENT } from '../../lib/interference';
 import { ZONE, type ZoneResult } from '../../lib/zones';
 import type { Sensor } from '../../types';
 import { lightStyle, lightSourceIds, installLightBasemap, showBasemap, type Basemap } from './lightBasemap';
@@ -22,6 +23,7 @@ export interface MapLink { from: LatLon; to: LatLon; kind: 'intended' | 'interfe
 export interface MapZones {
   result: ZoneResult;
   totalInterference?: boolean;
+  placement?: boolean;
   /** Grid corners: north-west, north-east, south-east, south-west. */
   corners: [LatLon, LatLon, LatLon, LatLon];
   objective?: LinkObjective;
@@ -42,7 +44,7 @@ const lineFeatures = (lines: LatLon[][], props: Record<string, unknown>) => line
 }));
 
 /** Paints zone classes into an image, north row first (grid row 0 is the south edge). */
-function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }, totalInterference = false): string {
+function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }, totalInterference = false, placement = false): string {
   const width = result.cols + 1;
   const height = result.rows + 1;
   const canvas = document.createElement('canvas');
@@ -56,8 +58,10 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
       const node = j * width + i;
       const pixel = ((result.rows - j) * width + i) * 4;
       const cls = result.classes[node];
-      const gradient = range && result.powerDbm && cls !== ZONE.unknown ? signalColour(result.powerDbm[node], range.lo, range.hi) : null;
-      const colour = gradient ?? (cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35] : totalInterference ? result.interference[node] ? [...red, 54] : cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0]);
+      const gradient = !placement && range && result.powerDbm && cls !== ZONE.unknown ? signalColour(result.powerDbm[node], range.lo, range.hi) : null;
+      const colour = gradient ?? (cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35]
+        : placement ? cls === PLACEMENT.recommended ? [...green, 95] : cls === PLACEMENT.safe ? [163, 217, 165, 95] : cls === PLACEMENT.marginal ? [...yellow, 46] : [...red, 54]
+        : totalInterference ? result.interference[node] ? [...red, 54] : cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0]);
       image.data.set(colour, pixel);
     }
   }
@@ -257,7 +261,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       return;
     }
     const coordinates = zones.corners.map((p) => [p.lon, p.lat]) as [[number, number], [number, number], [number, number], [number, number]];
-    const url = paintZones(zones.result, zones.objective, zones.showAll, zones.range, zones.totalInterference);
+    const url = paintZones(zones.result, zones.objective, zones.showAll, zones.range, zones.totalInterference, zones.placement);
     if (existing) {
       if (queue.loading) queue.next = { url, coordinates };
       else { queue.loading = true; existing.updateImage({ url, coordinates }); }

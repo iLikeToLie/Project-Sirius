@@ -294,18 +294,18 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** `MapWorkspace.tsx`, `CoverageLegend.tsx`, `SensorMap.tsx`, `src/lib/interference.ts` (+ tests)
 
-- [ ] Available when a transmitter t is selected.
+- [x] Available when a transmitter t is selected.
   - **Victims V:** receivers that do not desire t. **Served S:** receivers t serves.
   - Each source is a receiver r ∈ V ∪ S at its own position and elevation (ground + agl), with `rxAglM = t.aglM` and inputs `pairLinkInputs(map, shared, t, r, 1)`. Path loss is treated as reciprocal: diffraction is computed from the receiver side, which is an approximation. Say so in the legend help text.
-- [ ] Per-victim allowance is computed once per victim and does not depend on the cell. It is Task 4's threshold and C/I allowances with t's own contribution left out. Compute it with margin (`L`) and without (`T`).
-- [ ] Per-cell class (pure function `placementClass(...)`, unit-tested):
+- [x] Per-victim allowance is computed once per victim and does not depend on the cell. It is Task 4's threshold and C/I allowances with t's own contribution left out. Compute it with margin (`L`) and without (`T`).
+- [x] Per-cell class (pure function `placementClass(...)`, unit-tested):
   - **Unsafe:** any victim exceeds its no-margin allowance.
   - **Marginal:** within the margin.
   - **Safe:** every victim within its allowance.
   - **Recommended:** Safe, and every served receiver gets ≥ S + F there.
   - **Unknown:** any source ray unknown.
-- [ ] Colours: Recommended green, Safe light green, Marginal amber, Unsafe red, Unknown the existing hatching. Legend lists the victims and served receivers used.
-- [ ] Commit: `Add safe placement map layer for transmitters`.
+- [x] Colours: Recommended green, Safe light green, Marginal amber, Unsafe red, Unknown the existing hatching. Legend lists the victims and served receivers used.
+- [x] Commit: `Add safe placement map layer for transmitters`.
 
 ---
 

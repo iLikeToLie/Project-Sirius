@@ -9,7 +9,7 @@ import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
 import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairLinkInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { assessAll, pairVerdict, usesAggregate, worstAssessedLink } from '../../lib/interference';
-import { interferenceSources, interferenceZones, referenceReceiver } from '../../lib/interferenceLayer';
+import { interferenceSources, interferenceZones, placementPlan, placementZones, referenceReceiver } from '../../lib/interferenceLayer';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useMultiFieldWorker, useZoneWorker } from '../useFieldWorker';
@@ -44,7 +44,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const [hidePanels, setHidePanels] = usePref('hidePanels', false, isBoolean);
   const [showAll, setShowAll] = usePref('showAllBands', false, isBoolean);
   const [coverageStyle, setCoverageStyle] = usePref<CoverageStyle>('coverageStyle', 'gradient', oneOf('gradient', 'bands'));
-  const [coverageLayer, setCoverageLayer] = usePref<CoverageLayer>('coverageLayer', 'range', oneOf('range', 'interference'));
+  const [coverageLayer, setCoverageLayer] = usePref<CoverageLayer>('coverageLayer', 'range', oneOf('range', 'interference', 'placement'));
   const [basemapNotice, setBasemapNotice] = useState(false);
   const [basemap, setBasemap] = usePref<Basemap>('basemap', 'onemap', oneOf('onemap', 'plain', 'light'));
   const [drawerOpen, setDrawerOpen] = usePref('drawerOpen', false, isBoolean);
@@ -132,6 +132,8 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? activePair(liveMap, groundAt, state.inputs, pin)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt, state.inputs, pin]);
   const zone = useMemo(() => (zoneTx ? zoneReceiver(liveMap, zoneTx.id, groundAt) : null), [zoneTx, liveMap, groundAt]);
   const referenceRx = referenceReceiver(liveMap, selected, zone?.rx ?? null);
+  const placement = useMemo(() => selected?.role === 'tx' ? placementPlan(liveMap, state.inputs, selected, groundAt, pairs) : null,
+    [selected, liveMap, state.inputs, groundAt, pairs]);
   const linkedRxIds = zoneTx ? pairs.filter((p) => p.txId === zoneTx.id && p.intended).map((p) => p.rxId) : [];
 
   const zoneRequest = useMemo(() => {
@@ -191,21 +193,22 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     elevation.ensureBox(sw, ne, zoneRequest.z);
   }, [coverageRequest?.ground.grid]);
   const multiRequest = useMemo(() => {
-    if (coverageLayer !== 'interference' || !referenceRx || !view || view.width === 0) return null;
+    const anchor = coverageLayer === 'placement' ? placement && selected : coverageLayer === 'interference' ? referenceRx : null;
+    if (!anchor || !view || view.width === 0) return null;
     const sw = toLocalM(view.southWest), ne = toLocalM(view.northEast);
     const cols = Math.max(16, Math.ceil(view.width / (dragging ? 14 : 3)));
     const rows = Math.max(10, Math.ceil(view.height / (dragging ? 14 : 3)));
-    const z = zoomForCell(Math.max((ne.xM - sw.xM) / cols, (ne.yM - sw.yM) / rows), referenceRx.lat);
+    const z = zoomForCell(Math.max((ne.xM - sw.xM) / cols, (ne.yM - sw.yM) / rows), anchor.lat);
     const sampler = elevation.samplerAt(z);
     const sample = (xM: number, yM: number) => map.useTerrainElevation ? sampler(toLatLon({ xM, yM })) ?? NaN : 0;
     const raster = sampleGrid({ minX: sw.xM, maxX: ne.xM, minY: sw.yM, maxY: ne.yM }, cols, rows, sample);
-    const sources = interferenceSources(liveMap, state.inputs, referenceRx, groundAt);
-    // Include off-screen transmitters and their paths in one shared ray ground grid.
+    const sources = coverageLayer === 'placement' ? placement!.sources : interferenceSources(liveMap, state.inputs, referenceRx!, groundAt);
+    // Include off-screen sources and their paths in one shared ray ground grid.
     const extent = sources.reduce((g, source) => groundForCoverage(g, toLocalM(source), sample), raster);
     const rayGround = extent === raster ? raster : sampleGrid({ minX: extent.x0, maxX: extent.x0 + extent.cols * extent.dx, minY: extent.y0, maxY: extent.y0 + extent.rows * extent.dy }, extent.cols, extent.rows, sample);
-    return { z, request: { raster, rayGround, origin: SG_REFERENCE, mode: map.propagationModel, rxAglM: referenceRx.aglM, sources, radials: dragging ? 180 : 360 },
+    return { z, request: { raster, rayGround, origin: SG_REFERENCE, mode: map.propagationModel, rxAglM: anchor.aglM, sources, radials: dragging ? 180 : 360 },
       key: JSON.stringify([coverageLayer, liveMap, state.inputs, view, dragging, elevation.version]) };
-  }, [coverageLayer, referenceRx, view, dragging, liveMap, state.inputs, groundAt, map.useTerrainElevation, map.propagationModel, elevation.samplerAt, elevation.version]);
+  }, [coverageLayer, referenceRx, placement, selected, view, dragging, liveMap, state.inputs, groundAt, map.useTerrainElevation, map.propagationModel, elevation.samplerAt, elevation.version]);
   useEffect(() => {
     if (!multiRequest || !map.useTerrainElevation) return;
     const g = multiRequest.request.rayGround;
@@ -214,11 +217,13 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const multi = useMultiFieldWorker(multiRequest?.request ?? null, multiRequest?.key ?? coverageLayer);
   const free = useZoneWorker(coverageLayer === 'range' && !terrain ? zoneRequest?.request ?? null : null, `${coverageLayer}|${terrain}|${zoneRequest?.key}`);
   const coverage = useCoverageWorker(coverageLayer === 'range' ? coverageRequest : null, `${coverageLayer}|${terrain}|${zoneRequest?.key}`);
-  const zoneResult = useMemo(() => coverageLayer === 'interference'
-    ? multi.result && multiRequest && multi.resultKey === multiRequest.key && referenceRx ? interferenceZones(liveMap, referenceRx, multiRequest.request.raster, multi.result) : null
+  const zoneResult = useMemo(() => coverageLayer !== 'range'
+    ? multi.result && multiRequest && multi.resultKey === multiRequest.key
+      ? coverageLayer === 'placement' ? placement ? placementZones(placement, multiRequest.request.raster, multi.result) : null
+        : referenceRx ? interferenceZones(liveMap, referenceRx, multiRequest.request.raster, multi.result) : null : null
     : terrain ? coverage.result && coverageRequest && zoneRequest ? coverageZones(coverage.result, coverageRequest, zoneRequest.request.ground) : null : free.result,
-  [coverageLayer, multi.result, multi.resultKey, multiRequest, referenceRx, liveMap, terrain, coverage.result, coverageRequest, zoneRequest, free.result]);
-  const refining = coverageLayer === 'interference' ? multi.refining : terrain ? coverage.refining : free.refining;
+  [coverageLayer, placement, multi.result, multi.resultKey, multiRequest, referenceRx, liveMap, terrain, coverage.result, coverageRequest, zoneRequest, free.result]);
+  const refining = coverageLayer !== 'range' ? multi.refining : terrain ? coverage.refining : free.refining;
   const objective = coverageLayer === 'interference' ? 'avoidance' : zone ? effectiveObjective(liveMap, zone.rx) : map.defaultObjective;
   // Rings are free-space reference ranges, so they would mislead once terrain diffraction is on.
   const rings = useMemo(() => coverageLayer === 'range' && zoneTx && zoneRequest && !terrain ? (['sensitivity', 'required', 'interference'] as const).flatMap(id => {
@@ -241,9 +246,10 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     return {
       result: zoneResult,
       totalInterference: coverageLayer === 'interference',
+      placement: coverageLayer === 'placement',
       objective, showAll,
       // Without a range the map paints the threshold bands and their outlines instead of the gradient.
-      range: zoneResult.powerDbm && coverageStyle === 'gradient' ? coverageLayer === 'interference' && referenceRx ? signalRange(referenceRx, 'avoidance', false) : zone ? signalRange(zone.rx, objective, showAll) : undefined : undefined,
+      range: coverageLayer !== 'placement' && zoneResult.powerDbm && coverageStyle === 'gradient' ? coverageLayer === 'interference' && referenceRx ? signalRange(referenceRx, 'avoidance', false) : zone ? signalRange(zone.rx, objective, showAll) : undefined : undefined,
       corners: [at(bounds.minX, bounds.maxY), at(bounds.maxX, bounds.maxY), at(bounds.maxX, bounds.minY), at(bounds.minX, bounds.minY)] as [LatLon, LatLon, LatLon, LatLon],
       outlines: { sensitivity: lines(zoneResult.outlines.sensitivity), required: lines(zoneResult.outlines.required), interference: lines(zoneResult.outlines.interference) },
     };
@@ -321,7 +327,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
 
-      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} range={zones?.range} coverageStyle={coverageStyle} onCoverageStyle={setCoverageStyle} coverageLayer={coverageLayer} onCoverageLayer={setCoverageLayer} referenceName={referenceRx?.name} aggregate={referenceRx ? usesAggregate(liveMap, referenceRx) : false} />
+      <CoverageLegend objective={objective} showAll={showAll} onShowAll={setShowAll} terrain={terrain} range={zones?.range} coverageStyle={coverageStyle} onCoverageStyle={setCoverageStyle} coverageLayer={coverageLayer} onCoverageLayer={setCoverageLayer} referenceName={referenceRx?.name} aggregate={referenceRx ? usesAggregate(liveMap, referenceRx) : false} placementName={selected?.role === 'tx' ? selected.name : undefined} victimNames={placement?.victims.map(v => v.rx.name)} servedNames={placement?.served.map(s => s.name)} />
       <SensorListCard
         sensors={sensors} pairs={pairs} assessments={assessments} selectedId={map.selectedId} onSelect={select} onAdd={addAtCentre}
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
