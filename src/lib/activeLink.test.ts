@@ -8,7 +8,7 @@ import { addSensor, createSensor, evaluatePairs, receiverSummary } from './senso
 
 const flat: GroundAt = () => 0;
 const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSensor(sensors, createSensor(sensors, role, offsetLatLon(SG_REFERENCE, dx, dy), DEFAULT_STATE.inputs));
-const map = (sensors: Sensor[], extra: Partial<MapScenario> = {}): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation: false, protectionMarginDb: 3, aggregateInterference: 'objective', ...extra });
+const map = (sensors: Sensor[], extra: Partial<MapScenario> = {}): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation: false, protectionMarginDb: 3, aggregateInterference: 'objective', rejectionModel: 'simple', ...extra });
 const state = (m: MapScenario): LinkState => ({ inputs: { ...DEFAULT_STATE.inputs }, map: m });
 
 // T1 at 0, T2 at 3000, R1 at 500 (→T1), R2 at 2600 (→T2), R3 at 900 (→T1)
@@ -20,6 +20,19 @@ sensors = place(sensors, 'rx', 900);
 const [T1, T2, R1, R2, R3] = sensors;
 
 describe('active link', () => {
+  it('edits an explicit active transmitter frequency without changing the scenario default', () => {
+    const s = state(map([{ ...T1, frequencyGhz: 2.4 }, R1], { selectedId: R1.id }));
+    expect(activeInputs(s, flat).frequencyGhz).toBe(2.4);
+    const edited = applyInputEdit(s, 'frequencyGhz', 2.5, flat);
+    expect(edited.ok && edited.state.map.sensors[0].frequencyGhz).toBe(2.5);
+    expect(edited.ok && edited.state.inputs.frequencyGhz).toBe(s.inputs.frequencyGhz);
+  });
+  it('edits the shared frequency when the active transmitter inherits it', () => {
+    const s = state(map([T1, R1], { selectedId: R1.id }));
+    const edited = applyInputEdit(s, 'frequencyGhz', 2.5, flat);
+    expect(edited.ok && edited.state.inputs.frequencyGhz).toBe(2.5);
+    expect(edited.ok && edited.state.map.sensors[0].frequencyGhz).toBe('default');
+  });
   it('uses the strongest desired transmitter for the selected receiver, not the nearest or first', () => {
     const m = map([T1, { ...T2, powerDbm: T2.powerDbm + 30 }, { ...R1, desiredTxIds: [T1.id, T2.id] }], { selectedId: R1.id });
     const strongest = receiverSummary(evaluatePairs(m, DEFAULT_STATE.inputs, flat), R1.id).links[0];

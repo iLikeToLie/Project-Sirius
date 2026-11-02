@@ -69,7 +69,7 @@ try {
   assert.equal(await card.getByRole('group', { name: 'Desired transmitters' }).count(), 1, 'receiver override restores desired links');
   await page.waitForFunction(() => Number(document.querySelector('.signal-overlay')?.dataset.packets) > 0);
   await page.getByRole('button', { name: 'Link settings', exact: true }).click();
-  const frequency = page.getByLabel('Operating frequency (all sensors)', { exact: true });
+  const frequency = page.getByLabel('Default frequency', { exact: true });
   await frequency.fill('433 MHz'); await frequency.press('Enter');
   await frequency.fill('28 GHz'); await frequency.press('Enter');
   await frequency.fill('5.8 GHz'); await frequency.press('Enter');

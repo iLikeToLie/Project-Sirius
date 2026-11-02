@@ -2,6 +2,7 @@ import { DEFAULT_TERRAIN, freshDefaultState, mapForPlacements, workspaceForDista
 import type { AntennaPlacement, AppState, LinkInputs, LinkWorkspace, MapScenario, Sensor, TerrainSettings } from '../types';
 import { antennaElevationM, isValidPlacement } from './linkGeometry';
 import { MAX_SENSORS } from './sensors';
+import { defaultRejectionMask, isRejectionMask } from './isolation';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -77,6 +78,14 @@ function readSensor(value: unknown): Sensor | undefined {
   if (value.requiredCiDb !== undefined && (!isFiniteNumber(value.requiredCiDb) || value.requiredCiDb < 0)) return undefined;
   sensor.protectionMarginDb = value.protectionMarginDb as Sensor['protectionMarginDb'] ?? 'default';
   sensor.requiredCiDb = value.requiredCiDb as number ?? 10;
+  if (value.frequencyGhz !== undefined && value.frequencyGhz !== 'default' && (!isFiniteNumber(value.frequencyGhz) || value.frequencyGhz <= 0)) return undefined;
+  if (value.bandwidthMhz !== undefined && (!isFiniteNumber(value.bandwidthMhz) || value.bandwidthMhz <= 0)) return undefined;
+  if (value.acrDb !== undefined && (!isFiniteNumber(value.acrDb) || value.acrDb < 0)) return undefined;
+  if (value.rejectionMask !== undefined && !isRejectionMask(value.rejectionMask)) return undefined;
+  sensor.frequencyGhz = value.frequencyGhz as Sensor['frequencyGhz'] ?? 'default';
+  sensor.bandwidthMhz = value.bandwidthMhz as number ?? 20;
+  sensor.acrDb = value.acrDb as number ?? 30;
+  sensor.rejectionMask = isRejectionMask(value.rejectionMask) ? value.rejectionMask.map(s => ({ ...s })) : defaultRejectionMask();
   return valid ? sensor : undefined;
 }
 
@@ -87,6 +96,7 @@ function readMap(value: unknown): MapScenario | undefined {
   if (value.defaultObjective !== undefined && !['desired', 'avoidance'].includes(value.defaultObjective as string)) return undefined;
   if (value.protectionMarginDb !== undefined && (!isFiniteNumber(value.protectionMarginDb) || value.protectionMarginDb < 0)) return undefined;
   if (value.aggregateInterference !== undefined && !['objective', 'always', 'never'].includes(value.aggregateInterference as string)) return undefined;
+  if (value.rejectionModel !== undefined && !['simple', 'mask'].includes(value.rejectionModel as string)) return undefined;
   const sensors = value.sensors.map(readSensor);
   if (sensors.some((s) => !s)) return undefined;
   const list = sensors as Sensor[];
@@ -106,6 +116,7 @@ function readMap(value: unknown): MapScenario | undefined {
     defaultObjective: value.defaultObjective as MapScenario['defaultObjective'] ?? 'desired',
     protectionMarginDb: value.protectionMarginDb as number ?? 3,
     aggregateInterference: value.aggregateInterference as MapScenario['aggregateInterference'] ?? 'objective',
+    rejectionModel: value.rejectionModel as MapScenario['rejectionModel'] ?? 'simple',
   };
 }
 

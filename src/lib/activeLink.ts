@@ -2,7 +2,7 @@ import type { LinkInputs, MapScenario, Sensor } from '../types';
 import type { GroundAt } from './elevation';
 import { toLatLon, toLocalM } from './geo';
 import { solveTxAlongBearing } from './linkGeometry';
-import { evaluatePairs, groundOf, pairInputs, pairPropagation, receiverSummary, resolveDesiredTxs, separationM } from './sensors';
+import { evaluatePairs, groundOf, pairLinkInputs, pairPropagation, receiverSummary, resolveDesiredTxs, separationM } from './sensors';
 
 /** The part of the app state the active link reads and writes. */
 export interface LinkState { inputs: LinkInputs; map: MapScenario }
@@ -66,7 +66,7 @@ export function zoneReceiver(map: MapScenario, txId: string, groundAt: GroundAt)
 export function activeInputs(state: LinkState, groundAt: GroundAt, pin: LinkPin | null = null): LinkInputs {
   const pair = activePair(state.map, groundAt, state.inputs, pin);
   if (!pair) return state.inputs;
-  const inputs = pairInputs(state.inputs, pair.tx, pair.rx, separationM(pair.tx, pair.rx, groundAt, state.map.useTerrainElevation));
+  const { inputs } = pairLinkInputs(state.map, state.inputs, pair.tx, pair.rx, separationM(pair.tx, pair.rx, groundAt, state.map.useTerrainElevation));
   return { ...inputs, otherLossDb: inputs.otherLossDb + pairPropagation(state.map, pair.tx, pair.rx, inputs.frequencyGhz, groundAt).lossDb };
 }
 
@@ -112,6 +112,9 @@ export function applyInputEdit<S extends LinkState, K extends keyof LinkInputs>(
     return { ok: true, state: { ...state, map: replaceSensor(state.map, { ...pair.tx, lat: at.lat, lon: at.lon }) } };
   }
 
+  if (key === 'frequencyGhz' && pair.tx.frequencyGhz !== 'default') {
+    return { ok: true, state: { ...state, map: replaceSensor(state.map, { ...pair.tx, frequencyGhz: value as number }) } };
+  }
   const field = SENSOR_FIELDS[key];
   if (!field) return { ok: true, state: { ...state, inputs: { ...state.inputs, [key]: value } } };
   const [role, sensorKey] = field;

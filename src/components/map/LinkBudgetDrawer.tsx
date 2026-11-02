@@ -3,7 +3,7 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 import { activePair, type LinkPin } from '../../lib/activeLink';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
-import { effectiveObjective, groundOf, pairInputs, pairPropagation, receiverSummary, separationM, type PairResult } from '../../lib/sensors';
+import { effectiveObjective, groundOf, pairLinkInputs, pairPropagation, receiverSummary, separationM, type PairResult } from '../../lib/sensors';
 import { pairVerdict, type ReceiverAssessment } from '../../lib/interference';
 import type { AppState, LinkInputs } from '../../types';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from '../ui';
@@ -46,12 +46,12 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);
-    const inputs = pairInputs(state.inputs, pair.tx, pair.rx, distanceM);
+    const { inputs, rejectionDb } = pairLinkInputs(map, state.inputs, pair.tx, pair.rx, distanceM);
     const propagation = pairPropagation(map, pair.tx, pair.rx, inputs.frequencyGhz, groundAt);
     const objective = pairs.find(p => p.txId === pair.tx.id && p.rxId === pair.rx.id)?.intended === false ? 'avoidance' : effectiveObjective(map, pair.rx);
     const result = calculateLink({ ...inputs, otherLossDb: inputs.otherLossDb + propagation.lossDb }, objective);
     const known = [pair.tx, pair.rx].every((s) => groundOf(s, groundAt, map.useTerrainElevation) !== null) && Number.isFinite(propagation.lossDb);
-    return { inputs, propagation, objective, result, known };
+    return { inputs, propagation, objective, result, known, rejectionDb };
   }, [pair, map, state.inputs, groundAt, pairs]);
 
   const rxPairs = pair ? pairs.filter(p => p.rxId === pair.rx.id) : [];
@@ -150,7 +150,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
               <NumberField label="Rx cable & connector loss" unit="dB" min={0} value={inputs.rxLossDb} onChange={num('rxLossDb')} />
               <NumberField label="Polarization mismatch" unit="dB" min={0} value={inputs.polarizationLossDb} onChange={num('polarizationLossDb')} />
               <NumberField label="Obstruction / environment" unit="dB" min={0} value={inputs.obstructionLossDb} onChange={num('obstructionLossDb')} />
-              <NumberField label="Other miscellaneous loss" unit="dB" min={0} value={inputs.otherLossDb} onChange={num('otherLossDb')} />
+              <NumberField label="Other miscellaneous loss" unit="dB" min={0} value={state.inputs.otherLossDb} onChange={num('otherLossDb')} />
               <NumberField label="Receiver sensitivity" unit="dBm" value={inputs.sensitivityDbm} onChange={num('sensitivityDbm')} />
               <NumberField label="Interference threshold" unit="dBm" value={inputs.interferenceThresholdDbm} onChange={num('interferenceThresholdDbm')} />
             </div>
@@ -163,6 +163,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
               {objective === 'avoidance' && <Metric label="Protected margin" value={known ? formatNumber(assessment.limitDbm - result.receivedPowerDbm) : 'Unknown'} unit="dB" note="Protected limit minus received power" />}
               <Metric label="Free-space path loss" value={formatNumber(result.fsplDb)} unit="dB" />
               <Metric label="Diffraction loss" value={map.propagationModel === 'terrain' ? formatNumber(propagation.lossDb) : 'off'} unit={map.propagationModel === 'terrain' ? 'dB' : ''} note={map.propagationModel === 'terrain' ? `Clearance: ${propagation.clearance}` : 'Free-space model'} />
+              {model.rejectionDb > 0 && <Metric label="Frequency rejection" value={formatNumber(model.rejectionDb)} unit="dB" />}
               <Metric label="Total system losses" value={formatNumber(result.totalLossDb)} unit="dB" />
               <Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" />
             </div>

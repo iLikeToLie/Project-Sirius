@@ -9,7 +9,7 @@ const state = freshDefaultState();
 const rx = { ...state.map.sensors[1], objective: 'avoidance' as const };
 const pair = (txId: string, power: number, intended = false, status: ScreeningStatus = 'Acceptable link'): PairResult => ({
   txId, txName: txId, rxId: rx.id, intended, elevationKnown: true, distanceM: 100,
-  propagationLossDb: 0, clearance: 'unknown',
+  propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, clearance: 'unknown',
   result: { ...calculateLink(state.inputs, intended ? 'desired' : 'avoidance'), receivedPowerDbm: power, status },
 });
 

@@ -11,13 +11,13 @@ import {
 const flat: GroundAt = () => 0;
 const defaults = DEFAULT_STATE.inputs;
 const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSensor(sensors, createSensor(sensors, role, offsetLatLon(SG_REFERENCE, dx, dy), defaults));
-const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation, protectionMarginDb: 3, aggregateInterference: 'objective' });
+const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation, protectionMarginDb: 3, aggregateInterference: 'objective', rejectionModel: 'simple' });
 const LINK = ['Acceptable link', 'Weak link', 'No link'];
 const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
 const [T1, T2, T3, R1, R2] = place(place(place(place(place([], 'tx', 0), 'tx', 1000), 'tx', 2000), 'rx', 200), 'rx', 400);
 const sensorsWithLinks: Sensor[] = [T1, T2, { ...R1, desiredTxIds: [T1.id, T2.id] }, { ...R2, desiredTxIds: [T1.id] }];
 const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[] => powers.map(([txId, power]) => ({
-  txId, txName: txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, clearance: 'unknown',
+  txId, txName: txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, clearance: 'unknown',
   result: { ...calculateLink(defaults, 'desired'), receivedPowerDbm: power },
 }));
 

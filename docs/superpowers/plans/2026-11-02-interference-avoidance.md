@@ -193,13 +193,13 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** `src/types.ts`, `src/lib/state.ts` (+ tests), new `src/lib/isolation.ts` (+ tests), `src/lib/sensors.ts`, `src/lib/activeLink.ts`, `MapWorkspace.tsx`, `LinkBudgetDrawer.tsx`, `SelectedSensorCard.tsx`, `LinkSettingsCard.tsx`
 
-- [ ] Schema 6 additions:
+- [x] Schema 6 additions:
   - `Sensor.frequencyGhz: 'default' | number` (default `'default'`, a number must be > 0).
   - `Sensor.bandwidthMhz: number` (default `20`, > 0).
   - `Sensor.acrDb: number` (default `30`, ≥ 0).
   - `Sensor.rejectionMask: { offsetMhz: number; rejectionDb: number }[]`, default `[{20,30},{40,45},{60,60}]`. It needs 1–4 steps, offsets > 0 and strictly ascending, rejections ≥ 0 and non-decreasing.
   - `MapScenario.rejectionModel: 'simple' | 'mask'` (default `'simple'`).
-- [ ] `isolation.ts`:
+- [x] `isolation.ts`:
   ```ts
   export const centreMhz = (s: Sensor, shared: LinkInputs) => 1000 * (s.frequencyGhz === 'default' ? shared.frequencyGhz : s.frequencyGhz);
   export function frequencyRejectionDb(tx: {fMhz:number;bwMhz:number}, rx: {fMhz:number;bwMhz:number;acrDb:number;mask:{offsetMhz:number;rejectionDb:number}[]}, model: 'simple'|'mask'): number;
@@ -207,19 +207,19 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
   - `overlap = max(0, min(fT+bwT/2, fR+bwR/2) − max(fT−bwT/2, fR−bwR/2))`.
   - If `overlap > 0`: `−10·log10(min(1, overlap / bwT))`, which is 0 dB co-channel. Out-of-band leakage from the non-overlapping part is ignored; note this approximation in the UI help text.
   - If `overlap = 0`, the simple model returns `acrDb`. The mask model takes `Δ = |fT − fR|` and returns the rejection of the last step with `offsetMhz ≤ Δ`, or the first step's rejection when Δ is below every offset.
-- [ ] In `sensors.ts`, add `pairLinkInputs(map, shared, tx, rx, distanceM): { inputs: LinkInputs; rejectionDb: number; polarizationDb: number }`.
+- [x] In `sensors.ts`, add `pairLinkInputs(map, shared, tx, rx, distanceM): { inputs: LinkInputs; rejectionDb: number; polarizationDb: number }`.
   - It wraps `pairInputs`, sets `inputs.frequencyGhz` to the **transmitter's** centre frequency, and adds `rejectionDb` (and later `polarizationDb`) to `otherLossDb`.
   - Replace every `pairInputs` call site with it: `evaluatePairs`, `activeInputs`, `LinkBudgetDrawer` (line 43), `MapWorkspace` zone and coverage requests (lines 148, 180).
   - `pairPropagation` uses `inputs.frequencyGhz` from the same result.
   - Add `rejectionDb` and `polarizationDb` to `PairResult`.
-- [ ] Drawer frequency edit: if the active Tx has its own frequency, `applyInputEdit('frequencyGhz')` writes to the Tx. Otherwise it writes to the shared default, as today. Add a test in `activeLink.test.ts`.
-- [ ] UI:
+- [x] Drawer frequency edit: if the active Tx has its own frequency, `applyInputEdit('frequencyGhz')` writes to the Tx. Otherwise it writes to the shared default, as today. Add a test in `activeLink.test.ts`.
+- [x] UI:
   - Sensor card "Channel" fields: frequency (with "Use scenario default"), bandwidth, and for receivers the ACR and mask steps (editable list of 1–4 rows).
   - The mask rows show only when `rejectionModel === 'mask'`, and the ACR only when `'simple'`. Both values are kept either way.
   - Add a Rejection model toggle to `LinkSettingsCard` and relabel the frequency control "Default frequency".
   - The drawer shows "Frequency rejection X dB" when it is above 0.
   - A desired Tx on another channel shows "Off-channel for R1 (−X dB)".
-- [ ] Tests:
+- [x] Tests:
   - Co-channel gives 0 dB.
   - Half overlap of equal bandwidths gives 3.01 dB.
   - Narrow Tx fully inside a wide Rx gives 0 dB.
@@ -227,7 +227,7 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
   - The mask lookup at, between and beyond steps.
   - Switching the model keeps both stored values.
   - Parity: the default scenario with all sensors on `'default'` gives the same powers as before.
-- [ ] Commit: `Add per-sensor channels with simple and mask rejection models`.
+- [x] Commit: `Add per-sensor channels with simple and mask rejection models`.
 
 ### Task 9: Threshold from noise floor
 

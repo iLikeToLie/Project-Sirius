@@ -6,13 +6,15 @@ import { effectiveObjective, groundOf, type PairResult, receiverSummary, toggleD
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
 import { CommitField, StatusBadge } from '../ui';
+import { SensorChannel } from './SensorChannel';
 
 /** OneMap coverage (Global Constraints bounds). */
 export const SG_BOUNDS = { minLon: 103.596, minLat: 1.1443, maxLon: 104.4309, maxLat: 1.4835 };
 
 const formatDistance = (m: number) => !Number.isFinite(m) ? '—' : m >= 1000 ? `${formatNumber(m / 1000, 2)} km` : `${formatNumber(m, 1)} m`;
 
-export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, zoneInfo, onChange, onRoleChange, onZonesFor }: {
+export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, zoneInfo, onChange, onRoleChange, onZonesFor, defaultFrequencyGhz }: {
+  defaultFrequencyGhz: number;
   sensor: Sensor;
   map: MapScenario;
   pairs: PairResult[];
@@ -78,6 +80,7 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
         </>}
       </div>
 
+      <SensorChannel sensor={sensor} model={map.rejectionModel} defaultFrequencyGhz={defaultFrequencyGhz} onChange={onChange} />
       <dl className="readouts">
         <div><dt>Ground elevation</dt><dd>{!map.useTerrainElevation ? '0 m (terrain off)' : ground === null ? 'Elevation unavailable' : `${formatNumber(ground, 1)} m`}</dd></div>
         <div><dt>Total antenna elevation</dt><dd>{formatNumber((ground ?? 0) + sensor.aglM, 1)} m{map.useTerrainElevation && ground === null ? ' (ground taken as 0)' : ''}</dd></div>
@@ -113,6 +116,7 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
           <>
             {summary.links.map((desired) => <div key={desired.txId}>
               <div className="result-line"><span>Link from {name(desired.txId)}</span><strong>{desired.elevationKnown ? `${formatNumber(desired.result.receivedPowerDbm)} dBm` : 'Unknown'}</strong>{desired.elevationKnown && <StatusBadge status={assessment!.links.find(l => l.txId === desired.txId)!.status} />}</div>
+              {desired.rejectionDb > 0 && <p className="field-note warning">Off-channel for {sensor.name} (−{formatNumber(desired.rejectionDb)} dB)</p>}
               <p className="field-note">C/I {desired.elevationKnown ? assessment!.links.find(l => l.txId === desired.txId)!.ciDb === Infinity ? '∞' : formatNumber(assessment!.links.find(l => l.txId === desired.txId)!.ciDb) : 'Unknown'} dB · Required {formatNumber(sensor.requiredCiDb)} dB</p>
               <p className="field-note">{desired.clearance} · Diffraction {formatNumber(desired.propagationLossDb)} dB · {formatDistance(desired.distanceM)} 3D separation{desired.elevationKnown ? '' : '. Elevation unavailable for this path; terrain prediction is unknown.'}</p>
             </div>)}
@@ -137,6 +141,7 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
               <button type="button" className="ghost" disabled={!Number.isFinite(roundedMax) || infeasible || roundedBelowMin || powerRange.unknownPaths > 0} onClick={() => onChange({ powerDbm: roundedMax })}>Set to max</button>
             </div>}
             <p className="field-note">{served.length ? `Serves ${served.map((p) => `${name(p.rxId)} (${assessments.get(p.rxId)!.links.find(l => l.txId === sensor.id)!.status.toLowerCase()})`).join(', ')}.` : 'No receiver has this transmitter as its intended link.'}</p>
+            {served.filter(p => p.rejectionDb > 0).map(p => <p key={p.rxId} className="field-note warning">Off-channel for {name(p.rxId)} (−{formatNumber(p.rejectionDb)} dB)</p>)}
             {interferes.length > 0 && <p className="field-note danger">Interferes with {interferes.map((p) => `${name(p.rxId)} at ${formatNumber(p.result.receivedPowerDbm, 1)} dBm`).join(', ')}.</p>}
           </>
         )}

@@ -38,7 +38,7 @@ describe('interference workspace display', () => {
   });
 
   it('shows receiver assessment readouts, contributors, and editable settings', () => {
-    const html = renderToStaticMarkup(<SelectedSensorCard sensor={rx} map={state.map} pairs={pairs} assessments={assessments} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    const html = renderToStaticMarkup(<SelectedSensorCard defaultFrequencyGhz={state.inputs.frequencyGhz} sensor={rx} map={state.map} pairs={pairs} assessments={assessments} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
     for (const text of ['aggregate of 1', 'Protected limit', 'Required C/I', 'Protection margin', 'Use scenario (3 dB)', '100%']) expect(html).toContain(text);
   });
 
@@ -49,7 +49,7 @@ describe('interference workspace display', () => {
 
   it('shows power and distance fixes below a receiver violation', () => {
     const results = pairs.map(p => ({ ...p, result: { ...p.result, receivedPowerDbm: -67 } }));
-    const html = renderToStaticMarkup(<SelectedSensorCard sensor={rx} map={state.map} pairs={results} assessments={assessAll(state.map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    const html = renderToStaticMarkup(<SelectedSensorCard defaultFrequencyGhz={state.inputs.frequencyGhz} sensor={rx} map={state.map} pairs={results} assessments={assessAll(state.map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
     expect(html).toContain('aria-label="Fix suggestions"');
     expect(html).toContain(`Reduce ${state.map.sensors[0].name} power by 1.00 dB`);
     expect(html).toContain('separation from');
@@ -63,7 +63,7 @@ describe('interference workspace display', () => {
       { ...pairs[0], intended: true, result: { ...pairs[0].result, status: 'Acceptable link' as const, receivedPowerDbm: -60 } },
       { ...pairs[0], txId: extra.id, txName: extra.name, intended: false, result: { ...pairs[0].result, receivedPowerDbm: -70 } },
     ];
-    const html = renderToStaticMarkup(<SelectedSensorCard sensor={desired} map={map} pairs={results} assessments={assessAll(map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    const html = renderToStaticMarkup(<SelectedSensorCard defaultFrequencyGhz={state.inputs.frequencyGhz} sensor={desired} map={map} pairs={results} assessments={assessAll(map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
     expect(html).toContain('Reduce Extra transmitter power by 5.00 dB');
     expect(html).toContain('C/I requirement');
   });
@@ -72,7 +72,7 @@ describe('interference workspace display', () => {
     const served = { ...rx, id: 'served', name: 'Served receiver', objective: 'desired' as const, sensitivityDbm: -50 };
     const map = { ...state.map, sensors: [...state.map.sensors, served] };
     const results = evaluatePairs(map, state.inputs, () => 0);
-    const html = renderToStaticMarkup(<SelectedSensorCard sensor={map.sensors[0]} map={map} pairs={results} assessments={assessAll(map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    const html = renderToStaticMarkup(<SelectedSensorCard defaultFrequencyGhz={state.inputs.frequencyGhz} sensor={map.sensors[0]} map={map} pairs={results} assessments={assessAll(map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
     for (const text of ['Power range:', 'Limited by', 'protected limit', 'No power level satisfies both; move or retune', 'Set to max']) expect(html).toContain(text);
     expect(html).toMatch(/disabled=""[^>]*>Set to max/);
   });

@@ -7,7 +7,7 @@ import { signalRange } from '../../lib/signalColour';
 import { sampleGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairInputs, receiverSummary, removeSensor } from '../../lib/sensors';
+import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairLinkInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { assessAll, pairVerdict, worstAssessedLink } from '../../lib/interference';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
@@ -147,7 +147,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
       if (!map.useTerrainElevation) return 0;
       return sampler(toLatLon({ xM, yM })) ?? NaN;
     });
-    const inputs = pairInputs(state.inputs, zoneTx, zone.rx, 1);
+    const { inputs } = pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1);
     return {
       z,
       request: {
@@ -162,9 +162,9 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
       },
       key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, zoneTx.gainDbi, zoneTx.cableLossDb, zone.rx.id, zone.rx.aglM, zone.rx.gainDbi, zone.rx.cableLossDb,
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
-        state.inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version].join('|'),
+        state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version].join('|'),
     };
-  }, [zoneTx, zone, view, dragging, map.useTerrainElevation, elevation.samplerAt, elevation.version, state.inputs, groundAt]);
+  }, [zoneTx, zone, view, dragging, map.useTerrainElevation, map.rejectionModel, elevation.samplerAt, elevation.version, state.inputs, groundAt]);
 
   useEffect(() => {
     if (zoneRequest && view && map.useTerrainElevation) elevation.ensureBox(view.southWest, view.northEast, zoneRequest.z);
@@ -179,7 +179,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     // The rays start at the transmitter, which may be off-screen when zoomed in: give them ground that reaches it.
     const sampler = elevation.samplerAt(zoneRequest.z);
     const rayGround = groundForCoverage(g, req.tx, (xM, yM) => (map.useTerrainElevation ? sampler(toLatLon({ xM, yM })) ?? NaN : 0));
-    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairInputs(state.inputs, zoneTx, zone.rx, 1), maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: rayGround } };
+    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1).inputs, maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: rayGround } };
   }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs, elevation.samplerAt]);
   useEffect(() => {
     const grid = coverageRequest?.ground.grid;
@@ -304,7 +304,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
 
       {selected && (
         <SelectedSensorCard
-          sensor={selected} map={liveMap} pairs={pairs} assessments={assessments} groundAt={groundAt}
+          sensor={selected} map={liveMap} pairs={pairs} assessments={assessments} groundAt={groundAt} defaultFrequencyGhz={state.inputs.frequencyGhz}
           zoneInfo={zoneTx && zone ? { txName: zoneTx.name, rxName: zone.rx.name, reason: zone.reason, aglM: zone.rx.aglM, linkedRxIds } : null}
           onChange={(patch) => { updateSensor(selected.id, patch); return undefined; }}
           onRoleChange={(role) => setMap((m) => ({ ...m, sensors: changeRole(m.sensors, selected.id, role) }))}

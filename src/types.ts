@@ -77,6 +77,7 @@ export interface LinkWorkspace {
 }
 
 export type SensorRole = 'tx' | 'rx';
+export interface RejectionStep { offsetMhz: number; rejectionDb: number }
 
 /** A placed antenna. Both role's fields are kept so toggling TX/RX never loses values. */
 export interface Sensor {
@@ -96,6 +97,10 @@ export interface Sensor {
   objective: 'default' | LinkObjective;
   protectionMarginDb: 'default' | number;
   requiredCiDb: number;
+  frequencyGhz: 'default' | number;
+  bandwidthMhz: number;
+  acrDb: number;
+  rejectionMask: RejectionStep[];
 }
 
 export interface MapScenario {
@@ -107,6 +112,7 @@ export interface MapScenario {
   propagationModel: 'free-space' | 'terrain';
   protectionMarginDb: number;
   aggregateInterference: 'objective' | 'always' | 'never';
+  rejectionModel: 'simple' | 'mask';
 }
 
 export interface AppState {
