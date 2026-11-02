@@ -131,3 +131,29 @@ Validation:
   channel model persistence, overlap/rejection, worker updates and drawer edits.
 - `git diff --check`: clean. RF engine unchanged from main; App.tsx unchanged
   by this task. Task 11 is pending.
+
+## Task 11: Isolation-based fix suggestions (2026-11-02)
+
+Receiver-local advice now offers an orthogonal contributor polarization when
+matching antennas have enough XPD, and a frequency centre offset when the
+selected rejection model supplies enough isolation. Simple rejection uses the
+non-overlap offset; masks use the first sufficient step with that same floor.
+Already applied rejection is included in the required replacement isolation.
+The advice uses the aggregate or C/I allowance already computed for power
+suggestions and preserves warnings about other violating contributors.
+Frequency changes under terrain propagation are labelled as estimates.
+
+Validation:
+
+- Targeted tests: 11 expected missing-suggestion failures before implementation,
+  then 50/50 interference tests pass after implementation and fixture corrections.
+- `corepack pnpm test`: 267/267 tests pass. New coverage includes all four
+  orthogonal switches, equality at the XPD/ACR/mask boundaries, insufficient
+  isolation, unequal bandwidths, mask step selection, existing rejection,
+  aggregate allowances, other-contributor warnings, and terrain estimate labels.
+  Applying frequency and polarization advice to evaluated free-space pairs
+  clears the protected limit for both rejection models.
+- `corepack pnpm build`: passes without warnings.
+- `git diff --check`: clean. RF engine unchanged from main; App.tsx unchanged
+  by this task. No browser check added for this pure calculation change.
+- Task 12 remains pending; no push or merge performed.

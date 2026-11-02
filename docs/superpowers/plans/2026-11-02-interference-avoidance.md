@@ -253,12 +253,12 @@ Completed: receiver-local power and distance advice for protected-limit and C/I 
 
 **Files:** `src/lib/interference.ts` (+ tests)
 
-- [ ] `'polarization'`: if the excess ≤ XPD and contributor and victim have the same linear (or same circular) polarization, suggest switching the contributor to the orthogonal one.
-- [ ] `'frequency'`: the smallest centre offset that clears the excess.
+- [x] `'polarization'`: if the excess ≤ XPD and contributor and victim have the same linear (or same circular) polarization, suggest switching the contributor to the orthogonal one.
+- [x] `'frequency'`: the smallest centre offset that clears the excess.
   - Simple model: if `acrDb ≥ excess`, the offset is `(bwT + bwR)/2`, otherwise none.
   - Mask model: the first step with `rejectionDb ≥ excess`, offset `max(step.offsetMhz, (bwT+bwR)/2)`.
-- [ ] Tests for both models and the no-solution case.
-- [ ] Commit: `Suggest frequency offsets and cross-polarization`.
+- [x] Tests for both models and the no-solution case.
+- [x] Commit: `Suggest frequency offsets and cross-polarization`.
 
 ---
 

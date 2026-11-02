@@ -155,7 +155,30 @@ export function mitigations(map: MapScenario, assessment: ReceiverAssessment, pa
       text: `Increase ${tx.name} to ${rx.name} separation from ${formatNumber(path.distanceM, 2)} m to ${formatNumber(Math.ceil(newDistance * 100) / 100, 2)} m${estimate ? ' (free-space estimate; terrain may differ)' : ''}.${note}`,
     });
   }
-  // Frequency and polarization suggestions are introduced with their isolation models in Task 11.
+  if (tx.polarization === rx.polarization && reduction <= map.crossPolarDiscriminationDb) {
+    const orthogonal = { V: 'H', H: 'V', RHCP: 'LHCP', LHCP: 'RHCP' } as const;
+    suggestions.push({
+      kind: 'polarization', txId: tx.id, deltaDb: reduction, estimate: false,
+      text: `Switch ${tx.name} polarization from ${tx.polarization} to ${orthogonal[tx.polarization]} for ${rx.name}'s ${reason}.${note}`,
+    });
+  }
+  // Pair power already includes the current rejection. The replacement must supply
+  // that isolation plus the additional reduction, rather than counting it twice.
+  if (path) {
+    const requiredRejection = path.rejectionDb + reduction;
+    const nonOverlapMhz = (tx.bandwidthMhz + rx.bandwidthMhz) / 2;
+    const step = rx.rejectionMask.find(s => s.rejectionDb >= requiredRejection);
+    const offsetMhz = map.rejectionModel === 'simple'
+      ? (rx.acrDb >= requiredRejection ? nonOverlapMhz : undefined)
+      : (step ? Math.max(step.offsetMhz, nonOverlapMhz) : undefined);
+    if (offsetMhz !== undefined) {
+      const estimate = map.propagationModel === 'terrain';
+      suggestions.push({
+        kind: 'frequency', txId: tx.id, deltaDb: reduction, estimate,
+        text: `Set ${tx.name} centre frequency at least ${formatNumber(Math.ceil(offsetMhz * 100) / 100, 2)} MHz above ${rx.name}'s centre frequency for its ${reason}${estimate ? ' (isolation estimate; terrain may differ)' : ''}.${note}`,
+      });
+    }
+  }
   return suggestions;
 }
 

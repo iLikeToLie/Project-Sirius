@@ -107,7 +107,92 @@ describe('interference fix suggestions', () => {
     expect(assessed.interferenceDbm).toBeCloseTo(assessed.limitDbm, 10);
     expect(assessed.status).toBe('Below interference threshold');
     expect(suggest(after)).toEqual([]);
-    expect(suggestions.some(s => s.kind === 'frequency' || s.kind === 'polarization')).toBe(false);
+    expect(suggestions.find(s => s.kind === 'frequency')).toBeDefined();
+    expect(suggestions.find(s => s.kind === 'polarization')).toBeDefined();
+  });
+
+  it.each([
+    ['V', 'H'], ['H', 'V'], ['RHCP', 'LHCP'], ['LHCP', 'RHCP'],
+  ] as const)('suggests switching matched %s antennas to %s at the XPD boundary', (polarization, orthogonal) => {
+    const scenario = { ...map, crossPolarDiscriminationDb: 8, sensors: [{ ...tx, polarization }, { ...rx, polarization }] };
+    const suggestion = suggest([pair('a', -60)], scenario).find(s => s.kind === 'polarization');
+    expect(suggestion).toMatchObject({ txId: 'a', deltaDb: 8, estimate: false });
+    expect(suggestion?.text).toContain(`from ${polarization} to ${orthogonal}`);
+    expect(suggestion?.text).toContain(rx.name);
+  });
+
+  it('omits polarization advice for insufficient XPD and already mismatched antennas', () => {
+    expect(suggest([pair('a', -60)], { ...map, crossPolarDiscriminationDb: 7.99 }).some(s => s.kind === 'polarization')).toBe(false);
+    for (const polarization of ['H', 'RHCP', 'LHCP'] as const) {
+      const scenario = { ...map, sensors: [{ ...tx, polarization }, rx] };
+      expect(suggest([pair('a', -60)], scenario).some(s => s.kind === 'polarization')).toBe(false);
+    }
+  });
+
+  it('suggests the non-overlap centre offset for simple rejection including unequal bandwidths', () => {
+    const scenario = { ...map, sensors: [{ ...tx, bandwidthMhz: 10 }, { ...rx, bandwidthMhz: 40, acrDb: 8 }] };
+    const frequency = suggest([pair('a', -60)], scenario).find(s => s.kind === 'frequency');
+    expect(frequency).toMatchObject({ txId: 'a', deltaDb: 8, estimate: false });
+    expect(Number(frequency?.text.match(/([\d.]+) MHz/)?.[1])).toBe(25);
+    expect(frequency?.text).toContain(rx.name);
+    const insufficient = { ...scenario, sensors: [scenario.sensors[0], { ...scenario.sensors[1], acrDb: 7.99 }] };
+    expect(suggest([pair('a', -60)], insufficient).some(s => s.kind === 'frequency')).toBe(false);
+  });
+
+  it.each([[10, 20], [35, 35]])('selects the first sufficient mask step at %s MHz with a non-overlap floor', (offsetMhz, expectedOffset) => {
+    const scenario: MapScenario = { ...map, rejectionModel: 'mask', sensors: [tx, { ...rx, acrDb: 100, rejectionMask: [
+      { offsetMhz: 5, rejectionDb: 7.99 }, { offsetMhz, rejectionDb: 8 }, { offsetMhz: 60, rejectionDb: 40 },
+    ] }] };
+    const frequency = suggest([pair('a', -60)], scenario).find(s => s.kind === 'frequency');
+    expect(frequency).toMatchObject({ txId: 'a', deltaDb: 8, estimate: false });
+    expect(Number(frequency?.text.match(/([\d.]+) MHz/)?.[1])).toBe(expectedOffset);
+  });
+
+  it('omits frequency advice when no mask step can supply the required isolation', () => {
+    const scenario: MapScenario = { ...map, rejectionModel: 'mask', sensors: [tx, { ...rx, acrDb: 100, rejectionMask: [{ offsetMhz: 20, rejectionDb: 7.99 }] }] };
+    expect(suggest([pair('a', -60)], scenario).some(s => s.kind === 'frequency')).toBe(false);
+  });
+
+  it('requires additional rejection beyond isolation already included in the pair', () => {
+    const path = { ...pair('a', -60), rejectionDb: 25 };
+    expect(suggest([path]).some(s => s.kind === 'frequency')).toBe(false); // ACR 30 cannot add 8 dB to 25 dB.
+    const scenario: MapScenario = { ...map, rejectionModel: 'mask', sensors: [tx, { ...rx, rejectionMask: [
+      { offsetMhz: 20, rejectionDb: 30 }, { offsetMhz: 40, rejectionDb: 33 },
+    ] }] };
+    const frequency = suggest([path], scenario).find(s => s.kind === 'frequency');
+    expect(Number(frequency?.text.match(/([\d.]+) MHz/)?.[1])).toBe(40);
+  });
+
+  it('uses the aggregate allowance for isolation and preserves warnings for other single-source violations', () => {
+    const pairs = [pair('a', -60), pair('b', -75)];
+    const limited = { ...map, crossPolarDiscriminationDb: 8, sensors: [tx, other, { ...rx, acrDb: 8 }] };
+    expect(suggest(pairs, limited).some(s => s.kind === 'polarization' || s.kind === 'frequency')).toBe(false);
+    const single = suggest([pair('a', -60), pair('b', -67)], { ...map, aggregateInterference: 'never' });
+    for (const kind of ['frequency', 'polarization']) {
+      expect(single.find(s => s.kind === kind)?.text).toContain('T2 must also be reduced');
+    }
+  });
+
+  it('labels frequency changes in terrain as estimates', () => {
+    const frequency = suggest([pair('a', -60)], { ...map, propagationModel: 'terrain' }).find(s => s.kind === 'frequency');
+    expect(frequency?.estimate).toBe(true);
+    expect(frequency?.text).toContain('terrain may differ');
+  });
+
+  it.each(['simple', 'mask'] as const)('clears an evaluated violation after applying %s frequency or polarization advice', rejectionModel => {
+    const base: MapScenario = { ...state.map, defaultObjective: 'avoidance', propagationModel: 'free-space', rejectionModel,
+      crossPolarDiscriminationDb: 8, sensors: [state.map.sensors[0], { ...rx, acrDb: 8, rejectionMask: [{ offsetMhz: 35, rejectionDb: 8 }] }] };
+    const before = evaluatePairs(base, state.inputs, () => 0);
+    const victim = { ...base.sensors[1], interferenceThresholdDbm: before[0].result.receivedPowerDbm - 5 };
+    const scenario = { ...base, sensors: [base.sensors[0], victim] };
+    const suggestions = mitigations(scenario, assessReceiver(scenario, victim, before), before);
+    const frequency = suggestions.find(s => s.kind === 'frequency')!;
+    const offset = Number(frequency.text.match(/([\d.]+) MHz/)![1]);
+    const shifted = { ...scenario, sensors: [{ ...scenario.sensors[0], frequencyGhz: state.inputs.frequencyGhz + offset / 1000 }, victim] };
+    expect(assessReceiver(shifted, victim, evaluatePairs(shifted, state.inputs, () => 0)).status).toBe('Below interference threshold');
+    expect(suggestions.find(s => s.kind === 'polarization')?.text).toContain('from V to H');
+    const crossed = { ...scenario, sensors: [{ ...scenario.sensors[0], polarization: 'H' as const }, victim] };
+    expect(assessReceiver(crossed, victim, evaluatePairs(crossed, state.inputs, () => 0)).status).toBe('Below interference threshold');
   });
 
   it('subtracts aggregate others before suggesting a power reduction', () => {
