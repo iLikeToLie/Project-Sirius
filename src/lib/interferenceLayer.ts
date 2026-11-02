@@ -26,6 +26,9 @@ export function placementPlan(map: MapScenario, shared: LinkInputs, tx: Sensor, 
   const victims = receivers.filter(rx => !servedIds.has(rx.id)).map(rx => ({ rx,
     limitDbm: placementAllowance(map, rx, tx.id, pairs, effectiveMarginDb(map, rx)),
     thresholdDbm: placementAllowance(map, rx, tx.id, pairs, 0),
+    // Raw interference threshold equality is flagged even at zero margin;
+    // equality at a lower, C/I-derived allowance remains safe.
+    exclusiveThresholdDbm: placementAllowance(map, rx, tx.id, pairs, 0, true),
   }));
   // Reverse the geometry only: power, gains, channel rejection and losses retain Tx-to-Rx roles.
   const sources = [...victims.map(v => v.rx), ...served].map(rx => {

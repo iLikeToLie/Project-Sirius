@@ -321,10 +321,12 @@ Verified Task 15: 295/295 tests across 30 files pass; production build passes wi
 
 ### Task 16: Whole-branch review
 
-- [ ] `corepack pnpm test` and `corepack pnpm build` pass with no warnings. `git diff main -- src/lib/rf.ts` is empty.
-- [ ] Add `scripts/e2e/interference-avoidance.mjs` following the existing e2e scripts, covering the Review Focus cases below in headless Chromium.
-- [ ] Write `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` (pattern: `docs/MULTI_LINK_REVIEW.md`), with commands, results per Review Focus item, the Task 7 timing, and screenshots paths.
-- [ ] Do not merge or push to `main`.
+- [x] `corepack pnpm test` and `corepack pnpm build` pass with no warnings. `git diff main -- src/lib/rf.ts` is empty.
+- [x] Add `scripts/e2e/interference-avoidance.mjs` following the existing e2e scripts, covering the Review Focus cases below in headless Chromium.
+- [x] Write `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` (pattern: `docs/MULTI_LINK_REVIEW.md`), with commands, results per Review Focus item, the Task 7 timing, and screenshots paths.
+- [x] Do not merge or push to `main`.
+
+Verified Task 16: 302/302 tests, warning-free build, all eleven consolidated Review Focus cases and ten existing browser regressions pass. Independent review found three Important issues; seven failing-then-passing regressions cover their fixes (fixed worst-single bounds/unknowns, served-link C/I minimums, zero-margin threshold equality). Two Minor findings are deferred in the review record. For zero margin, raw threshold equality is flagged and Set to max stays strictly below it; protected/C/I equality otherwise retains the agreed semantics. Case 5's isolated margin assertion excludes the separately accepted aggregate/C/I changes. No push or merge performed.
 
 ## Review Focus
 

@@ -413,7 +413,7 @@ Unchanged from 1.7.0.
 Web Version 1.9.0 (based on workbook Version 3)
 Target deployment: https://iliketolie.github.io/Project-Sirius/
 Date: 2026-11-02
-Status: feature/interference-avoidance; not deployed; whole-branch review pending.
+Status: feature/interference-avoidance; whole-branch review complete; not deployed.
 
 Function:
 Multi-transmitter interference screening and placement planning in the Singapore
@@ -426,6 +426,9 @@ Key changes:
   requirement (default 10 dB) that flags desired links as Interfered link.
 - Allowed transmit-power ranges, binding receiver limits, fix suggestions and
   a clickable Tx x Rx matrix in the Link budget drawer.
+- Review fixes: power bounds include fixed worst-single violations and unknowns;
+  served-link minimums include required C/I. Zero-margin threshold equality is
+  flagged in Placement and excluded from the safe Set to max boundary.
 - Per-sensor frequency, bandwidth and V/H/RHCP/LHCP polarization. Simple ACR
   and stepped-mask rejection models retain both receiver settings when toggled.
 - Noise-floor helper derives an interference threshold from receiver bandwidth,
@@ -454,5 +457,7 @@ approximation. Channel rejection models rectangular in-band overlap and applies
 ACR or a stepped mask outside overlap; transmitter spectral leakage is omitted.
 Cross-polar discrimination (XPD) is a fixed user value, default 15 dB; real urban
 paths can have less isolation. Directional antenna patterns remain future work.
-Terrain limitations from 1.6.0 still apply. Whole-branch release verification is
-tracked separately as Task 16; this entry does not claim deployment or approval.
+Terrain limitations from 1.6.0 still apply. Task 16 records 302 passing tests,
+a warning-free build, independent review fixes and all eleven Review Focus
+checks. Two minor findings remain deferred in the review record. This entry
+does not claim deployment or approval to merge.

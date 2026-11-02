@@ -32,6 +32,48 @@ describe('transmitter power range', () => {
     expect(range.maxDbm).toBeCloseTo(30 + allowed + 70, 10);
   });
 
+  it('rejects a worst-single bound that another fixed interferer already violates', () => {
+    for (const power of [-67, -60]) {
+      expect(transmitterPowerRange(map, tx.id, [pair(tx.id, -70), pair('other', power)]))
+        .toMatchObject({ maxDbm: -Infinity, limitedBy: rx.id, limitKind: 'threshold' });
+    }
+    expect(transmitterPowerRange(map, tx.id, [pair(tx.id, -70), pair('other', -68)]).maxDbm).toBe(32);
+    const desired = { ...rx, objective: 'desired' as const };
+    expect(transmitterPowerRange({ ...map, sensors: [tx, desired] }, tx.id,
+      [pair(tx.id, -80), pair('wanted', -60, true), pair('other', -69)]))
+      .toMatchObject({ maxDbm: -Infinity, limitKind: 'ci' });
+  });
+
+  it('counts unknown fixed interference with aggregation off, including at served receivers', () => {
+    for (const intended of [false, true]) {
+      const scenario = { ...map, sensors: [tx, { ...rx, objective: intended ? 'desired' as const : 'avoidance' as const }] };
+      const range = transmitterPowerRange(scenario, tx.id,
+        [pair(tx.id, -60, intended), { ...pair('other', -80), elevationKnown: false }]);
+      expect(range.unknownPaths).toBe(1);
+    }
+  });
+
+  it.each(['never', 'always'] as const)('includes served-link C/I in the %s minimum', aggregateInterference => {
+    const desired = { ...rx, objective: 'desired' as const };
+    const scenario = { ...map, sensors: [tx, desired], aggregateInterference };
+    const pairs = [pair(tx.id, -60, true), pair('other', -65), pair('another', -65)];
+    const range = transmitterPowerRange(scenario, tx.id, pairs);
+    const interference = aggregateInterference === 'always' ? sumDbm([-65, -65]) : -65;
+    expect(range.minDbm).toBeCloseTo(30 + interference + desired.requiredCiDb + 60, 10);
+    const atMin = pairs.map(p => p.txId === tx.id ? { ...p, result: { ...p.result, receivedPowerDbm: p.result.receivedPowerDbm + range.minDbm! - tx.powerDbm } } : p);
+    expect(assessReceiver(scenario, desired, atMin).links[0].status).toBe('Acceptable link');
+  });
+
+  it('keeps the zero-margin threshold maximum strictly below the interference threshold', () => {
+    const victim = { ...rx, protectionMarginDb: 0 };
+    const scenario = { ...map, sensors: [tx, victim] };
+    const p = pair(tx.id, -60);
+    const range = transmitterPowerRange(scenario, tx.id, [p]);
+    const atMax = { ...p, result: { ...p.result, receivedPowerDbm: p.result.receivedPowerDbm + range.maxDbm - tx.powerDbm } };
+    expect(pairVerdict(atMax, victim, 0)).toBe('Below interference threshold');
+    expect(range.maxDbm).toBeCloseTo(25, 7);
+  });
+
   it('reports no finite power when other sources already reach the protected limit', () => {
     for (const power of [-68, -67]) {
       expect(transmitterPowerRange({ ...map, aggregateInterference: 'always' }, tx.id, [pair(tx.id, -70), pair('other', power)]))

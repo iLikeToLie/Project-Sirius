@@ -68,7 +68,7 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
 
 - **Want:** someone placing several transmitters can keep their own receivers free of interference and avoid pushing other receivers over their limits.
 - **Plan:** `docs/superpowers/plans/2026-11-02-interference-avoidance.md`, on branch `feature/interference-avoidance`.
-- **State (2 Nov):** items 7a–7k implemented on `feature/interference-avoidance`; whole-branch review (Task 16), merge and deployment remain pending.
+- **State (2 Nov):** items 7a–7k implemented and whole-branch review (Task 16) complete on `feature/interference-avoidance`; merge and deployment remain pending. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for fixes, evidence and two deferred minor findings.
 - **Decisions (2 Nov):** aggregate interference is on by default for avoidance receivers only; the protection margin defaults to 3 dB and is user-adjustable; both frequency rejection models are built behind a toggle; per-sensor polarization is included.
 - **Items:**
   - [x] 7a. Aggregate interference (power sum per receiver).

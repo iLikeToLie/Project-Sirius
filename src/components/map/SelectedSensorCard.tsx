@@ -154,7 +154,7 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
             {powerRange && <div className="transmitter-power-range" aria-label="Transmitter power range">
               <p><b>Power range:</b> {powerRange.minDbm === null ? '−∞' : formatNumber(powerRange.minDbm, 1)} to {powerRange.maxDbm === Infinity ? '+∞' : powerRange.maxDbm === -Infinity ? '−∞' : formatNumber(powerRange.maxDbm, 1)} dBm</p>
               {powerRange.limitedBy && <p className="field-note">Limited by {name(powerRange.limitedBy)} ({powerRange.limitKind === 'ci' ? 'C/I requirement' : 'protected limit'}){powerRange.maxDbm === -Infinity ? '; other transmitters already reach this limit.' : '.'}</p>}
-              {powerRange.minFor && <p className="field-note">Minimum required by {name(powerRange.minFor)} for sensitivity plus fade margin.</p>}
+              {powerRange.minFor && <p className="field-note">Minimum required by {name(powerRange.minFor)} for sensitivity plus fade margin and required C/I.</p>}
               {powerRange.maxDbm === Infinity && <p className="field-note">No upper limit from known receiver paths.</p>}
               {infeasible && <p className="field-note danger" role="status">No power level satisfies both; move or retune.</p>}
               {!infeasible && roundedBelowMin && <p className="field-note" role="status">Rounding the maximum down to 0.1 dBm would fall below the required minimum.</p>}

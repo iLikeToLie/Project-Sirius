@@ -1,6 +1,6 @@
 # Friis RF Link & Interference Calculator
 
-A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.9.0** is based on **workbook Version 3** and adds multi-transmitter interference planning to the Singapore Link workspace. This version is on `feature/interference-avoidance`, pending whole-branch review and deployment.
+A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.9.0** is based on **workbook Version 3** and adds multi-transmitter interference planning to the Singapore Link workspace. This version is verified on `feature/interference-avoidance`, pending user review and deployment; see [the review record](docs/INTERFERENCE_AVOIDANCE_REVIEW.md).
 
 **Live calculator:** [iliketolie.github.io/Project-Sirius](https://iliketolie.github.io/Project-Sirius/)
 

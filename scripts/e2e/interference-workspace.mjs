@@ -140,6 +140,8 @@ try {
   const secondRx = { ...matrixScenario.map.sensors.at(-1), id: 'second-rx', name: 'Second receiver', objective: 'avoidance' };
   matrixScenario.map.sensors.push(secondRx);
   ({ page, drawer } = await open(matrixScenario));
+  // Close the settings popover before clicking matrix cells underneath it.
+  await page.getByRole('button', { name: 'Link settings', exact: true }).click();
   await drawer.getByRole('tab', { name: 'Matrix', exact: true }).click();
   assert.equal(await drawer.locator('tbody tr').count(), 3);
   assert.equal(await drawer.locator('tbody td').count(), 6);
@@ -187,10 +189,10 @@ try {
   fixScenario.map.sensors = [fixScenario.map.sensors[0], fixScenario.map.sensors.at(-1)];
   ({ page, card, drawer } = await open(fixScenario));
   const fixes = card.getByRole('list', { name: 'Fix suggestions', exact: true });
-  assert.equal(await fixes.locator('li').count(), 2);
+  assert.ok(await fixes.locator('li').count() >= 2, 'power and distance advice, plus available isolation advice');
   const powerFix = await fixes.locator('li').first().innerText();
   const suggestedPower = powerFix.match(/to (-?[\d.]+) dBm/)[1];
-  assert.match(await fixes.locator('li').last().innerText(), /separation from/);
+  assert.equal(await fixes.locator('li').filter({ hasText: /^Increase .*separation from/ }).count(), 1);
   await drawer.getByLabel('Transmit power', { exact: false }).fill(suggestedPower);
   await card.locator('.status-below-interference-threshold').waitFor();
   assert.equal(await fixes.count(), 0);

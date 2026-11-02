@@ -109,29 +109,29 @@ export interface Mitigation {
 }
 
 export const PLACEMENT = { unsafe: 0, marginal: 1, safe: 2, recommended: 3, unknown: 255 } as const;
-interface PlacementVictimPower { powerDbm: number; limitDbm: number; thresholdDbm: number }
+interface PlacementVictimPower { powerDbm: number; limitDbm: number; thresholdDbm: number; exclusiveThresholdDbm?: number }
 interface PlacementServedPower { powerDbm: number; requiredDbm: number }
 
-/** Equality at an allowance is permitted, matching the transmitter power bounds. */
+/** Protected-limit and C/I equality are safe; raw interference-threshold equality is flagged. */
 export function placementClass(victims: PlacementVictimPower[], served: PlacementServedPower[]): number {
   if (victims.some(v => !Number.isFinite(v.powerDbm) || Number.isNaN(v.limitDbm) || Number.isNaN(v.thresholdDbm)) ||
       served.some(s => !Number.isFinite(s.powerDbm) || !Number.isFinite(s.requiredDbm))) return PLACEMENT.unknown;
   if (victims.some(v => v.powerDbm > v.thresholdDbm)) return PLACEMENT.unsafe;
-  if (victims.some(v => v.powerDbm > v.limitDbm)) return PLACEMENT.marginal;
+  if (victims.some(v => v.powerDbm > v.limitDbm || v.powerDbm >= (v.exclusiveThresholdDbm ?? Infinity))) return PLACEMENT.marginal;
   return served.every(s => s.powerDbm >= s.requiredDbm) ? PLACEMENT.recommended : PLACEMENT.safe;
 }
 
-/** Fixed received-power allowance for a moving source. Its current path is deliberately excluded. */
-export function placementAllowance(map: MapScenario, rx: Sensor, txId: string, pairs: PairResult[], marginDb: number): number {
+/** Fixed allowance excluding the moving path. thresholdOnly omits C/I to identify the exclusive raw threshold. */
+export function placementAllowance(map: MapScenario, rx: Sensor, txId: string, pairs: PairResult[], marginDb: number, thresholdOnly = false): number {
   const fixed = pairs.filter(p => p.rxId === rx.id && p.txId !== txId);
   if (fixed.some(p => !p.elevationKnown || !p.result.valid || !Number.isFinite(p.result.receivedPowerDbm))) return NaN;
-  const desired = effectiveObjective(map, rx) === 'desired' ? fixed.filter(p => p.intended) : [];
+  const desired = !thresholdOnly && effectiveObjective(map, rx) === 'desired' ? fixed.filter(p => p.intended) : [];
   const ci = desired.reduce((limit, p) => Math.min(limit, p.result.receivedPowerDbm - rx.requiredCiDb), Infinity);
   const limit = Math.min(rx.interferenceThresholdDbm - marginDb, ci);
   const powers = fixed.filter(p => !p.intended).map(p => p.result.receivedPowerDbm);
   if (usesAggregate(map, rx)) return remainingPowerDbm(limit, sumDbm(powers));
   // An already violated fixed path cannot be repaired by moving this transmitter.
-  return powers.some(p => p > limit) ? -Infinity : limit;
+  return powers.some(p => thresholdOnly ? p >= limit : p > limit) ? -Infinity : limit;
 }
 
 /** Receiver-local advice, holding all other powers and settings fixed. No confident advice from incomplete paths. */
@@ -223,18 +223,25 @@ export function transmitterPowerRange(map: MapScenario, txId: string, pairs: Pai
     const mine = pairs.filter(p => p.rxId === rx.id);
     const target = mine.find(p => p.txId === txId);
     if (!target || !known(target)) continue;
+    const aggregate = usesAggregate(map, rx);
+    const fixedInterference = mine.filter(p => !p.intended && p.txId !== txId).filter(known).map(p => p.result.receivedPowerDbm);
+    const others = aggregate ? sumDbm(fixedInterference) : fixedInterference.reduce((max, power) => Math.max(max, power), -Infinity);
     if (target.intended) {
-      const min = tx.powerDbm + rx.sensitivityDbm + rx.fadeMarginTargetDb - target.result.receivedPowerDbm;
+      const required = Math.max(rx.sensitivityDbm + rx.fadeMarginTargetDb, others + rx.requiredCiDb);
+      const min = tx.powerDbm + required - target.result.receivedPowerDbm;
       if (range.minDbm === null || min > range.minDbm) {
         range.minDbm = min; range.minFor = rx.id;
       }
       continue;
     }
-    const others = usesAggregate(map, rx) ? sumDbm(mine.filter(p => !p.intended && p.txId !== txId).filter(known).map(p => p.result.receivedPowerDbm)) : -Infinity;
-    const threshold = remainingPowerDbm(rx.interferenceThresholdDbm - effectiveMarginDb(map, rx), others);
+    const allowance = (limit: number) => aggregate ? remainingPowerDbm(limit, others) : others > limit ? -Infinity : limit;
+    const margin = effectiveMarginDb(map, rx);
+    // At zero margin the threshold itself is interference, so move inside the
+    // open boundary before the UI rounds down to its editable tenth of a dB.
+    const threshold = allowance(rx.interferenceThresholdDbm - margin - (margin === 0 ? 1e-9 : 0));
     const desired = effectiveObjective(map, rx) === 'desired' ? mine.filter(p => p.intended).filter(known) : [];
     const weakest = desired.reduce((power, p) => Math.min(power, p.result.receivedPowerDbm), Infinity);
-    const ci = weakest === Infinity ? Infinity : remainingPowerDbm(weakest - rx.requiredCiDb, others);
+    const ci = weakest === Infinity ? Infinity : allowance(weakest - rx.requiredCiDb);
     const max = tx.powerDbm + Math.min(threshold, ci) - target.result.receivedPowerDbm;
     if (max < range.maxDbm) {
       range.maxDbm = max; range.limitedBy = rx.id; range.limitKind = ci < threshold ? 'ci' : 'threshold';

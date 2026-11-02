@@ -1,5 +1,172 @@
 # Interference avoidance verification
 
+## Task 16 — Whole-branch review (2026-11-02)
+
+Review base: `edb76799380c76152019d948dd6bb8bd735cbb95` (actual merge-base
+with local `main`). Independent read-only review covered the branch through
+`92c3393`; its three Important findings were reproduced and fixed in this task.
+No Critical findings. The final checks cover the resulting working tree.
+No push, merge or deployment was performed.
+
+### Commands and environment
+
+Windows, Node 24.22.1, pnpm 11.19.0, installed headless Chrome 156.0.8078.73,
+1440 × 1000 viewport, production preview on localhost port 5199. Browser
+checks use deterministic zero-height DEM and basemap image responses, with
+explicit missing DEM responses for unknown-path tests. Chrome uses SwiftShader
+software rendering. These checks verify app behavior, not provider availability
+or the predictive accuracy of real terrain propagation.
+
+```powershell
+corepack pnpm test
+corepack pnpm build
+corepack pnpm exec vite preview --host 127.0.0.1 --port 5199 --strictPort
+# Set PLAYWRIGHT_MODULE to the installed playwright-core index.mjs file URL,
+# and CHROMIUM_EXECUTABLE to the installed Chrome executable, as in HANDOFF.md.
+node scripts/e2e/interference-avoidance.mjs
+node scripts/benchmark-sensors.mjs
+git diff --check
+git diff main -- src/lib/rf.ts
+```
+
+The consolidated script also loads the actual `main` sensor evaluator through
+a read-only Vite virtual module. It first verifies that its shared runtime
+dependencies (`rf.ts`, `geo.ts`, `propagation.ts`) are unchanged, then compares
+complete RF result objects. It does not change any checkout or branch.
+
+Results: **302/302 tests across 30 files pass**, production build passes without
+warnings, whitespace check clean, and `rf.ts` unchanged from `main`. Seven new
+regression cases were observed failing before their fixes, then passing.
+No application dependencies or application network requests were added.
+Current Playwright and Vite 6 documentation was fetched through Context7.
+
+Existing browser regressions also pass: `interference-workspace.mjs`,
+`channel-rejection.mjs`, `placement-layer.mjs`, `interference-layer.mjs`,
+`twelve-sensors.mjs` (desktop and mobile), `polarization.mjs`, `noise-floor.mjs`,
+`multi-link-receivers.mjs`, `link-budget-drawer.mjs` and `terrain-workspace.mjs`.
+The terrain check first saw one additional global requestAnimationFrame during
+its 300 ms idle assertion (274 versus 273), then passed unchanged when rerun
+alone. Its counter includes all MapLibre rendering, not just signal animation;
+this transient is recorded rather than treating the first run as a pass.
+
+### Review Focus results
+
+| Case | Result and evidence |
+|---|---|
+| 1. Default parity | PASS. One desired Tx/Rx pair has exactly the same powers, margins and raw statuses as the actual main evaluator; assessed status also matches. |
+| 2. Aggregate avoidance | PASS. Three −67 dBm interferers produce −62.23 dBm and Possible interference. Setting aggregate Off changes the card to Marginal interference. |
+| 3. Desired default | PASS. The desired receiver uses −67 dBm worst-single interference under the default aggregation setting. |
+| 4. C/I throughout UI | PASS. A desired link below required C/I reads Interfered link in the card, list and matrix, and its receiver marker has the danger tone. Screenshot `04-ci-matrix.png`. |
+| 5. Schema 5 migration | PASS. A schema 5 single-link file imports through the browser, saves as schema 6 and gains the 3 dB/objective/default-frequency/V defaults. Original desired-link status is retained. Isolated margin cases −70/−68/−67/−65/−60 dBm verify exact boundaries. See interpretation below. |
+| 6. Isolation parity | PASS. Every complete RF result from multiple same-default-frequency/V pairs equals main exactly. Legacy browser channel tests also retain −51.18795996 dBm power. |
+| 7. Binding power | PASS. Applying the unrounded maximum puts the receiver at its protected limit within 1e−10 dB and reads Below interference threshold. The real Set to max control rounds down to 0.1 dBm and clears the receiver. Zero-margin and fixed worst-single violation controls are checked separately. |
+| 8. Unknown elevation | PASS. A missing −30 dBm path is excluded from a known −80 dBm partial sum and counted, not used as a contributor. Browser card/matrix show three missing paths explicitly. Fixed unknown paths also make power ranges incomplete and disable Set to max. |
+| 9. Rejection settings | PASS. Two receivers retain independent ACR and mask values across both model toggles and browser reload. Existing channel checks cover edits and invalid-mask rejection. |
+| 10. Twelve-sensor terrain drag | PASS on the fixture below. Real mouse drag moves and persists T3 with six transmitters/six receivers, terrain elevation and terrain diffraction enabled. Animation frames continue, and 180-radial drag requests return to 360-radial refinement after release. |
+| 11. Placement consistency | PASS. A real placement-worker sample nearest the current transmitter exceeds the victim threshold, matching its Interferes card and Unsafe region. Exact zero-margin threshold equality is tested through placement plan/raster classification and reads Marginal, preserving safe C/I equality. |
+
+Case 5's literal statement that *only* statuses within 3 dB may change conflicts
+with the separately accepted aggregate and C/I behavior changes. The review
+isolates the margin effect for that assertion; it does not claim that a legacy
+multi-interferer scenario retains its old aggregate or desired-link statuses.
+
+### Review fixes and rulings
+
+1. **Fixed worst-single interference and unknown paths.** The power-range
+   evaluator previously ignored other interferers whenever aggregation was Off.
+   A source already violating the protected or C/I allowance now makes the
+   range infeasible. Unknown fixed interferers are counted in either mode,
+   including at served receivers. Set to max cannot confidently apply a partial
+   range. Regression tests cover threshold/C/I feasibility, protected equality
+   and unknown fixed paths; browser checks verify the disabled control.
+2. **Served-link minimum.** The minimum now uses the greater of sensitivity
+   plus fade margin and effective interference plus required C/I. This resolves
+   Task 4's formula conflicting with its promise that served links stay
+   Acceptable. Tests apply both aggregate and worst-single minimums and verify
+   the resulting assessed desired link. The card explains both requirements.
+3. **Zero-margin equality.** Review Focus 11 takes precedence over a blanket
+   safe-equality interpretation when the margin is zero: equality at the raw
+   interference threshold is Marginal in Placement, never Recommended. A
+   separate threshold-only allowance preserves safe equality at a stricter C/I
+   allowance. A fixed interferer exactly at the raw threshold also prevents
+   recommending a cell. A zero-margin power maximum is moved 1e−9 dB inside
+   the open threshold boundary before the existing UI rounds down; it cannot
+   offer a threshold-equal power as safe. Positive-margin protected equality
+   retains its original safe semantics. Tests cover these distinctions.
+
+The old workspace browser check initially failed because its open Link settings
+popover intercepted a matrix click; the test now closes that popover. Its old
+exact count of two fix suggestions also predates frequency/polarization advice;
+it now verifies the actual power and distance suggestions while allowing the
+additional valid isolation suggestions. No product change was needed for these
+two test setup issues.
+
+### Timing and screenshots
+
+Task 7's original in-memory 36-path terrain benchmark remains recorded below:
+mean 0.972 ms, median 0.960 ms, p95 1.105 ms, max 1.267 ms. A fresh Task 16
+run (same synthetic ridge, 20 warmups, 200 samples) measured mean 1.237 ms,
+median 1.105 ms, p95 1.646 ms, max 2.341 ms, below the 50 ms pair-evaluation
+budget. These values exclude module loading, browser rendering and networking.
+
+The final browser drag generated 41 mousemove events over 8.580 seconds,
+including automation round trips. Input-to-next-frame delay: median 2.8 ms,
+p95 7.1 ms, max 8.4 ms. There were 141 measured frame intervals: median
+50.0 ms, p95 116.7 ms, max 300.0 ms. Software rendering is visibly slower
+than 60 fps, but input continues to be processed during the drag. The 42
+completed six-source worker requests took 15.0–374.7 ms (median 64.5 ms,
+p95 268.2 ms), below the plan's approximately 1-second concern threshold.
+This is one local deterministic workload, not a hardware-independent guarantee.
+
+Artifacts are local and git-ignored; paths relative to this feature worktree:
+
+- `.superpowers/review-task16/results.json` — browser version, assertions and zero page errors.
+- `.superpowers/review-task16/review-edb7679-92c3393.diff` — archived independent-review range (24 commits, 568,466 bytes).
+- `.superpowers/review-task16/timing.json` — frame/input samples summarized above and every worker duration/source count/radial count.
+- `.superpowers/review-task16/02-aggregate.png`
+- `.superpowers/review-task16/04-ci-matrix.png`
+- `.superpowers/review-task16/05-schema5-import.png`
+- `.superpowers/review-task16/08-unknown.png`
+- `.superpowers/review-task16/10-twelve-terrain-drag.png`
+- `.superpowers/review-task16/11-placement.png`
+
+The matrix, current-position Placement and twelve-sensor screenshots were
+visually inspected. Basemap images are deterministic fixtures; they do not
+represent live cartography. The visible 1.8.0 chip is the already documented
+App.tsx scope exclusion, not a failed package version bump.
+
+### Deferred minor findings
+
+- The Interference layer paints exact protected-limit equality amber under
+  Task 13's `[L,T)` band definition, while card/matrix shared definitions call
+  that equality safe. The layer is conservative at that exact boundary.
+- The multi-field request key serializes the full map, so some name, selection
+  or threshold edits can recompute fields unnecessarily. The measured workload
+  did not demonstrate a responsiveness failure requiring optimization.
+
+### Disposition of items set aside by the reviewer
+
+- Stale UI version labels remain explicitly excluded and disclosed; pair-pin
+  changes in App.tsx are earlier authorized integration, with Calculator
+  formulas/status logic unchanged. No further Calculator work is introduced.
+- Directional antennas, spectral leakage and environment-dependent XPD remain
+  future work/documented limitations. Terrain placement remains reciprocal and
+  sampled by nearest ray; exact terrain reciprocity is not promised.
+- Recommended continues to require served sensitivity plus fade margin, as
+  explicitly defined in the placement legend. It does not promise served C/I;
+  the transmitter's scalar allowed power interval now includes that requirement.
+- Existing unknown desired-path badge/raw drawer behavior and the worker's
+  pre-existing error handling are outside this branch's introduced changes;
+  no new regressions were identified there by the independent review.
+- Inherited Light-basemap and coverage-edge work between main and the plan's
+  earlier `34140db` reference remains part of the baseline, not an interference
+  implementation finding. Review Focus 5 is interpreted as described above.
+
+All three Important findings were handled in one fix pass with failing-then-
+passing regressions and a green full suite. The two Minor findings are deferred.
+This review permits keeping the verified feature branch ready for user review;
+it does not authorize publication or integration.
+
 ## Task 7: Raise the sensor cap (2026-11-02)
 
 The workspace allows 12 sensors. Adding a thirteenth is blocked; importing a

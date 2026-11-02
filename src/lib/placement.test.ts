@@ -27,6 +27,13 @@ describe('placement classification', () => {
     expect(placementClass([], [])).toBe(PLACEMENT.recommended);
     expect(placementClass([{ ...victim(-90), limitDbm: -Infinity, thresholdDbm: -Infinity }], [])).toBe(PLACEMENT.unsafe);
   });
+  it('never recommends equality at a raw interference threshold, including zero margin', () => {
+    expect(placementClass([{ powerDbm: -65, limitDbm: -65, thresholdDbm: -65, exclusiveThresholdDbm: -65 }], []))
+      .toBe(PLACEMENT.marginal);
+    // C/I equality remains safe when the raw interference threshold is higher.
+    expect(placementClass([{ powerDbm: -75, limitDbm: -75, thresholdDbm: -75, exclusiveThresholdDbm: -65 }], []))
+      .toBe(PLACEMENT.recommended);
+  });
 });
 
 describe('fixed placement allowances', () => {
@@ -60,6 +67,13 @@ describe('fixed placement allowances', () => {
     const unknown = { ...p('other', -90), elevationKnown: false };
     expect(placementAllowance(map, rx, tx.id, [unknown], 3)).toBeNaN();
     expect(placementAllowance(map, rx, tx.id, [{ ...p('desired', -50, true), elevationKnown: false }], 3)).toBeNaN();
+  });
+  it('flags a fixed interferer already exactly at the raw threshold even with zero margin', () => {
+    const m = { ...map, aggregateInterference: 'never' as const };
+    const allowance = placementAllowance(m, rx, tx.id, [p('other', rx.interferenceThresholdDbm)], 0, true);
+    expect(allowance).toBe(-Infinity);
+    expect(placementClass([{ powerDbm: -100, limitDbm: -60, thresholdDbm: -60, exclusiveThresholdDbm: allowance }], []))
+      .toBe(PLACEMENT.marginal);
   });
 });
 
