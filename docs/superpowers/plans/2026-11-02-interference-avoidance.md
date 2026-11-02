@@ -163,16 +163,18 @@ Completed: accessible Tx × Rx matrix with remembered drawer tabs, pair margins,
 
 ### Task 6: Fix suggestions
 
+Completed: receiver-local power and distance advice for protected-limit and C/I violations, shown below receiver violations and in matrix tooltips. Aggregate residual power, exhausted allowances, incomplete predictions and conservative displayed rounding are covered. Verified 223 unit tests, production build and Chrome interference-workspace regressions.
+
 **Files:** `src/lib/interference.ts` (+ tests), `SelectedSensorCard.tsx`, `InterferenceMatrix.tsx`
 
-- [ ] Implement `mitigations(map, assessment, pairs): Mitigation[]`, where `Mitigation = { kind: 'power' | 'distance' | 'frequency' | 'polarization'; txId: string; deltaDb: number; text: string; estimate: boolean }`.
+- [x] Implement `mitigations(map, assessment, pairs): Mitigation[]`, where `Mitigation = { kind: 'power' | 'distance' | 'frequency' | 'polarization'; txId: string; deltaDb: number; text: string; estimate: boolean }`.
   - **Excess:** `I − L` for an interference violation. For an Interfered link it is `requiredCiDb − ciDb`.
   - **Power:** for the strongest contributor `c`, the reduction needed so that I ≤ L. With aggregate on, `P_c − 10·log10(10^(L/10) − 10^(others_c/10))`. If `others_c ≥ L`, the text says reducing c alone cannot fix it and names the next contributor. Without aggregate, the reduction is `P_c − L`.
   - **Distance:** `d_new = d · 10^(reduction/20)`. In terrain mode set `estimate: true` and add "free-space estimate; terrain may differ".
   - Leave `'frequency'` and `'polarization'` as stubs that return nothing until Task 11.
-- [ ] Tests: applying the suggested power reduction puts I exactly at L (status Below). The distance doubles for 6.02 dB. The aggregate edge case works where others alone exceed L.
-- [ ] UI: under a violation in the receiver card, list up to three suggestions. The matrix cell tooltip shows the first one.
-- [ ] Commit: `Suggest the smallest change that clears each violation`.
+- [x] Tests: applying the suggested power reduction puts I exactly at L (status Below). The distance doubles for 6.02 dB. The aggregate edge case works where others alone exceed L.
+- [x] UI: under a violation in the receiver card, list up to three suggestions. The matrix cell tooltip shows the first one.
+- [x] Commit: `Suggest the smallest change that clears each violation`.
 
 ### Task 7: Raise the sensor cap
 

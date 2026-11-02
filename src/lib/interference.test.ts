@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
-import type { ScreeningStatus } from '../types';
+import type { MapScenario, ScreeningStatus } from '../types';
 import { calculateLink } from './rf';
 import { evaluatePairs, receiverSummary, type PairResult } from './sensors';
-import { assessAll, assessReceiver, effectiveMarginDb, pairVerdict, sumDbm, transmitterPowerRange, usesAggregate, worstAssessedLink } from './interference';
+import { assessAll, assessReceiver, effectiveMarginDb, mitigations, pairVerdict, sumDbm, transmitterPowerRange, usesAggregate, worstAssessedLink } from './interference';
 
 const state = freshDefaultState();
 const rx = { ...state.map.sensors[1], objective: 'avoidance' as const };
@@ -89,6 +89,105 @@ describe('transmitter power range', () => {
   });
 });
 const three = () => ['a', 'b', 'c'].map((id) => pair(id, -67));
+
+describe('interference fix suggestions', () => {
+  const tx = { ...state.map.sensors[0], id: 'a', name: 'T1', powerDbm: 30 };
+  const other = { ...tx, id: 'b', name: 'T2' };
+  const map = { ...state.map, sensors: [tx, other, rx], propagationModel: 'free-space' as const };
+  const suggest = (pairs: PairResult[], scenario: MapScenario = map) => mitigations(scenario, assessReceiver(scenario, scenario.sensors.find(s => s.id === rx.id)!, pairs), pairs);
+
+  it('clears a single-source violation exactly at the protected limit', () => {
+    const pairs = [pair('a', -60)];
+    const suggestions = suggest(pairs);
+    const power = suggestions.find(s => s.kind === 'power')!;
+    expect(power).toMatchObject({ txId: 'a', deltaDb: 8, estimate: false });
+    expect(power.text).toContain('T1');
+    const after = [{ ...pairs[0], result: { ...pairs[0].result, receivedPowerDbm: -60 - power.deltaDb } }];
+    const assessed = assessReceiver(map, rx, after);
+    expect(assessed.interferenceDbm).toBeCloseTo(assessed.limitDbm, 10);
+    expect(assessed.status).toBe('Below interference threshold');
+    expect(suggest(after)).toEqual([]);
+    expect(suggestions.some(s => s.kind === 'frequency' || s.kind === 'polarization')).toBe(false);
+  });
+
+  it('subtracts aggregate others before suggesting a power reduction', () => {
+    const pairs = [pair('a', -60), pair('b', -75)];
+    const power = suggest(pairs).find(s => s.kind === 'power')!;
+    const after = pairs.map(p => p.txId === power.txId ? { ...p, result: { ...p.result, receivedPowerDbm: p.result.receivedPowerDbm - power.deltaDb } } : p);
+    const assessed = assessReceiver(map, rx, after);
+    expect(power.deltaDb).toBeGreaterThan(8);
+    expect(assessed.interferenceDbm).toBeCloseTo(assessed.limitDbm, 10);
+    expect(assessed.status).toBe('Below interference threshold');
+  });
+
+  it('rounds the displayed target power down so entering it also clears the violation', () => {
+    const scenario = { ...map, sensors: [{ ...tx, powerDbm: 30.006 }, other, rx] };
+    const power = suggest([pair('a', -60)], scenario).find(s => s.kind === 'power')!;
+    const target = Number(power.text.match(/to (-?[\d.]+) dBm/)![1]);
+    expect(target).toBe(22);
+    expect(assessReceiver(scenario, rx, [pair('a', -60 + target - 30.006)]).status).toBe('Below interference threshold');
+  });
+
+  it('doubles free-space distance for a 6.02 dB reduction', () => {
+    const suggestions = suggest([pair('a', -68 + 20 * Math.log10(2))]);
+    expect(suggestions.find(s => s.kind === 'distance')).toMatchObject({ txId: 'a', estimate: false });
+    const targetM = Number(suggestions.find(s => s.kind === 'distance')!.text.match(/to ([\d.]+) m/)![1]);
+    expect(targetM).toBeCloseTo(200, 1); // Display rounds upward to the next centimetre.
+  });
+
+  it('rounds the displayed distance up to keep a free-space fix within the limit', () => {
+    const distance = suggest([pair('a', -67)]).find(s => s.kind === 'distance')!;
+    const targetM = Number(distance.text.match(/to ([\d.]+) m/)![1]);
+    expect(-67 - 20 * Math.log10(targetM / 100)).toBeLessThanOrEqual(-68);
+  });
+
+  it('labels terrain distance advice as a free-space estimate', () => {
+    const distance = suggest([pair('a', -60)], { ...map, propagationModel: 'terrain' }).find(s => s.kind === 'distance')!;
+    expect(distance.estimate).toBe(true);
+    expect(distance.text).toContain('free-space estimate; terrain may differ');
+  });
+
+  it('names the next contributor when reducing the strongest alone cannot fix aggregate interference', () => {
+    for (const power of [-68, -67]) {
+      const suggestions = suggest([pair('a', -60), pair('b', power)]);
+      expect(suggestions).toHaveLength(1);
+      expect(suggestions[0]).toMatchObject({ kind: 'power', txId: 'a', deltaDb: Infinity });
+      expect(suggestions[0].text).toMatch(/T1 alone cannot fix/);
+      expect(suggestions[0].text).toContain('T2');
+      expect(suggestions[0].text).not.toMatch(/Infinity|NaN/);
+    }
+  });
+
+  it('uses the stricter C/I target even when threshold interference is safe', () => {
+    const desired = { ...rx, objective: 'desired' as const, requiredCiDb: 15 };
+    const scenario = { ...map, sensors: [tx, other, desired] };
+    const pairs = [pair('a', -60, true), pair('b', -70)];
+    const power = suggest(pairs, scenario).find(s => s.kind === 'power')!;
+    expect(power).toMatchObject({ txId: 'b', deltaDb: 5 });
+    expect(power.text).toContain('C/I');
+    const after = [pairs[0], pair('b', -70 - power.deltaDb)];
+    expect(assessReceiver(scenario, desired, after).links[0].status).toBe('Acceptable link');
+  });
+
+  it('uses worst single power when aggregation is off and explains other violating sources', () => {
+    const suggestions = suggest([pair('a', -60), pair('b', -67)], { ...map, aggregateInterference: 'never' });
+    expect(suggestions[0]).toMatchObject({ kind: 'power', deltaDb: 8 });
+    expect(suggestions[0].text).toContain('T2');
+  });
+
+  it('returns no confident suggestions with missing or invalid relevant predictions', () => {
+    const bad = { ...pair('b', -30), elevationKnown: false };
+    expect(suggest([pair('a', -60), bad])).toEqual([]);
+    expect(suggest([pair('a', -60), { ...bad, elevationKnown: true, result: { ...bad.result, valid: false } }])).toEqual([]);
+    expect(suggest([pair('a', NaN)])).toEqual([]);
+  });
+
+  it('does not use unknown desired links as C/I targets', () => {
+    const desired = { ...rx, objective: 'desired' as const };
+    const scenario = { ...map, sensors: [tx, other, desired] };
+    expect(suggest([{ ...pair('a', -60, true), elevationKnown: false }, pair('b', -70)], scenario)).toEqual([]);
+  });
+});
 
 describe('receiver interference assessment', () => {
   it('sums three -67 dBm interferers to -62.23 dBm for avoidance', () => {

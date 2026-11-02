@@ -47,6 +47,27 @@ describe('interference workspace display', () => {
     for (const text of ['Protection margin', 'Avoidance receivers only', 'All receivers', 'Off']) expect(html).toContain(text);
   });
 
+  it('shows power and distance fixes below a receiver violation', () => {
+    const results = pairs.map(p => ({ ...p, result: { ...p.result, receivedPowerDbm: -67 } }));
+    const html = renderToStaticMarkup(<SelectedSensorCard sensor={rx} map={state.map} pairs={results} assessments={assessAll(state.map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    expect(html).toContain('aria-label="Fix suggestions"');
+    expect(html).toContain(`Reduce ${state.map.sensors[0].name} power by 1.00 dB`);
+    expect(html).toContain('separation from');
+  });
+
+  it('offers a C/I fix even when interference is below the threshold', () => {
+    const desired = { ...rx, objective: 'desired' as const, desiredTxIds: [state.map.sensors[0].id], requiredCiDb: 15 };
+    const extra = { ...state.map.sensors[0], id: 'extra', name: 'Extra transmitter' };
+    const map = { ...state.map, sensors: [state.map.sensors[0], desired, extra] };
+    const results = [
+      { ...pairs[0], intended: true, result: { ...pairs[0].result, status: 'Acceptable link' as const, receivedPowerDbm: -60 } },
+      { ...pairs[0], txId: extra.id, txName: extra.name, intended: false, result: { ...pairs[0].result, receivedPowerDbm: -70 } },
+    ];
+    const html = renderToStaticMarkup(<SelectedSensorCard sensor={desired} map={map} pairs={results} assessments={assessAll(map, results)} groundAt={() => 0} zoneInfo={null} onChange={noop} onRoleChange={noop} onZonesFor={noop} />);
+    expect(html).toContain('Reduce Extra transmitter power by 5.00 dB');
+    expect(html).toContain('C/I requirement');
+  });
+
   it('shows conflicting transmitter bounds and prevents applying an infeasible maximum', () => {
     const served = { ...rx, id: 'served', name: 'Served receiver', objective: 'desired' as const, sensitivityDbm: -50 };
     const map = { ...state.map, sensors: [...state.map.sensors, served] };

@@ -13,7 +13,7 @@ function render(intended: boolean, power: number, unknown = false, interfered = 
   const pairs = evaluatePairs(state.map, state.inputs, () => 0).map(p => ({ ...p, intended, elevationKnown: !unknown, result: { ...p.result, receivedPowerDbm: power } }));
   const assessments = assessAll(state.map, pairs);
   if (interfered) assessments.get(rx.id)!.links[0].status = 'Interfered link';
-  return { tx, rx, html: renderToStaticMarkup(<InterferenceMatrix sensors={state.map.sensors} pairs={pairs} assessments={assessments} onPin={() => undefined} />) };
+  return { tx, rx, html: renderToStaticMarkup(<InterferenceMatrix map={state.map} pairs={pairs} assessments={assessments} onPin={() => undefined} />) };
 }
 
 describe('interference matrix', () => {
@@ -42,11 +42,16 @@ describe('interference matrix', () => {
     expect(html).toContain('protected margin 0.00 dB; Below interference threshold');
     expect(html).toContain('tone-safe');
   });
+  it('adds the first receiver fix suggestion to a violating cell tooltip', () => {
+    const { tx, html } = render(false, -67);
+    expect(html).toMatch(new RegExp(`title="[^"]*Reduce ${tx.name} power by 1.00 dB`));
+  });
   it('marks unknown paths with a tooltip and incomplete footer', () => {
     const { html } = render(false, -67, true);
     expect(html).toContain('Elevation unavailable for this path');
     expect(html).toContain('>—</button>');
     expect(html).toContain('1 paths unknown');
     expect(html).not.toContain('-1.00 dB');
+    expect(html).not.toContain('Reduce');
   });
 });

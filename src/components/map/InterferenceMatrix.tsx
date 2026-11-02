@@ -1,19 +1,24 @@
-import type { Sensor } from '../../types';
+import type { MapScenario } from '../../types';
 import type { LinkPin } from '../../lib/activeLink';
-import { pairVerdict, sumDbm, type ReceiverAssessment } from '../../lib/interference';
+import { mitigations, pairVerdict, sumDbm, type ReceiverAssessment } from '../../lib/interference';
 import { formatNumber } from '../../lib/rf';
 import type { PairResult } from '../../lib/sensors';
 import { statusTone } from '../ui';
 
 /** Pair margins use the same assessments as the map; totals remain receiver-level. */
-export function InterferenceMatrix({ sensors, pairs, assessments, onPin }: {
-  sensors: Sensor[];
+export function InterferenceMatrix({ map, pairs, assessments, onPin }: {
+  map: MapScenario;
   pairs: PairResult[];
   assessments: Map<string, ReceiverAssessment>;
   onPin: (pin: LinkPin) => void;
 }) {
+  const { sensors } = map;
   const transmitters = sensors.filter(s => s.role === 'tx');
   const receivers = sensors.filter(s => s.role === 'rx');
+  const firstFix = new Map(receivers.map(rx => {
+    const a = assessments.get(rx.id);
+    return [rx.id, a ? mitigations(map, a, pairs)[0]?.text : undefined];
+  }));
   return (
     <div className="interference-matrix">
       <table>
@@ -32,7 +37,8 @@ export function InterferenceMatrix({ sensors, pairs, assessments, onPin }: {
               : assessment.limitDbm - pair.result.receivedPowerDbm : NaN;
             const explanation = !pair ? 'Pair unavailable' : !pair.elevationKnown ? 'Elevation unavailable for this path' : 'Prediction unavailable for this path';
             const label = `${tx.name} to ${rx.name}: ${known ? `${pair.intended ? 'desired link' : 'protected'} margin ${formatNumber(margin, 2)} dB; ${status}` : explanation}. Open link budget.`;
-            return <td key={rx.id}><button type="button" className={`matrix-cell tone-${statusTone(status)}`} aria-label={label} title={known ? label : explanation} disabled={!pair} onClick={() => onPin({ txId: tx.id, rxId: rx.id })}>
+            const title = known ? `${label}${firstFix.get(rx.id) ? ` ${firstFix.get(rx.id)}` : ''}` : explanation;
+            return <td key={rx.id}><button type="button" className={`matrix-cell tone-${statusTone(status)}`} aria-label={label} title={title} disabled={!pair} onClick={() => onPin({ txId: tx.id, rxId: rx.id })}>
               {known ? `${formatNumber(margin, 2)} dB${status === 'Interfered link' ? ' C/I' : ''}` : '—'}
             </button></td>;
           })}</tr>

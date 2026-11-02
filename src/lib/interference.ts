@@ -1,5 +1,6 @@
 import type { MapScenario, ScreeningStatus, Sensor } from '../types';
 import { effectiveObjective, receiverSummary, worstLink, type PairResult } from './sensors';
+import { formatNumber } from './rf';
 
 type InterferenceStatus = 'Possible interference' | 'Marginal interference' | 'Below interference threshold';
 
@@ -97,6 +98,65 @@ function remainingPowerDbm(limit: number, others: number): number {
   if (others === -Infinity) return limit;
   if (others >= limit) return -Infinity;
   return limit + 10 * Math.log10(-Math.expm1((others - limit) * Math.LN10 / 10));
+}
+
+export interface Mitigation {
+  kind: 'power' | 'distance' | 'frequency' | 'polarization';
+  txId: string;
+  deltaDb: number;
+  text: string;
+  estimate: boolean;
+}
+
+/** Receiver-local advice, holding all other powers and settings fixed. No confident advice from incomplete paths. */
+export function mitigations(map: MapScenario, assessment: ReceiverAssessment, pairs: PairResult[]): Mitigation[] {
+  const rx = map.sensors.find(s => s.id === assessment.rxId && s.role === 'rx');
+  const relevant = pairs.filter(p => p.rxId === assessment.rxId);
+  if (!rx || assessment.unknownPaths > 0 || relevant.some(p => !p.elevationKnown || !p.result.valid || !Number.isFinite(p.result.receivedPowerDbm))) return [];
+
+  let limit = assessment.limitDbm;
+  let reason = 'protected limit';
+  for (const link of assessment.links.filter(l => l.status === 'Interfered link')) {
+    const desired = relevant.find(p => p.intended && p.txId === link.txId);
+    if (!desired) continue;
+    const ciLimit = desired.result.receivedPowerDbm - rx.requiredCiDb;
+    if (ciLimit < limit) { limit = ciLimit; reason = 'C/I requirement'; }
+  }
+  if (!Number.isFinite(limit) || assessment.interferenceDbm <= limit) return [];
+  const [strongest, ...rest] = assessment.contributors;
+  if (!strongest) return [];
+  const tx = map.sensors.find(s => s.id === strongest.txId && s.role === 'tx');
+  if (!tx || !Number.isFinite(tx.powerDbm)) return [];
+  const name = (id: string) => map.sensors.find(s => s.id === id)?.name ?? id;
+  const others = assessment.aggregate ? sumDbm(rest.map(c => c.powerDbm)) : -Infinity;
+  const allowed = remainingPowerDbm(limit, others);
+  if (allowed === -Infinity) return [{
+    kind: 'power', txId: tx.id, deltaDb: Infinity, estimate: false,
+    text: `Reducing ${tx.name} alone cannot fix ${rx.name}'s ${reason}; other contributors already reach the limit. Reduce ${rest.map(c => name(c.txId)).join(', ')} as well.`,
+  }];
+
+  const reduction = strongest.powerDbm - allowed;
+  if (!(reduction > 0) || !Number.isFinite(reduction)) return [];
+  // Round both displayed values toward safety; retain full precision in deltaDb.
+  const displayedReduction = Math.ceil(reduction * 100) / 100;
+  const displayedPower = Math.floor((tx.powerDbm - displayedReduction) * 100) / 100;
+  const remaining = !assessment.aggregate ? rest.filter(c => c.powerDbm > limit) : [];
+  const note = remaining.length ? ` ${remaining.map(c => name(c.txId)).join(', ')} must also be reduced to clear this receiver's violation.` : '';
+  const suggestions: Mitigation[] = [{
+    kind: 'power', txId: tx.id, deltaDb: reduction, estimate: false,
+    text: `Reduce ${tx.name} power by ${formatNumber(displayedReduction, 2)} dB (to ${formatNumber(displayedPower, 2)} dBm) for ${rx.name}'s ${reason}.${note}`,
+  }];
+  const path = relevant.find(p => p.txId === tx.id && !p.intended);
+  const newDistance = path ? path.distanceM * 10 ** (reduction / 20) : NaN;
+  if (path && path.distanceM > 0 && Number.isFinite(newDistance)) {
+    const estimate = map.propagationModel === 'terrain';
+    suggestions.push({
+      kind: 'distance', txId: tx.id, deltaDb: reduction, estimate,
+      text: `Increase ${tx.name} to ${rx.name} separation from ${formatNumber(path.distanceM, 2)} m to ${formatNumber(Math.ceil(newDistance * 100) / 100, 2)} m${estimate ? ' (free-space estimate; terrain may differ)' : ''}.${note}`,
+    });
+  }
+  // Frequency and polarization suggestions are introduced with their isolation models in Task 11.
+  return suggestions;
 }
 
 /** Bounds for one transmitter, holding geometry and every other transmitter fixed. */

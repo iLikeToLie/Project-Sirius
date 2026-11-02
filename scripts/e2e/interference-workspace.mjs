@@ -52,6 +52,14 @@ try {
   const colors = await drawer.locator('.power-meter').first().evaluate(el => ['.protected-marker', '.threshold-marker'].map(s => getComputedStyle(el.querySelector(s)).backgroundColor));
   assert.notEqual(colors[0], colors[1], 'protected limit must differ visually from the threshold');
   console.log('PASS aggregate total, contributors, pair badge and protected meter');
+  const aggregateFix = await card.getByRole('list', { name: 'Fix suggestions', exact: true }).innerText();
+  assert.match(aggregateFix, /Reducing T1 alone cannot fix/);
+  assert.match(aggregateFix, /T2/);
+  assert.equal(await card.getByRole('list', { name: 'Fix suggestions', exact: true }).locator('li').count(), 1);
+  await drawer.getByRole('tab', { name: 'Matrix', exact: true }).click();
+  assert.match(await drawer.locator('tbody button').first().getAttribute('title'), /Reducing T1 alone cannot fix/);
+  await drawer.getByRole('tab', { name: 'Link budget', exact: true }).click();
+  console.log('PASS aggregate fix explains other contributors and appears in matrix tooltip');
 
   await settings.getByLabel(/^Aggregate interference/).selectOption('never');
   await card.getByText('worst single', { exact: false }).waitFor();
@@ -113,6 +121,7 @@ try {
 
   ({ page, card, drawer } = await open(scenario(false, true), true));
   await card.getByText('3 paths unknown; excluded from interference assessment.').waitFor();
+  assert.equal(await card.getByRole('list', { name: 'Fix suggestions', exact: true }).count(), 0);
   assert.match(await drawer.locator('.rx-meter-stack').innerText(), /Unknown/);
   await page.locator('.sensor-list-card .sensor-row').filter({ hasText: 'T1' }).click();
   assert.match(await card.getByLabel('Transmitter power range').innerText(), /paths unknown; power range is incomplete/);
@@ -173,5 +182,31 @@ try {
   await drawer.getByRole('table').waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   console.log('PASS drawer tab keyboard navigation, remembered view and narrow layout');
+
+  const fixScenario = scenario();
+  fixScenario.map.sensors = [fixScenario.map.sensors[0], fixScenario.map.sensors.at(-1)];
+  ({ page, card, drawer } = await open(fixScenario));
+  const fixes = card.getByRole('list', { name: 'Fix suggestions', exact: true });
+  assert.equal(await fixes.locator('li').count(), 2);
+  const powerFix = await fixes.locator('li').first().innerText();
+  const suggestedPower = powerFix.match(/to (-?[\d.]+) dBm/)[1];
+  assert.match(await fixes.locator('li').last().innerText(), /separation from/);
+  await drawer.getByLabel('Transmit power', { exact: false }).fill(suggestedPower);
+  await card.locator('.status-below-interference-threshold').waitFor();
+  assert.equal(await fixes.count(), 0);
+  console.log('PASS displayed power suggestion clears receiver violation and removes suggestions');
+
+  const ciFix = scenario(true);
+  ciFix.map.sensors.at(-1).requiredCiDb = 15;
+  ({ card } = await open(ciFix));
+  assert.match(await card.getByRole('list', { name: 'Fix suggestions', exact: true }).innerText(), /C\/I requirement/);
+  console.log('PASS C/I suggestions appear below a desired-link violation');
+
+  const terrainFix = structuredClone(fixScenario);
+  terrainFix.map.propagationModel = 'terrain';
+  terrainFix.map.useTerrainElevation = true;
+  ({ card } = await open(terrainFix));
+  await card.getByText(/free-space estimate; terrain may differ/).waitFor();
+  console.log('PASS terrain distance suggestion is visibly labeled as an estimate');
   assert.deepEqual(errors, []);
 } finally { await context?.close(); await browser.close(); }

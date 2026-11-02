@@ -123,7 +123,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
           }}>{v === 'budget' ? 'Link budget' : 'Matrix'}</button>)}
       </div>}
       {open && view === 'matrix' && <div id="drawer-panel-matrix" role="tabpanel" aria-labelledby="drawer-tab-matrix" className="drawer-matrix-panel" tabIndex={0}>
-        <InterferenceMatrix sensors={map.sensors} pairs={pairs} assessments={assessments} onPin={p => { onPin({ ...p, scope: 'pair' }); setView('budget'); document.getElementById('drawer-tab-budget')?.focus(); }} />
+        <InterferenceMatrix map={map} pairs={pairs} assessments={assessments} onPin={p => { onPin({ ...p, scope: 'pair' }); setView('budget'); document.getElementById('drawer-tab-budget')?.focus(); }} />
       </div>}
       {open && view === 'budget' && (
         <div className="drawer-body" id="drawer-panel-budget" role="tabpanel" aria-labelledby="drawer-tab-budget">

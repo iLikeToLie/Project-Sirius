@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { formatNumber } from '../../lib/rf';
-import { pairVerdict, transmitterPowerRange, type ReceiverAssessment } from '../../lib/interference';
+import { mitigations, pairVerdict, transmitterPowerRange, type ReceiverAssessment } from '../../lib/interference';
 import { effectiveObjective, groundOf, type PairResult, receiverSummary, toggleDesired } from '../../lib/sensors';
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
@@ -30,6 +30,7 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
   const transmitters = map.sensors.filter((s) => s.role === 'tx');
   const summary = sensor.role === 'rx' ? receiverSummary(pairs, sensor.id) : null;
   const assessment = assessments.get(sensor.id);
+  const suggestions = sensor.role === 'rx' && assessment ? mitigations(map, assessment, pairs).slice(0, 3) : [];
   const link = summary?.links[0];
   const served = pairs.filter((p) => p.txId === sensor.id && p.intended);
   const interferes = pairs.filter((p) => {
@@ -117,6 +118,11 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
             </div>)}
           </>
         ) : <p className="field-note">{effectiveObjective(map, sensor) === 'avoidance' ? 'Avoidance: every transmitter is assessed as interference.' : 'No intended transmitter available.'}</p>)}
+
+        {suggestions.length > 0 && <div className="receiver-fixes">
+          <p className="field-note"><b>Possible fixes</b></p>
+          <ul className="interference-contributors" aria-label="Fix suggestions">{suggestions.map(s => <li key={`${s.kind}-${s.txId}`}>{s.text}</li>)}</ul>
+        </div>}
 
         {sensor.role === 'tx' && (
           <>
