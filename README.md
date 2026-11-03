@@ -1,6 +1,6 @@
 # Friis RF Link & Interference Calculator
 
-A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.8.0** is based on **workbook Version 3** and presents its objective-based RF tools through a science-forward mission-control interface.
+A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.9.0** is based on **workbook Version 3** and adds multi-transmitter interference planning to the Singapore Link workspace. This version is verified on `feature/interference-avoidance`, pending user review and deployment; see [the review record](docs/INTERFERENCE_AVOIDANCE_REVIEW.md).
 
 **Live calculator:** [iliketolie.github.io/Project-Sirius](https://iliketolie.github.io/Project-Sirius/)
 
@@ -10,20 +10,26 @@ A browser-based RF link-budget and interference-screening tool using the Friis f
 - Link-objective toggle for **Desired communication** versus **Interference avoidance**, with status logic appropriate to each use case.
 - Dynamic Tx-to-Rx graphic with antenna symbols, stylized beams, distance, endpoint power and gain, cable losses, propagation losses, status animation, receiver thresholds, and an Rx power meter.
 - Objective-aware Rx meter: desired communication compares received power with sensitivity and the required receive level; interference avoidance compares it with sensitivity and the interference threshold.
-- Link workspace on a map of Singapore (OneMap Grey with hillshading): place up to six sensors, each switchable between transmitter and receiver; drag, nudge or type their positions.
+- Link workspace on a map of Singapore (OneMap Grey with hillshading): place up to twelve sensors, each switchable between transmitter and receiver; drag, nudge or type their positions.
 - Per-receiver objectives: each receiver has a set of desired transmitters (Auto picks the nearest), judged for communication with one Rx meter bar each; every other transmitter is judged for interference; links and above-threshold interference are drawn on the map.
 - Terrain diffraction (ITU-R P.526 Bullington knife edge, 4/3 Earth radius) over ALOS AW3D30 ground, with a radial coverage map for the selected transmitter (acceptable, weak, interference) using its linked receiver's settings, computed in a web worker and drawn as a continuous signal gradient or as threshold bands. A Free space model option remains, with free-space range rings shown only in that model.
 - Workspace default objective (Desired / Avoidance) with per-receiver overrides, a frequency-scaled transmit animation, compact collapsible cards, and a Link-budget drawer holding every Calculator input and result plus a path-profile chart.
-- Antenna elevation = ground + height above ground. All sensors share one operating frequency.
+- Receiver interference assessment with aggregate power (default for avoidance receivers), worst single interferer (default for desired receivers), an adjustable 3 dB protection margin, contributor shares and unknown-path flags. Interferers within 3 dB below the threshold now read **Marginal interference**; desired links below their required C/I read **Interfered link**.
+- Per-transmitter allowed power ranges and fix suggestions, plus a clickable Tx × Rx interference matrix in the drawer.
+- Per-sensor frequency overrides, bandwidth and polarization (V, H, RHCP, LHCP); simple ACR or stepped-mask receiver rejection, an adjustable fixed XPD, and a noise-floor helper for setting interference thresholds. Frequency defaults to the shared setting.
+- Range, total Interference and transmitter Placement map layers. Placement classifies cells as Recommended, Safe, Marginal, Unsafe or Unknown against fixed victim and served receiver sets.
+- Antenna elevation = ground + height above ground.
 - Distance sweep with received-power, sensitivity, and interference-threshold curves.
 - Antenna-gain sweep with a Tx/Rx selector and three editable comparison distances.
 - Ten-row placement comparison with editable gains, distances, losses, rankings, and statuses.
-- Automatic device-local saving plus JSON scenario import/export. Scenarios from 1.5.0 and earlier open with the terrain model; 1.4.0 and earlier open as two map sensors with terrain elevation off, so over flat ground their results are unchanged.
+- Automatic device-local saving plus JSON scenario import/export (schema 6). Schema 5 and older files receive defaults for new fields. Received powers are preserved with default frequency and polarization; interference statuses can change under the new margin and aggregation defaults. Scenarios from 1.5.0 and earlier open with the terrain model; 1.4.0 and earlier open as two map sensors with terrain elevation off.
 - Responsive layout for desktop, tablet, and mobile browsers.
 - Mission-control interface with monospaced editorial typography, deep-space surfaces, solar-amber emphasis, compact instrument controls, and accessible status colours.
 - Automated tests against known Version 3 workbook results.
 
 The objective toggle changes status interpretation only; it does not change the Friis power calculation. The web version intentionally does **not** include the Version 4 antenna-pattern and off-axis-gain model.
+
+The Calculator tab keeps its existing single-link calculations and statuses, without the workspace protection margin. Placement terrain fields use reciprocal paths computed from the receiver side, an approximation. Frequency isolation uses rectangular in-band overlap plus ACR or mask rejection outside overlap; it does not model transmitter spectral leakage. XPD is a fixed input (15 dB by default), not a prediction of polarization isolation along a real path.
 
 ## Run locally
 

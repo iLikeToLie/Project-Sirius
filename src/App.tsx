@@ -62,12 +62,13 @@ function App() {
   // Every view reads the active link's inputs: the selected receiver and its strongest desired transmitter.
   // A transmitter the user is editing stays the active one even if the edit would re-rank the links.
   const [pin, setPin] = useState<LinkPin | null>(null);
-  useEffect(() => setPin(null), [state.map.selectedId]);
-  // A pin whose transmitter has left the receiver's desired set must not come back to life if it is re-added.
+  useEffect(() => setPin(current => current?.rxId === state.map.selectedId ? current : null), [state.map.selectedId]);
+  // Invalidate removed endpoints; legacy link-selector pins also expire outside the desired set.
   useEffect(() => {
     if (!pin) return;
     const rx = state.map.sensors.find((s) => s.id === pin.rxId);
-    if (!rx || !resolveDesiredTxs(state.map, rx, groundAt).some((s) => s.id === pin.txId)) setPin(null);
+    const candidates = pin.scope === 'pair' ? state.map.sensors.filter(s => s.role === 'tx') : rx ? resolveDesiredTxs(state.map, rx, groundAt) : [];
+    if (rx?.role !== 'rx' || !candidates.some(s => s.id === pin.txId)) setPin(null);
   }, [pin, state.map, groundAt]);
   const viewState = useMemo(() => ({ ...state, inputs: activeInputs(state, groundAt, pin) }), [state, groundAt, pin]);
   const elevationKnown = useMemo(() => activeElevationKnown(state, groundAt, pin), [state, groundAt, pin]);
@@ -77,7 +78,7 @@ function App() {
 
   const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
     const shown = activePair(state.map, groundAt, state.inputs, pin);
-    const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id } : null;
+    const held = shown ? { rxId: shown.rx.id, txId: shown.tx.id, scope: pin?.scope } : null;
     const edited = applyInputEdit(state, key, value, groundAt, held);
     if (!edited.ok) return edited.reason;
     setPin(held);

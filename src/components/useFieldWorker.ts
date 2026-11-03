@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { computeCoverage, type CoverageRequest, type CoverageResult } from '../lib/coverage';
+import { computeMultiField, type MultiFieldRequest, type MultiFieldResult } from '../lib/multiField';
 import { computeZones, type ZoneRequest, type ZoneResult } from '../lib/zones';
 import type { FieldRequest } from '../workers/fieldWorker';
 
 /** One running request plus one replaceable pending request; stale jobs never paint. */
-function useFieldWorker<T extends ZoneResult | CoverageResult>(request: Omit<FieldRequest, 'jobId'> | null, key: string) {
-  const [result, setResult] = useState<T | null>(null);
+function useFieldWorker<T extends ZoneResult | CoverageResult | MultiFieldResult>(request: Omit<FieldRequest, 'jobId'> | null, key: string) {
+  const [completed, setCompleted] = useState<{ value: T; key: string } | null>(null);
+  const keyRef = useRef(key); keyRef.current = key;
+  const runningKey = useRef(key);
   const [refining, setRefining] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const jobRef = useRef(0), busy = useRef(false);
@@ -13,10 +16,11 @@ function useFieldWorker<T extends ZoneResult | CoverageResult>(request: Omit<Fie
   const requestRef = useRef(request); requestRef.current = request;
   const dispatch = useRef<(req: FieldRequest) => void>(() => {});
   dispatch.current = req => {
+    runningKey.current = keyRef.current;
     if (workerRef.current) { busy.current = true; workerRef.current.postMessage(req); }
     else {
-      const out = req.kind === 'coverage' ? computeCoverage(req) : computeZones(req);
-      if (out.jobId === jobRef.current) { setResult(out as T); setRefining(false); }
+      const out = req.kind === 'multi' ? computeMultiField(req) : req.kind === 'coverage' ? computeCoverage(req) : computeZones(req);
+      if (out.jobId === jobRef.current) { setCompleted({ value: out as T, key: runningKey.current }); setRefining(false); }
     }
   };
   useEffect(() => {
@@ -25,7 +29,7 @@ function useFieldWorker<T extends ZoneResult | CoverageResult>(request: Omit<Fie
     workerRef.current = worker;
     worker.onmessage = (event: MessageEvent<T>) => {
       busy.current = false;
-      if (event.data.jobId === jobRef.current) { setResult(event.data); setRefining(false); }
+      if (event.data.jobId === jobRef.current) { setCompleted({ value: event.data, key: runningKey.current }); setRefining(false); }
       const next = pending.current; pending.current = null;
       if (next && next.jobId === jobRef.current) dispatch.current(next);
     };
@@ -39,7 +43,7 @@ function useFieldWorker<T extends ZoneResult | CoverageResult>(request: Omit<Fie
   useEffect(() => {
     const jobId = ++jobRef.current;
     pending.current = null;
-    if (!requestRef.current) { setResult(null); setRefining(false); return; }
+    if (!requestRef.current) { setCompleted(null); setRefining(false); return; }
     setRefining(true);
     const frame = requestAnimationFrame(() => {
       const req = { ...requestRef.current, jobId } as FieldRequest;
@@ -48,11 +52,14 @@ function useFieldWorker<T extends ZoneResult | CoverageResult>(request: Omit<Fie
     });
     return () => cancelAnimationFrame(frame);
   }, [key]);
-  return { result, refining };
+  return { result: completed?.value ?? null, resultKey: completed?.key, refining };
 }
 export function useZoneWorker(request: Omit<ZoneRequest, 'jobId'> | null, key: string) {
   return useFieldWorker<ZoneResult>(request ? { ...request, kind: 'zones' } : null, key);
 }
 export function useCoverageWorker(request: Omit<CoverageRequest, 'jobId'> | null, key: string) {
   return useFieldWorker<CoverageResult>(request ? { ...request, kind: 'coverage' } : null, key);
+}
+export function useMultiFieldWorker(request: Omit<MultiFieldRequest, 'jobId'> | null, key: string) {
+  return useFieldWorker<MultiFieldResult>(request ? { ...request, kind: 'multi' } : null, key);
 }

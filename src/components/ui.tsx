@@ -8,7 +8,7 @@ export function StatusBadge({ status }: { status: ScreeningStatus }) {
 export function statusTone(status: ScreeningStatus): 'good' | 'safe' | 'warning' | 'danger' | 'neutral' {
   if (status === 'Acceptable link') return 'good';
   if (status === 'Below interference threshold') return 'safe';
-  if (status === 'Weak link') return 'warning';
+  if (status === 'Weak link' || status === 'Marginal interference') return 'warning';
   if (status === 'Invalid input') return 'neutral';
   return 'danger';
 }

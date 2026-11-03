@@ -66,22 +66,35 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
   return { jobId: req.jobId, powerDbm, radials: req.radials, steps, stepM: req.stepM, unknown };
 }
 
+/** Nearest polar samples per raster node; NaN for unknown or out-of-range paths. */
+export function reprojectPowers(out: CoverageResult, source: { xM: number; yM: number }, raster: ScalarGrid): Float64Array {
+  const { x0, y0, dx, dy, cols } = raster;
+  const powers = new Float64Array(raster.values.length).fill(NaN);
+  for (let k = 0; k < powers.length; k++) {
+    const x = x0 + k % (cols + 1) * dx - source.xM, y = y0 + Math.floor(k / (cols + 1)) * dy - source.yM;
+    const d = Math.hypot(x, y);
+    if (d > out.steps * out.stepM) continue;
+    const radial = Math.round((Math.atan2(x, y) + 2 * Math.PI) % (2 * Math.PI) / (2 * Math.PI) * out.radials) % out.radials;
+    const step = Math.max(0, Math.min(out.steps - 1, Math.round(d / out.stepM) - 1));
+    const index = radial * out.steps + step;
+    if (!out.unknown[index]) powers[k] = out.powerDbm[index];
+  }
+  return powers;
+}
+
 /** Reprojects nearest polar samples onto the map's existing zone raster. */
 export function coverageZones(out: CoverageResult, req: Omit<CoverageRequest, 'jobId'>, raster: ScalarGrid): import('./zones').ZoneResult {
   const { x0, y0, dx, dy, cols, rows } = raster;
   const tx = toLocalM(req.tx, req.ground.origin);
   const classes = new Uint8Array(raster.values.length), interference = new Uint8Array(classes.length);
-  const powers = new Float64Array(classes.length).fill(NaN);
+  const powers = reprojectPowers(out, tx, raster);
   for (let k = 0; k < classes.length; k++) {
     const x = x0 + k % (cols + 1) * dx - tx.xM, y = y0 + Math.floor(k / (cols + 1)) * dy - tx.yM;
-    const d = Math.hypot(x, y);
-    if (d > out.steps * out.stepM) continue;
-    const radial = Math.round((Math.atan2(x, y) + 2 * Math.PI) % (2 * Math.PI) / (2 * Math.PI) * out.radials) % out.radials;
-    const step = Math.max(0, Math.min(out.steps - 1, Math.round(d / out.stepM) - 1));
-    const index = radial * out.steps + step, p = out.powerDbm[index];
-    if (!out.unknown[index]) powers[k] = p;
-    classes[k] = out.unknown[index] || !Number.isFinite(p) ? 255 : p >= req.inputs.sensitivityDbm + req.inputs.fadeMarginTargetDb ? 2 : p >= req.inputs.sensitivityDbm ? 1 : 0;
-    interference[k] = !out.unknown[index] && p >= req.inputs.interferenceThresholdDbm ? 1 : 0;
+    // Preserve the existing clear class outside the sweep, distinct from unknown paths within it.
+    if (Math.hypot(x, y) > out.steps * out.stepM) continue;
+    const p = powers[k];
+    classes[k] = !Number.isFinite(p) ? 255 : p >= req.inputs.sensitivityDbm + req.inputs.fadeMarginTargetDb ? 2 : p >= req.inputs.sensitivityDbm ? 1 : 0;
+    interference[k] = p >= req.inputs.interferenceThresholdDbm ? 1 : 0;
   }
   return { jobId: out.jobId, bounds: { minX: x0, maxX: x0 + cols * dx, minY: y0, maxY: y0 + rows * dy }, cols, rows, cellSizeM: Math.max(dx, dy), classes, interference, powerDbm: Float32Array.from(powers), outlines: {
     sensitivity: isolineSegments({ ...raster, values: powers }, req.inputs.sensitivityDbm),

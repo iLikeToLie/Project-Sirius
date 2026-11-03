@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { ELEVATION_TILE_URL } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE } from '../../lib/geo';
 import { signalColour } from '../../lib/signalColour';
+import { PLACEMENT } from '../../lib/interference';
 import { ZONE, type ZoneResult } from '../../lib/zones';
 import type { Sensor } from '../../types';
 import { lightStyle, lightSourceIds, installLightBasemap, showBasemap, type Basemap } from './lightBasemap';
@@ -21,6 +22,8 @@ const PAD = 0.3;
 export interface MapLink { from: LatLon; to: LatLon; kind: 'intended' | 'interference'; tone: string; emphasis: boolean; label?: string }
 export interface MapZones {
   result: ZoneResult;
+  totalInterference?: boolean;
+  placement?: boolean;
   /** Grid corners: north-west, north-east, south-east, south-west. */
   corners: [LatLon, LatLon, LatLon, LatLon];
   objective?: LinkObjective;
@@ -41,7 +44,7 @@ const lineFeatures = (lines: LatLon[][], props: Record<string, unknown>) => line
 }));
 
 /** Paints zone classes into an image, north row first (grid row 0 is the south edge). */
-function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }): string {
+function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }, totalInterference = false, placement = false): string {
   const width = result.cols + 1;
   const height = result.rows + 1;
   const canvas = document.createElement('canvas');
@@ -55,8 +58,10 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
       const node = j * width + i;
       const pixel = ((result.rows - j) * width + i) * 4;
       const cls = result.classes[node];
-      const gradient = range && result.powerDbm && cls !== ZONE.unknown ? signalColour(result.powerDbm[node], range.lo, range.hi) : null;
-      const colour = gradient ?? (cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0]);
+      const gradient = !placement && range && result.powerDbm && cls !== ZONE.unknown ? signalColour(result.powerDbm[node], range.lo, range.hi) : null;
+      const colour = gradient ?? (cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35]
+        : placement ? cls === PLACEMENT.recommended ? [...green, 95] : cls === PLACEMENT.safe ? [163, 217, 165, 95] : cls === PLACEMENT.marginal ? [...yellow, 46] : [...red, 54]
+        : totalInterference ? result.interference[node] ? [...red, 54] : cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0]);
       image.data.set(colour, pixel);
     }
   }
@@ -151,7 +156,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
         'line-color': ['match', ['get', 'tone'], 'good', token('--green'), 'warning', token('--yellow'), 'danger', token('--red'), 'safe', token('--blue'), token('--mute')],
       } });
       map.addLayer({ id: 'links-interference', type: 'line', source: 'links', filter: ['==', ['get', 'kind'], 'interference'], layout: line, paint: {
-        'line-width': ['case', ['get', 'emphasis'], 2, 1.25], 'line-dasharray': [2, 2], 'line-color': token('--red'),
+        'line-width': ['case', ['get', 'emphasis'], 2, 1.25], 'line-dasharray': [2, 2], 'line-color': ['match', ['get', 'tone'], 'warning', token('--yellow'), token('--red')],
         'line-opacity': ['case', ['get', 'emphasis'], 0.95, 0.45],
       } });
       map.addSource('range-rings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -256,7 +261,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       return;
     }
     const coordinates = zones.corners.map((p) => [p.lon, p.lat]) as [[number, number], [number, number], [number, number], [number, number]];
-    const url = paintZones(zones.result, zones.objective, zones.showAll, zones.range);
+    const url = paintZones(zones.result, zones.objective, zones.showAll, zones.range, zones.totalInterference, zones.placement);
     if (existing) {
       if (queue.loading) queue.next = { url, coordinates };
       else { queue.loading = true; existing.updateImage({ url, coordinates }); }

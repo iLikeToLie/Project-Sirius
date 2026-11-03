@@ -1,0 +1,113 @@
+// Production preview check; standard PLAYWRIGHT_MODULE / CHROMIUM_EXECUTABLE / E2E_URL overrides.
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { PNG } from 'pngjs';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
+const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}), args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const tile = new PNG({ width: 256, height: 256 });
+for (let i = 0; i < tile.data.length; i += 4) tile.data.set([128, 0, 0, 255], i);
+const body = PNG.sync.write(tile);
+const fixture = JSON.parse(readFileSync(new URL('./fixtures/v4-single-link.json', import.meta.url)));
+fixture.map.sensors[0].name = 'T1';
+fixture.map.sensors[1].name = 'R1';
+const errors = [];
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page.on('pageerror', e => errors.push(e.message));
+  await page.addInitScript(() => {
+    window.fieldRequests = [];
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function(data, ...args) {
+      if (data.kind === 'coverage' || data.kind === 'zones') window.fieldRequests.push({ kind: data.kind, inputs: data.inputs, slant: data.slant });
+      return post.call(this, data, ...args);
+    };
+  });
+  await page.route('https://www.onemap.gov.sg/**', r => r.fulfill({ contentType: 'image/png', body, headers: { 'access-control-allow-origin': '*' } }));
+  await page.route('**/dem/**/*.png', r => r.fulfill({ contentType: 'image/png', body }));
+  const open = async () => {
+    await page.goto(process.env.E2E_URL ?? 'http://127.0.0.1:5199/friis-rf-calculator/');
+    await page.getByRole('button', { name: 'Link workspace', exact: true }).click();
+  };
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
+  const commit = async (field, value) => { await field.fill(String(value)); await field.press('Enter'); };
+  await open();
+  await page.locator('input[type=file]').setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });
+  const card = page.locator('.selected-sensor-card');
+  const drawer = page.locator('.link-budget-drawer');
+  const select = async name => {
+    await page.locator('.sensor-row').filter({ has: page.getByText(name, { exact: true }) }).click();
+    await card.getByRole('tab', { name: 'Sensor', exact: true }).click();
+  };
+  if (await drawer.getByRole('button', { name: /^Link budget/ }).getAttribute('aria-expanded') !== 'true') await drawer.getByRole('button', { name: /^Link budget/ }).click();
+  await drawer.getByRole('tab', { name: 'Link budget', exact: true }).click();
+  const metric = label => drawer.locator('.metric').filter({ has: page.getByText(label, { exact: true }) });
+  const value = async label => Number((await metric(label).locator('strong').innerText()).split(' ')[0]);
+  const mismatch = async expected => {
+    await page.waitForFunction(expected => {
+      const metric = [...document.querySelectorAll('.metric')].find(m => m.querySelector('span')?.textContent === 'Per-sensor polarization mismatch');
+      return Number.parseFloat(metric?.querySelector('strong')?.textContent) === expected;
+    }, expected);
+  };
+  const baseline = await value('Received power');
+  assert.ok(Math.abs(baseline - (-51.18795996)) < .01, 'legacy V/V parity');
+  assert.equal((await saved()).map.crossPolarDiscriminationDb, 15);
+  assert.deepEqual((await saved()).map.sensors.map(s => s.polarization), ['V', 'V']);
+  await mismatch(0);
+  await page.getByRole('button', { name: 'Link settings', exact: true }).click();
+  const settings = page.locator('.link-settings-card');
+  const xpd = settings.getByLabel('Cross-polar discrimination (XPD)', { exact: false });
+  await settings.getByText('XPD falls in cluttered urban paths; 15 dB is a cautious default.', { exact: true }).waitFor();
+  await select('R1');
+  await page.waitForFunction(() => window.fieldRequests.some(r => r.kind === 'zones'));
+  const radius = await page.evaluate(() => window.fieldRequests.filter(r => r.kind === 'zones').at(-1).slant.interferenceM);
+  const pol = card.getByLabel('Sensor polarization', { exact: true });
+  assert.equal(await pol.locator('option').count(), 4);
+  await pol.selectOption('H');
+  await mismatch(15);
+  assert.ok(Math.abs(await value('Received power') - (baseline - 15)) < .01);
+  await page.waitForFunction(previous => window.fieldRequests.filter(r => r.kind === 'zones').at(-1).slant.interferenceM < previous * .2, radius);
+  const crossRadius = await page.evaluate(() => window.fieldRequests.filter(r => r.kind === 'zones').at(-1).slant.interferenceM);
+  await commit(xpd, 22);
+  await mismatch(22);
+  await page.waitForFunction(previous => window.fieldRequests.filter(r => r.kind === 'zones').at(-1).slant.interferenceM < previous * .5, crossRadius);
+  await commit(xpd, -1);
+  await settings.getByRole('alert').waitFor();
+  assert.equal((await saved()).map.crossPolarDiscriminationDb, 22, 'negative XPD rejected');
+  await commit(xpd, 0);
+  await mismatch(0);
+  assert.ok(Math.abs(await value('Received power') - baseline) < .01);
+  await commit(xpd, 15);
+  await pol.selectOption('RHCP');
+  await mismatch(3.01);
+  assert.ok(Math.abs(await value('Received power') - (baseline - 10 * Math.log10(2))) < .01);
+  await select('T1');
+  await pol.selectOption('LHCP');
+  await mismatch(15);
+  await card.getByRole('button', { name: 'Receiver', exact: true }).click();
+  assert.equal(await pol.inputValue(), 'LHCP', 'polarization survives role change');
+  await card.getByRole('button', { name: 'Transmitter', exact: true }).click();
+  await drawer.getByLabel('Polarization mismatch', { exact: false }).fill('2.5');
+  await mismatch(15);
+  assert.ok(Math.abs(await value('Received power') - (baseline - 15 - 2)) < .01, 'shared loss adds to mismatch once');
+  assert.equal(Number(await drawer.getByLabel('Other miscellaneous loss', { exact: false }).inputValue()), .5);
+  await drawer.getByLabel('Other miscellaneous loss', { exact: false }).fill('1.5');
+  assert.ok(Math.abs(await value('Received power') - (baseline - 15 - 3)) < .01, 'derived mismatch stays out of editable shared loss');
+  await select('R1');
+  await page.locator('select').filter({ has: page.locator('option[value="terrain"]') }).selectOption('terrain');
+  await page.waitForFunction(() => window.fieldRequests.some(r => r.kind === 'coverage' && r.inputs.otherLossDb === 16.5));
+  await commit(xpd, 20);
+  await mismatch(20);
+  await page.waitForFunction(() => window.fieldRequests.some(r => r.kind === 'coverage' && r.inputs.otherLossDb === 21.5));
+  await open();
+  await select('R1');
+  assert.equal(await pol.inputValue(), 'RHCP');
+  const state = await saved();
+  assert.equal(state.map.sensors[0].polarization, 'LHCP');
+  assert.equal(state.map.crossPolarDiscriminationDb, 20);
+  assert.equal(state.inputs.polarizationLossDb, 2.5);
+  assert.equal(state.inputs.otherLossDb, 1.5);
+  assert.deepEqual(errors, [], 'no uncaught page errors');
+  console.log('PASS polarization legacy parity, four choices, XPD validation/zero, linear/circular mismatch, role retention, additive shared losses, free-space and terrain worker updates, persistence');
+} finally {
+  await browser.close();
+}

@@ -1,5 +1,7 @@
 export type ScreeningStatus =
   | 'Possible interference'
+  | 'Marginal interference'
+  | 'Interfered link'
   | 'Acceptable link'
   | 'Weak link'
   | 'No link'
@@ -75,6 +77,7 @@ export interface LinkWorkspace {
 }
 
 export type SensorRole = 'tx' | 'rx';
+export interface RejectionStep { offsetMhz: number; rejectionDb: number }
 
 /** A placed antenna. Both role's fields are kept so toggling TX/RX never loses values. */
 export interface Sensor {
@@ -92,6 +95,13 @@ export interface Sensor {
   interferenceThresholdDbm: number;
   desiredTxIds: 'auto' | string[];
   objective: 'default' | LinkObjective;
+  protectionMarginDb: 'default' | number;
+  requiredCiDb: number;
+  frequencyGhz: 'default' | number;
+  bandwidthMhz: number;
+  acrDb: number;
+  rejectionMask: RejectionStep[];
+  polarization: 'V' | 'H' | 'RHCP' | 'LHCP';
 }
 
 export interface MapScenario {
@@ -101,10 +111,14 @@ export interface MapScenario {
   useTerrainElevation: boolean;
   defaultObjective: LinkObjective;
   propagationModel: 'free-space' | 'terrain';
+  protectionMarginDb: number;
+  aggregateInterference: 'objective' | 'always' | 'never';
+  rejectionModel: 'simple' | 'mask';
+  crossPolarDiscriminationDb: number;
 }
 
 export interface AppState {
-  schemaVersion: 5;
+  schemaVersion: 6;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;

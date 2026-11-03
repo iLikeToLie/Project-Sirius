@@ -459,7 +459,12 @@ main { min-width: 0; }
 .status { font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
 .status-acceptable-link { color: #5be3ae; background: rgba(52, 211, 153, .09); border-color: rgba(52, 211, 153, .32); }
 .status-below-interference-threshold { color: #8cc9ff; background: rgba(114, 183, 255, .09); border-color: rgba(114, 183, 255, .32); }
-.status-weak-link { color: #ffc56f; background: rgba(255, 179, 71, .09); border-color: rgba(255, 179, 71, .32); }
+.status-weak-link, .status-marginal-interference { color: #ffc56f; background: rgba(255, 179, 71, .09); border-color: rgba(255, 179, 71, .32); }
+.status-interfered-link { color: var(--red); background: rgba(255, 107, 107, .09); border-color: rgba(255, 107, 107, .32); }
+.protected-marker { background: var(--yellow); }
+.protected-key { color: var(--yellow); font-size: 11px; margin: 5px 0; }
+.interference-controls { margin-top: 10px; }
+.interference-contributors { padding-left: 18px; font-size: 12px; overflow-wrap: anywhere; }
 .status-possible-interference { color: #ff8a8a; background: rgba(255, 107, 107, .09); border-color: rgba(255, 107, 107, .32); }
 
 .sweep-grid { gap: 18px; }
@@ -693,6 +698,15 @@ tbody tr:hover { background: var(--surface-elevated); }
 .drawer-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
 .drawer-summary b { color: var(--link-accent, var(--ink)); }
 .drawer-body { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; padding: 0 12px 12px; overflow: auto; }
+.drawer-tabs { flex: none; margin: 0 12px 8px; }
+.drawer-matrix-panel { overflow: auto; min-height: 0; padding: 0 12px 12px; }
+.interference-matrix table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.interference-matrix caption { text-align: left; color: var(--mute); padding-bottom: 8px; }
+.interference-matrix th, .interference-matrix td { border: 1px solid var(--hairline); padding: 8px; text-align: left; min-width: 145px; }
+.interference-matrix th { font-weight: 600; }
+.matrix-cell { width: 100%; padding: 8px; white-space: nowrap; background: transparent; border: 1px solid currentColor; border-radius: 5px; }
+.matrix-cell:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.interference-matrix tfoot td span { display: block; margin-bottom: 4px; }
 .drawer-inputs, .drawer-results { display: grid; gap: 10px; align-content: start; min-width: 0; }
 .drawer-metrics { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 .drawer-metrics .metric { min-height: 0; padding: 9px 11px; }
@@ -758,6 +772,9 @@ tbody tr:hover { background: var(--surface-elevated); }
 
 /* Legend */
 .coverage-legend { left: 10px; bottom: 56px; width: 220px; padding: 8px 10px; gap: 6px; }
+.coverage-layers { display: flex; }
+.coverage-layers button { flex: 1; padding: 5px 4px; font-size: 10px; }
+.coverage-layers button:disabled { opacity: .45; cursor: default; }
 .drawer-open .coverage-legend { bottom: calc(40% + 22px); }
 .legend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .legend-head b { color: var(--ink); font-size: 11px; }

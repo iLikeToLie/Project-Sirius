@@ -1,4 +1,5 @@
 import { offsetLatLon, SG_REFERENCE } from '../lib/geo';
+import { defaultRejectionMask } from '../lib/isolation';
 import type { AppState, LinkInputs, LinkWorkspace, MapScenario, PlacementScenario, TerrainSettings } from '../types';
 
 const placementRows: Omit<PlacementScenario, 'id'>[] = [
@@ -39,17 +40,27 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     interferenceThresholdDbm: inputs.interferenceThresholdDbm,
     desiredTxIds: 'auto' as const,
     objective: 'default' as const,
+    protectionMarginDb: 'default' as const,
+    requiredCiDb: 10,
+    frequencyGhz: 'default' as const,
+    bandwidthMhz: 20,
+    acrDb: 30,
+    polarization: 'V' as const,
   };
   return {
     sensors: [
-      { ...common, id: 'sensor-1', name: inputs.txId || 'T1', role: 'tx', ...offsetLatLon(SG_REFERENCE, tx.xM, tx.yM), aglM: tx.aglM, gainDbi: inputs.txGainDbi, cableLossDb: inputs.txLossDb },
-      { ...common, id: 'sensor-2', name: inputs.rxId || 'R1', role: 'rx', ...offsetLatLon(SG_REFERENCE, rx.xM, rx.yM), aglM: rx.aglM, gainDbi: inputs.rxGainDbi, cableLossDb: inputs.rxLossDb },
+      { ...common, rejectionMask: defaultRejectionMask(), id: 'sensor-1', name: inputs.txId || 'T1', role: 'tx', ...offsetLatLon(SG_REFERENCE, tx.xM, tx.yM), aglM: tx.aglM, gainDbi: inputs.txGainDbi, cableLossDb: inputs.txLossDb },
+      { ...common, rejectionMask: defaultRejectionMask(), id: 'sensor-2', name: inputs.rxId || 'R1', role: 'rx', ...offsetLatLon(SG_REFERENCE, rx.xM, rx.yM), aglM: rx.aglM, gainDbi: inputs.rxGainDbi, cableLossDb: inputs.rxLossDb },
     ],
     selectedId: null,
     zonesForRxId: 'auto',
     useTerrainElevation,
     defaultObjective: 'desired',
     propagationModel: 'terrain',
+    protectionMarginDb: 3,
+    aggregateInterference: 'objective',
+    rejectionModel: 'simple',
+    crossPolarDiscriminationDb: 15,
   };
 }
 
@@ -75,7 +86,7 @@ const DEFAULT_INPUTS: LinkInputs = {
 const defaultPlacements = workspaceForDistance(500);
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   linkObjective: 'desired',
   inputs: DEFAULT_INPUTS,
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },

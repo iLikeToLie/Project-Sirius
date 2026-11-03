@@ -2,6 +2,7 @@ import { DEFAULT_TERRAIN, freshDefaultState, mapForPlacements, workspaceForDista
 import type { AntennaPlacement, AppState, LinkInputs, LinkWorkspace, MapScenario, Sensor, TerrainSettings } from '../types';
 import { antennaElevationM, isValidPlacement } from './linkGeometry';
 import { MAX_SENSORS } from './sensors';
+import { defaultRejectionMask, isRejectionMask } from './isolation';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -73,6 +74,20 @@ function readSensor(value: unknown): Sensor | undefined {
   const valid = Math.abs(sensor.lat) <= 90 && Math.abs(sensor.lon) <= 180 && sensor.aglM >= 0 && sensor.cableLossDb >= 0 && sensor.fadeMarginTargetDb >= 0;
   if (value.objective !== undefined && !['default', 'desired', 'avoidance'].includes(value.objective as string)) return undefined;
   sensor.objective = value.objective as Sensor['objective'] ?? 'default';
+  if (value.protectionMarginDb !== undefined && value.protectionMarginDb !== 'default' && (!isFiniteNumber(value.protectionMarginDb) || value.protectionMarginDb < 0)) return undefined;
+  if (value.requiredCiDb !== undefined && (!isFiniteNumber(value.requiredCiDb) || value.requiredCiDb < 0)) return undefined;
+  sensor.protectionMarginDb = value.protectionMarginDb as Sensor['protectionMarginDb'] ?? 'default';
+  sensor.requiredCiDb = value.requiredCiDb as number ?? 10;
+  if (value.frequencyGhz !== undefined && value.frequencyGhz !== 'default' && (!isFiniteNumber(value.frequencyGhz) || value.frequencyGhz <= 0)) return undefined;
+  if (value.bandwidthMhz !== undefined && (!isFiniteNumber(value.bandwidthMhz) || value.bandwidthMhz <= 0)) return undefined;
+  if (value.acrDb !== undefined && (!isFiniteNumber(value.acrDb) || value.acrDb < 0)) return undefined;
+  if (value.rejectionMask !== undefined && !isRejectionMask(value.rejectionMask)) return undefined;
+  sensor.frequencyGhz = value.frequencyGhz as Sensor['frequencyGhz'] ?? 'default';
+  sensor.bandwidthMhz = value.bandwidthMhz as number ?? 20;
+  sensor.acrDb = value.acrDb as number ?? 30;
+  if (value.polarization !== undefined && !['V', 'H', 'RHCP', 'LHCP'].includes(value.polarization as string)) return undefined;
+  sensor.polarization = value.polarization as Sensor['polarization'] ?? 'V';
+  sensor.rejectionMask = isRejectionMask(value.rejectionMask) ? value.rejectionMask.map(s => ({ ...s })) : defaultRejectionMask();
   return valid ? sensor : undefined;
 }
 
@@ -81,6 +96,10 @@ function readMap(value: unknown): MapScenario | undefined {
   if (!isRecord(value) || !Array.isArray(value.sensors) || value.sensors.length > MAX_SENSORS || typeof value.useTerrainElevation !== 'boolean') return undefined;
   if (value.propagationModel !== undefined && !['terrain', 'free-space'].includes(value.propagationModel as string)) return undefined;
   if (value.defaultObjective !== undefined && !['desired', 'avoidance'].includes(value.defaultObjective as string)) return undefined;
+  if (value.protectionMarginDb !== undefined && (!isFiniteNumber(value.protectionMarginDb) || value.protectionMarginDb < 0)) return undefined;
+  if (value.aggregateInterference !== undefined && !['objective', 'always', 'never'].includes(value.aggregateInterference as string)) return undefined;
+  if (value.rejectionModel !== undefined && !['simple', 'mask'].includes(value.rejectionModel as string)) return undefined;
+  if (value.crossPolarDiscriminationDb !== undefined && (!isFiniteNumber(value.crossPolarDiscriminationDb) || value.crossPolarDiscriminationDb < 0)) return undefined;
   const sensors = value.sensors.map(readSensor);
   if (sensors.some((s) => !s)) return undefined;
   const list = sensors as Sensor[];
@@ -98,6 +117,10 @@ function readMap(value: unknown): MapScenario | undefined {
     useTerrainElevation: value.useTerrainElevation,
     propagationModel: value.propagationModel as MapScenario['propagationModel'] ?? 'terrain',
     defaultObjective: value.defaultObjective as MapScenario['defaultObjective'] ?? 'desired',
+    protectionMarginDb: value.protectionMarginDb as number ?? 3,
+    aggregateInterference: value.aggregateInterference as MapScenario['aggregateInterference'] ?? 'objective',
+    rejectionModel: value.rejectionModel as MapScenario['rejectionModel'] ?? 'simple',
+    crossPolarDiscriminationDb: value.crossPolarDiscriminationDb as number ?? 15,
   };
 }
 
@@ -108,7 +131,7 @@ export function normalizeState(saved?: unknown): AppState {
   const inputs = { ...defaults.inputs, ...s.inputs };
   const map = 'map' in s ? readMap(s.map) ?? defaults.map : migrateWorkspace(readWorkspace(s.workspace, inputs.distanceM), inputs);
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     linkObjective: s.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
     inputs,
     distanceSweep: { ...defaults.distanceSweep, ...s.distanceSweep },

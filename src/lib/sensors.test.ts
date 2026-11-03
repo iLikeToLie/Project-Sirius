@@ -11,13 +11,13 @@ import {
 const flat: GroundAt = () => 0;
 const defaults = DEFAULT_STATE.inputs;
 const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSensor(sensors, createSensor(sensors, role, offsetLatLon(SG_REFERENCE, dx, dy), defaults));
-const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation });
+const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation, protectionMarginDb: 3, aggregateInterference: 'objective', rejectionModel: 'simple', crossPolarDiscriminationDb: 15 });
 const LINK = ['Acceptable link', 'Weak link', 'No link'];
 const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
 const [T1, T2, T3, R1, R2] = place(place(place(place(place([], 'tx', 0), 'tx', 1000), 'tx', 2000), 'rx', 200), 'rx', 400);
 const sensorsWithLinks: Sensor[] = [T1, T2, { ...R1, desiredTxIds: [T1.id, T2.id] }, { ...R2, desiredTxIds: [T1.id] }];
 const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[] => powers.map(([txId, power]) => ({
-  txId, txName: txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, clearance: 'unknown',
+  txId, txName: txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, clearance: 'unknown',
   result: { ...calculateLink(defaults, 'desired'), receivedPowerDbm: power },
 }));
 
@@ -117,9 +117,19 @@ describe('sensor model', () => {
     sensors = place(sensors, 'tx', 100);
     sensors = place(sensors, 'rx', 200);
     expect(sensors.map((s) => s.name)).toEqual(['T1', 'T2', 'R1']);
-    for (let i = 0; i < 5; i += 1) sensors = place(sensors, 'rx', 300 + i);
+    for (let i = 0; i < 9; i += 1) sensors = place(sensors, 'rx', 300 + i);
+    expect(sensors).toHaveLength(12);
     expect(sensors).toHaveLength(MAX_SENSORS);
     expect(place(sensors, 'rx', 999)).toBe(sensors);
+  });
+
+  it('evaluates all 36 terrain paths for six transmitters and six receivers', () => {
+    let sensors: Sensor[] = [];
+    for (let i = 0; i < 12; i += 1) sensors = place(sensors, i < 6 ? 'tx' : 'rx', i * 200);
+    const pairs = evaluatePairs({ ...scenario(sensors, true), propagationModel: 'terrain' }, defaults, flat);
+    expect(pairs).toHaveLength(36);
+    expect(pairs.every(p => p.elevationKnown && p.result.valid)).toBe(true);
+    expect(new Set(pairs.map(p => `${p.txId}/${p.rxId}`)).size).toBe(36);
   });
 
   it('keeps role-specific values when toggling', () => {

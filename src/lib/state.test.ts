@@ -4,6 +4,7 @@ import type { AppState, LinkWorkspace } from '../types';
 import { activeInputs } from './activeLink';
 import { separation3dM } from './linkGeometry';
 import { normalizeState, validateImport } from './state';
+import { createSensor } from './sensors';
 
 const unknownGround = () => null;
 const base = () => {
@@ -27,9 +28,21 @@ const v5WithReceiver = (receiver: Record<string, unknown>) => {
 const v1 = (distanceM: number) => { const rest = base(); return { ...rest, inputs: { ...rest.inputs, distanceM } }; };
 
 describe('scenario state', () => {
+  it('imports and restores twelve sensors, but rejects a thirteenth', () => {
+    const state = freshDefaultState();
+    state.map.sensors = [];
+    for (let i = 0; i < 12; i += 1) {
+      state.map.sensors.push(createSensor(state.map.sensors, i < 6 ? 'tx' : 'rx', { lat: 1.3, lon: 103.8 + i * 0.001 }, state.inputs));
+    }
+    expect(validateImport(state)?.map.sensors).toEqual(state.map.sensors);
+    expect(normalizeState(state).map.sensors).toEqual(state.map.sensors);
+    state.map.sensors.push(createSensor(state.map.sensors, 'rx', { lat: 1.3, lon: 103.9 }, state.inputs));
+    expect(validateImport(state)).toBeNull();
+    expect(normalizeState(state).map).toEqual(freshDefaultState().map);
+  });
   it('returns defaults when nothing is saved', () => {
     expect(normalizeState()).toEqual(DEFAULT_STATE);
-    expect(DEFAULT_STATE.schemaVersion).toBe(5);
+    expect(DEFAULT_STATE.schemaVersion).toBe(6);
     expect(DEFAULT_STATE.map.sensors.map((s) => s.role)).toEqual(['tx', 'rx']);
     expect(DEFAULT_STATE.map.useTerrainElevation).toBe(true);
   });
@@ -62,7 +75,7 @@ describe('scenario state', () => {
   it('migrates a 1.4.0 workspace without changing its result', () => {
     const workspace: LinkWorkspace = { tx: { xM: 300, yM: 400, aglM: 12 }, rx: { xM: 0, yM: 0, aglM: 10 }, terrain: { ...DEFAULT_TERRAIN, enabled: true } };
     const state = normalizeState(v2(workspace) as unknown as Partial<AppState>);
-    expect(state.schemaVersion).toBe(5);
+    expect(state.schemaVersion).toBe(6);
     expect(state.map.sensors).toHaveLength(2);
     expect(state.map.useTerrainElevation).toBe(false);
     expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(separation3dM(workspace), 6);
@@ -88,13 +101,13 @@ describe('scenario state', () => {
     expect(state.map.sensors.map((s) => s.name)).toEqual([DEFAULT_STATE.inputs.txId, DEFAULT_STATE.inputs.rxId]);
   });
 
-  it('rejects imports with more than six sensors, unknown roles or non-numeric fields', () => {
+  it('rejects imports with more than twelve sensors, unknown roles or non-numeric fields', () => {
     const good = freshDefaultState();
-    const seven = { ...good, map: { ...good.map, sensors: Array.from({ length: 7 }, (_, i) => ({ ...good.map.sensors[0], id: `s${i}` })) } };
+    const thirteen = { ...good, map: { ...good.map, sensors: Array.from({ length: 13 }, (_, i) => ({ ...good.map.sensors[0], id: `s${i}` })) } };
     const badRole = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], role: 'relay' }] } };
     const badNumber = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], lat: 'north' }] } };
     const negativeHeight = { ...good, map: { ...good.map, sensors: [{ ...good.map.sensors[0], aglM: -1 }] } };
-    for (const raw of [seven, badRole, badNumber, negativeHeight, { inputs: good.inputs }, null, 'text']) expect(validateImport(raw)).toBeNull();
+    for (const raw of [thirteen, badRole, badNumber, negativeHeight, { inputs: good.inputs }, null, 'text']) expect(validateImport(raw)).toBeNull();
   });
 
   it('accepts a valid v3 scenario round trip', () => {
@@ -107,6 +120,66 @@ describe('scenario state', () => {
     const good = freshDefaultState();
     good.map.selectedId = 'ghost';
     expect(normalizeState(good).map.selectedId).toBeNull();
+  });
+});
+
+describe('schema 6 interference settings', () => {
+  it('migrates a schema 5 file with missing fields without changing link results', () => {
+    const old = JSON.parse(JSON.stringify(freshDefaultState()));
+    old.schemaVersion = 5;
+    delete old.map.protectionMarginDb;
+    delete old.map.aggregateInterference;
+    for (const sensor of old.map.sensors) {
+      delete sensor.protectionMarginDb;
+      delete sensor.requiredCiDb;
+    }
+    const next = validateImport(old)!;
+    expect(next.schemaVersion).toBe(6);
+    expect(next.map.protectionMarginDb).toBe(3);
+    expect(next.map.aggregateInterference).toBe('objective');
+    for (const sensor of next.map.sensors) {
+      expect(sensor.protectionMarginDb).toBe('default');
+      expect(sensor.requiredCiDb).toBe(10);
+    }
+    expect(activeInputs(next, () => 0)).toEqual(activeInputs(freshDefaultState(), () => 0));
+  });
+
+  it('round-trips custom schema 6 settings including zero and receiver overrides', () => {
+    const raw = JSON.parse(JSON.stringify(freshDefaultState()));
+    raw.schemaVersion = 6;
+    raw.map.protectionMarginDb = 0;
+    raw.map.sensors[1].protectionMarginDb = 4;
+    raw.map.sensors[1].requiredCiDb = 0;
+    for (const mode of ['objective', 'always', 'never']) {
+      raw.map.aggregateInterference = mode;
+      expect(validateImport(raw)).toEqual(raw);
+    }
+  });
+
+  it('defaults newly created sensors', () => {
+    const state = freshDefaultState();
+    const sensor = createSensor([], 'rx', { lat: 1.3, lon: 103.8 }, state.inputs);
+    expect(sensor).toMatchObject({ protectionMarginDb: 'default', requiredCiDb: 10 });
+  });
+
+  it('rejects invalid settings instead of silently replacing them', () => {
+    for (const field of ['protectionMarginDb', 'requiredCiDb']) {
+      for (const value of [-1, NaN, Infinity, null, '3', 'invalid']) {
+        const raw = JSON.parse(JSON.stringify(freshDefaultState()));
+        raw.map.sensors[1][field] = value;
+        expect(validateImport(raw), `${field}: ${String(value)}`).toBeNull();
+      }
+    }
+    for (const value of [-1, NaN, Infinity, null, '3', 'default']) {
+      const raw = JSON.parse(JSON.stringify(freshDefaultState()));
+      raw.map.protectionMarginDb = value;
+      expect(validateImport(raw)).toBeNull();
+    }
+    for (const value of ['invalid', null, 1]) {
+      const raw = JSON.parse(JSON.stringify(freshDefaultState()));
+      raw.map.aggregateInterference = value;
+      expect(validateImport(raw)).toBeNull();
+    }
   });
 });
 

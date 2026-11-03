@@ -1,20 +1,21 @@
 # Handoff — Friis RF calculator / Link workspace
 
-Last updated 28 October 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
+Last updated 2 November 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
 
 ## Where things stand
 
 | Item | State |
 |---|---|
 | Repository | `github.com/iLikeToLie/Project-Sirius` (renamed from `friis-rf-calculator`; GitHub forwards the old repo URL). |
-| Live site | **https://iliketolie.github.io/Project-Sirius/** — web **1.8.0** plus the elevation-notice fix (PR #6), deployed from `main` @ `a26a12d`. The old `iliketolie.github.io/friis-rf-calculator/` address returns 404. |
-| Branch to work from | **`main`**. Everything is merged; there is no open feature branch. Start new work on a fresh branch from `main`. |
-| Tests | 160 unit tests (`corepack pnpm test`), `tsc -b` clean, `vite build` with no warnings, four browser checks pass (see Environment). |
+| Live site | **https://iliketolie.github.io/Project-Sirius/**. Last recorded release: web **1.8.0**; deployment not rechecked for this documentation task. Web 1.9.0 has not been pushed or merged. |
+| Branch to work from | **`feature/interference-avoidance`**, worktree `.worktrees/interference-avoidance`. Tasks 1–16 complete for web **1.9.0**, including independent review and fixes. Local `main` is at `edb7679`; no merge or push performed. Keep this branch for user review. |
+| Tests | 302 unit tests across 30 files (`corepack pnpm test`); production build passes without warnings. All eleven whole-branch Review Focus cases and ten existing browser scripts pass; commands, timing, screenshots, review fixes and two deferred minor findings are in `docs/INTERFERENCE_AVOIDANCE_REVIEW.md`. |
 
 ### Release history (newest first)
 
 | Version | PR | What it added |
 |---|---|---|
+| 1.9.0 (branch only) | — | Twelve sensors, aggregate interference and protection margin, desired-link C/I, power limits and fixes, Tx × Rx matrix, frequency/bandwidth and polarization isolation, noise-floor helper, total Interference and transmitter Placement layers; schema 6. Whole-branch review complete; pending user review and deployment. |
 | fix | #6 | No false "Elevation tiles unavailable" notice when panning past Singapore: tiles outside the DEM are not requested, and a 404 is missing data, not an outage. |
 | 1.8.0 | #5 | Distance labels on desired links; Map select (OneMap / Plain terrain); view preferences remembered per device (`usePref`); F toggles full screen; Link settings number fields readable and frequency scale labels at their log positions; sensor list stops above the legend; vendor chunks (MapLibre, charts, React); deploy workflow on current action majors (Node 24) and `ubuntu-24.04`. |
 | 1.7.1 | #4 | Full screen button; resizable Link budget drawer (drag handle, keys, Expand); pan margin widened from 0.05° to 0.3°. |
@@ -27,7 +28,8 @@ Last updated 28 October 2026. Everything needed to continue this work on another
 
 ## Branches
 
-- `main`: the only branch to build on. Contains every feature below.
+- `feature/interference-avoidance`: verified web 1.9.0 work. Plan Tasks 1–16 complete; retain the branch/worktree for user review.
+- `main`: released baseline; does not contain the web 1.9.0 interference work.
 - Merged and kept for reference: `feature/v2-ui` (#1), `worktree-coverage-aesthetic` (#2), `integrate/consolidation` (#3), `feature/workspace-layout` (#4), `feature/suggestions` (#5), `fix/elevation-offline` (#6), `feature/multi-link-receivers` (via #3).
 - `feature/link-workspace-terrain` (`609b284`): **do not merge.** Despite being a late commit, most of its files are older copies of v2-ui or multi-link files, and it lacks the drawer and PR #2. Its one new change (hide rings in terrain mode) and its docs were ported by hand into #3.
 - These branches can be deleted on GitHub once you no longer need them.
@@ -36,6 +38,7 @@ Last updated 28 October 2026. Everything needed to continue this work on another
 ## Read in this order
 
 1. This file, then `docs/BACKLOG.md` (open ideas, with done items marked).
+   For the current branch, read `docs/superpowers/plans/2026-11-02-interference-avoidance.md` and `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` next.
 2. `REPOSITORY_BRIEF.md`: the original repo review (pre-1.4.0 baseline and the calculation rules to preserve). Its URLs predate the rename.
 3. `docs/superpowers/specs/2026-10-26-link-workspace-v2-design.md`: the approved v2 design (terrain, coverage, drawer).
 4. `docs/superpowers/plans/2026-10-27-multi-link-receivers.md` and `docs/MULTI_LINK_REVIEW.md`: the multi-transmitter plan and its verification record.
@@ -48,9 +51,13 @@ Last updated 28 October 2026. Everything needed to continue this work on another
 
 - `src/lib/rf.ts`: Version 3 Friis engine. **Do not change**; terrain loss is added through `otherLossDb`.
 - `src/lib/propagation.ts`, `coverage.ts`: Bullington diffraction and the radial coverage sweep (run in `src/workers/fieldWorker.ts`).
+- `src/lib/interference.ts`: receiver assessments, aggregate/worst-single powers, protected limits, desired-link C/I, transmitter power allowances, fix suggestions and placement classification.
+- `src/lib/isolation.ts`: rectangular channel overlap, ACR/stepped-mask rejection, polarization mismatch and receiver noise floor. Pair-specific losses enter `pairLinkInputs` in `sensors.ts`.
+- `src/lib/multiField.ts`: independent per-source power rasters for free-space and terrain paths, dispatched through `fieldWorker.ts` and `useMultiField.ts`.
+- `src/lib/interferenceLayer.ts`: receiver/source selection, field combination and categorical rendering for Interference and Placement layers.
 - `src/lib/sensors.ts`: pair evaluation, `resolveDesiredTxs`, `receiverSummary`, `worstLink`, `meterScale`.
 - `src/lib/activeLink.ts`: the active pair the Calculator, sweeps and drawer show, with the optional `LinkPin`.
-- `src/lib/state.ts`: load, validation and migration (schema 2 → 5). Saved key in `localStorage` is unchanged.
+- `src/lib/state.ts`: load, validation and migration (schema 2 → 6). New fields default when absent; saved key in `localStorage` is unchanged.
 - `src/lib/signalColour.ts`: gradient colours and ranges.
 - `src/components/map/MapWorkspace.tsx`: workspace state (prefs, full screen, drawer size, coverage style, basemap) and wiring.
 - `src/components/map/SensorMap.tsx`: MapLibre map, zones, rings, link lines, distance labels, basemap visibility, `PAD` pan margin.
@@ -61,13 +68,15 @@ Last updated 28 October 2026. Everything needed to continue this work on another
 
 ## Decisions the user made (do not re-ask)
 
-- **Sensors:** transmitters and receivers, up to **6**, each with a TX/RX toggle.
+- **Sensors:** transmitters and receivers, up to **12** in web 1.9.0, each with a TX/RX toggle.
 - **Objective:** a receiver has a set of **desired transmitters**, **Auto (nearest)** by default (1.7.0). The objective is a **workspace default plus per-receiver override**. An avoidance receiver shows the displayed pair against the interference threshold.
 - **Coverage style:** terrain coverage can be drawn as a **gradient or as bands**, with a toggle (1.7.0).
 - **Consolidation:** build on `main`; keep every feature; prefer the latest work, but not stale file copies.
 - **Workspace room (1.7.1):** the map must allow centring a setup near the coast; full screen mode; a resizable or full-size Link budget drawer.
 - **Releases:** the user reviews on the live site, so changes go out as PRs merged to `main` (which deploys). Ask before merging unless told to merge.
-- **Shared settings:** all sensors share **one operating frequency**.
+- **Shared settings:** sensors default to the shared operating frequency; web 1.9.0 permits per-sensor overrides and bandwidths.
+- **Interference (2 Nov):** default aggregation applies to avoidance receivers only; default protection margin is 3 dB with receiver overrides. Desired links require 10 dB C/I by default. Both receiver rejection models retain values when toggled; XPD is a fixed adjustable input (15 dB default).
+- **Calculator scope:** `src/lib/rf.ts` is unchanged from `main`. The Calculator retains raw single-link statuses without a protection margin; its version chips and guide still say 1.8.0. Earlier branch work changed pair-pin integration in `src/App.tsx`; Task 15 leaves that file untouched. The package and release documentation identify the workspace release as 1.9.0.
 - **Map:** a terrain map of **Singapore**, not satellite, using MapLibre + OneMap Grey (Plain terrain is an option). Layout **B**: full-bleed map with floating cards, desktop-first.
 - **Zones:** range zones use the **linked receiver's** settings.
 - **Terrain:** terrain should **block links** (frequency-dependent), with a **radial coverage map** like `Reference Images/`.
@@ -115,7 +124,7 @@ Last updated 28 October 2026. Everything needed to continue this work on another
 - **Old URL redirect:** create a public repo `iLikeToLie/friis-rf-calculator` with a redirect page to `/Project-Sirius/` (keep path and hash) and enable Pages. **First** run `git remote set-url origin https://github.com/iLikeToLie/Project-Sirius.git` in every clone, because creating that repo ends GitHub's forwarding of the old repo URL. This step was blocked by a permission prompt and is not done.
 - **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) and item 5 (match the drawer Rx meter to the reference) are open. See `docs/BACKLOG.md`.
 - **OneMap API terms:** confirm tile use from a public site (registration may be required).
-- **Final review:** no independent reviewer pass has been run over 1.7.0 – 1.8.0; each PR was self-reviewed and verified with tests and browser checks.
+- **Final review:** Task 16 completed all eleven Review Focus cases and independent code review. Three Important findings were reproduced and fixed; two Minor findings are deferred (protected-limit equality colour and unnecessary field recomputation). In the twelve-sensor terrain fixture, p95 input-to-frame delay was 7.1 ms and worker requests peaked at 374.7 ms. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for measurement limits and screenshots.
 
 ## Not in git (copy manually or re-create)
 
@@ -128,7 +137,7 @@ Last updated 28 October 2026. Everything needed to continue this work on another
 ## Environment setup on a new machine
 
 - **Clone:** `git clone https://github.com/iLikeToLie/Project-Sirius.git` (use the new name so the remote survives the redirect repo above).
-- **Node and pnpm:** Node ≥ 22 (tested on 24.22.1; CI uses 24). `corepack pnpm install`, then `corepack pnpm test` (160 passing), `corepack pnpm build`, `corepack pnpm dev`.
+- **Node and pnpm:** Node ≥ 22 (tested on 24.22.1; CI uses 24). `corepack pnpm install`, then `corepack pnpm test` (302 passing at Task 16), `corepack pnpm build`, `corepack pnpm dev`.
 - **Dev and preview server:** locally the base path is `/friis-rf-calculator/` (CI sets `VITE_BASE` from the repo name). For browser checks: `corepack pnpm build`, then `node_modules/.bin/vite preview --host 127.0.0.1 --port 5199 --strictPort`.
 - **GitHub CLI:** `gh auth login` (account `iLikeToLie`). On Windows, if `gh` is not on PATH, use `"C:/Program Files/GitHub CLI/gh.exe"`.
 - **Git identity:** per repo: `git config user.name iLikeToLie` and `git config user.email 113039795+iLikeToLie@users.noreply.github.com`.
@@ -147,7 +156,7 @@ Last updated 28 October 2026. Everything needed to continue this work on another
 
 ## How to resume
 
-1. Clone (or `git pull` on `main`) and run the setup above; confirm 160 tests pass.
-2. Open the live site and note review comments.
-3. Branch from `main`, implement, run the unit tests and the four browser checks, open a PR, and merge when the user approves; the merge deploys to Pages.
-4. Add a `VERSION_HISTORY.txt` entry and bump `package.json` and the version chips in `src/App.tsx` for each release.
+1. Check out `feature/interference-avoidance` (or enter its existing worktree) and run the setup above; confirm 302 tests pass.
+2. Read the completed plan and review record. To reproduce Task 16, run `scripts/e2e/interference-avoidance.mjs` against production preview with the browser environment variables above; screenshots and timing are written under `.superpowers/review-task16/` by default.
+3. Keep the branch local until the user authorizes publishing or integration. A merge to `main` deploys to Pages.
+4. Web 1.9.0 versioning is in `package.json` and `VERSION_HISTORY.txt`; the plan explicitly excludes `src/App.tsx` edits, including its historical version labels and guide.

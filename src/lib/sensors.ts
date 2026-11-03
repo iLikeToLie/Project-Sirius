@@ -3,8 +3,9 @@ import type { GroundAt } from './elevation';
 import { type LatLon, toLocalM } from './geo';
 import { buildProfile, bullingtonLossDb, type Clearance } from './propagation';
 import { calculateLink, type LinkResult } from './rf';
+import { centreMhz, defaultRejectionMask, frequencyRejectionDb, polarizationMismatchDb } from './isolation';
 
-export const MAX_SENSORS = 6;
+export const MAX_SENSORS = 12;
 
 const AUTO_NAME = /^[TR][1-9]\d*$/;
 
@@ -36,6 +37,13 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     interferenceThresholdDbm: defaults.interferenceThresholdDbm,
     desiredTxIds: 'auto',
     objective: 'default',
+    protectionMarginDb: 'default',
+    requiredCiDb: 10,
+    frequencyGhz: 'default',
+    bandwidthMhz: 20,
+    acrDb: 30,
+    rejectionMask: defaultRejectionMask(),
+    polarization: 'V',
   };
 }
 
@@ -119,7 +127,19 @@ export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM
   };
 }
 
-export interface PairResult { txId: string; txName: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; clearance: Clearance | 'unknown' }
+export function pairLinkInputs(map: MapScenario, shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number): { inputs: LinkInputs; rejectionDb: number; polarizationDb: number } {
+  const inputs = pairInputs(shared, tx, rx, distanceM);
+  inputs.frequencyGhz = centreMhz(tx, shared) / 1000;
+  const rejectionDb = frequencyRejectionDb(
+    { fMhz: centreMhz(tx, shared), bwMhz: tx.bandwidthMhz },
+    { fMhz: centreMhz(rx, shared), bwMhz: rx.bandwidthMhz, acrDb: rx.acrDb, mask: rx.rejectionMask }, map.rejectionModel,
+  );
+  const polarizationDb = polarizationMismatchDb(tx.polarization, rx.polarization, map.crossPolarDiscriminationDb);
+  inputs.otherLossDb += rejectionDb + polarizationDb;
+  return { inputs, rejectionDb, polarizationDb };
+}
+
+export interface PairResult { txId: string; txName: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; rejectionDb: number; polarizationDb: number; clearance: Clearance | 'unknown' }
 
 export function meterScale(links: PairResult[], inputs: LinkInputs): { scaleMin: number; scaleMax: number } {
   const values = [inputs.sensitivityDbm, inputs.sensitivityDbm + inputs.fadeMarginTargetDb, inputs.interferenceThresholdDbm,
@@ -144,8 +164,8 @@ export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundA
     for (const tx of scenario.sensors.filter((s) => s.role === 'tx')) {
       const distanceM = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
       const intended = desired.some((d) => d.id === tx.id);
-      const propagation = pairPropagation(scenario, tx, rx, shared.frequencyGhz, groundAt);
-      const inputs = pairInputs(shared, tx, rx, distanceM);
+      const { inputs, rejectionDb, polarizationDb } = pairLinkInputs(scenario, shared, tx, rx, distanceM);
+      const propagation = pairPropagation(scenario, tx, rx, inputs.frequencyGhz, groundAt);
       inputs.otherLossDb += propagation.lossDb;
       pairs.push({
         txId: tx.id,
@@ -156,6 +176,8 @@ export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundA
         result: calculateLink(inputs, intended ? 'desired' : 'avoidance'),
         elevationKnown: known(tx) && known(rx) && Number.isFinite(propagation.lossDb),
         propagationLossDb: propagation.lossDb,
+        rejectionDb,
+        polarizationDb,
         clearance: propagation.clearance,
       });
     }
@@ -172,7 +194,7 @@ export function receiverSummary(pairs: PairResult[], rxId: string) {
   return { links, worstInterferer, interferersAbove: interferers.length };
 }
 
-const STATUS_SEVERITY: Record<string, number> = { 'No link': 3, 'Weak link': 2, 'Invalid input': 1 };
+const STATUS_SEVERITY: Record<string, number> = { 'No link': 4, 'Interfered link': 3, 'Weak link': 2, 'Invalid input': 1 };
 
 /** The desired link with the worst status, ignoring links whose ground elevation is still unknown; ties keep the strongest. */
 export const worstLink = (links: PairResult[]): PairResult | undefined => {
