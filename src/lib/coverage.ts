@@ -83,7 +83,7 @@ export function reprojectPowers(out: CoverageResult, source: { xM: number; yM: n
 }
 
 /** Reprojects nearest polar samples onto the map's existing zone raster. */
-export function coverageZones(out: CoverageResult, req: Omit<CoverageRequest, 'jobId'>, raster: ScalarGrid): import('./zones').ZoneResult {
+export function coverageZones(out: CoverageResult, req: Omit<CoverageRequest, 'jobId'>, raster: ScalarGrid, withOutlines = true): import('./zones').ZoneResult {
   const { x0, y0, dx, dy, cols, rows } = raster;
   const tx = toLocalM(req.tx, req.ground.origin);
   const classes = new Uint8Array(raster.values.length), interference = new Uint8Array(classes.length);
@@ -96,7 +96,7 @@ export function coverageZones(out: CoverageResult, req: Omit<CoverageRequest, 'j
     classes[k] = !Number.isFinite(p) ? 255 : p >= req.inputs.sensitivityDbm + req.inputs.fadeMarginTargetDb ? 2 : p >= req.inputs.sensitivityDbm ? 1 : 0;
     interference[k] = p >= req.inputs.interferenceThresholdDbm ? 1 : 0;
   }
-  return { jobId: out.jobId, bounds: { minX: x0, maxX: x0 + cols * dx, minY: y0, maxY: y0 + rows * dy }, cols, rows, cellSizeM: Math.max(dx, dy), classes, interference, powerDbm: Float32Array.from(powers), outlines: {
+  return { jobId: out.jobId, bounds: { minX: x0, maxX: x0 + cols * dx, minY: y0, maxY: y0 + rows * dy }, cols, rows, cellSizeM: Math.max(dx, dy), classes, interference, powerDbm: Float32Array.from(powers), outlines: !withOutlines ? { sensitivity: [], required: [], interference: [] } : {
     sensitivity: isolineSegments({ ...raster, values: powers }, req.inputs.sensitivityDbm),
     required: isolineSegments({ ...raster, values: powers }, req.inputs.sensitivityDbm + req.inputs.fadeMarginTargetDb),
     interference: isolineSegments({ ...raster, values: powers }, req.inputs.interferenceThresholdDbm),

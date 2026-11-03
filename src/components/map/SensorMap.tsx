@@ -39,17 +39,20 @@ const RADIO_TOWER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none"
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const rgb = (hex: string) => { const n = parseInt(hex.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
-const lineFeatures = (lines: LatLon[][], props: Record<string, unknown>) => lines.map((line) => ({
-  type: 'Feature' as const, properties: props, geometry: { type: 'LineString' as const, coordinates: line.map((p) => [p.lon, p.lat]) },
-}));
+/** All segments of one outline as a single feature: far fewer features for MapLibre to tile than one per segment. */
+const outlineFeature = (lines: LatLon[][], props: Record<string, unknown>) => ({
+  type: 'Feature' as const, properties: props, geometry: { type: 'MultiLineString' as const, coordinates: lines.map((line) => line.map((p) => [p.lon, p.lat])) },
+});
 
 type ZoneImage = { url: string; coordinates: [[number, number], [number, number], [number, number], [number, number]] };
-interface ZoneImageQueue { loading: boolean; next: ZoneImage | null; timer: number }
+/** `sent` is the image MapLibre is loading, `shown` the last one it finished; both are object URLs to revoke once replaced. */
+interface ZoneImageQueue { loading: boolean; next: ZoneImage | null; timer: number; sent: string | null; shown: string | null }
 /** MapLibre does not always report the end of an image update; never let one missed event pin an old layer on screen. */
 const ZONE_IMAGE_TIMEOUT_MS = 400;
 
 function pushZoneImage(queue: ZoneImageQueue, source: ImageSource, image: ZoneImage) {
   queue.loading = true;
+  queue.sent = image.url;
   window.clearTimeout(queue.timer);
   queue.timer = window.setTimeout(() => settleZoneImage(queue, source), ZONE_IMAGE_TIMEOUT_MS);
   source.updateImage(image);
@@ -59,13 +62,28 @@ function pushZoneImage(queue: ZoneImageQueue, source: ImageSource, image: ZoneIm
 function settleZoneImage(queue: ZoneImageQueue, source: ImageSource | undefined) {
   window.clearTimeout(queue.timer);
   queue.loading = false;
+  if (queue.sent) {
+    if (queue.shown && queue.shown !== queue.sent) URL.revokeObjectURL(queue.shown);
+    queue.shown = queue.sent;
+    queue.sent = null;
+  }
   const next = queue.next;
   queue.next = null;
   if (next && source) pushZoneImage(queue, source, next);
 }
 
-/** Paints zone classes into an image, north row first (grid row 0 is the south edge). */
-function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }, totalInterference = false, placement = false): string {
+/** Drops every pending and shown image, releasing their object URLs. */
+function clearZoneImages(queue: ZoneImageQueue) {
+  window.clearTimeout(queue.timer);
+  for (const url of [queue.next?.url, queue.sent, queue.shown]) if (url) URL.revokeObjectURL(url);
+  Object.assign(queue, { loading: false, next: null, sent: null, shown: null });
+}
+
+/** Placement "Safe" fill; the legend's .swatch-safe uses the same colour. */
+const PLACEMENT_SAFE_RGB = [163, 217, 165];
+
+/** Paints zone classes into an image, north row first (grid row 0 is the south edge). Resolves to an object URL. */
+function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }, totalInterference = false, placement = false): Promise<string> {
   const width = result.cols + 1;
   const height = result.rows + 1;
   const canvas = document.createElement('canvas');
@@ -73,21 +91,26 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
   canvas.height = height;
   const context = canvas.getContext('2d')!;
   const image = context.createImageData(width, height);
-  const [green, yellow, red] = [rgb(token('--green')), rgb(token('--yellow')), rgb(token('--red'))];
+  // Style lookups are slow; read each token once per paint, never per pixel.
+  const [green, yellow, red, mute] = [rgb(token('--green')), rgb(token('--yellow')), rgb(token('--red')), rgb(token('--mute'))];
+  const clear = [0, 0, 0, 0], hatch = [...mute, 130], hatchFaint = [...mute, 35];
+  const acceptable = [...green, 58], weak = [...yellow, 46], interfered = [...red, 54];
+  const recommended = [...green, 95], safe = [...PLACEMENT_SAFE_RGB, 95];
   for (let j = 0; j <= result.rows; j += 1) {
     for (let i = 0; i <= result.cols; i += 1) {
       const node = j * width + i;
       const pixel = ((result.rows - j) * width + i) * 4;
       const cls = result.classes[node];
       const gradient = !placement && range && result.powerDbm && cls !== ZONE.unknown ? signalColour(result.powerDbm[node], range.lo, range.hi) : null;
-      const colour = gradient ?? (cls === ZONE.unknown ? [...rgb(token('--mute')), (i + j) % 6 < 2 ? 130 : 35]
-        : placement ? cls === PLACEMENT.recommended ? [...green, 95] : cls === PLACEMENT.safe ? [163, 217, 165, 95] : cls === PLACEMENT.marginal ? [...yellow, 46] : [...red, 54]
-        : totalInterference ? result.interference[node] ? [...red, 54] : cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0] : (objective === 'avoidance' || showAll) && result.interference[node] ? [...red, 54] : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? [...green, 58] : (objective === 'desired' || showAll) && cls === ZONE.weak ? [...yellow, 46] : [0, 0, 0, 0]);
+      const colour = gradient ?? (cls === ZONE.unknown ? (i + j) % 6 < 2 ? hatch : hatchFaint
+        : placement ? cls === PLACEMENT.recommended ? recommended : cls === PLACEMENT.safe ? safe : cls === PLACEMENT.marginal ? weak : interfered
+        : totalInterference ? result.interference[node] ? interfered : cls === ZONE.weak ? weak : clear : (objective === 'avoidance' || showAll) && result.interference[node] ? interfered : (objective === 'desired' || showAll) && cls === ZONE.acceptable ? acceptable : (objective === 'desired' || showAll) && cls === ZONE.weak ? weak : clear);
       image.data.set(colour, pixel);
     }
   }
   context.putImageData(image, 0, 0);
-  return canvas.toDataURL();
+  // toBlob encodes off the main thread, unlike toDataURL.
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : canvas.toDataURL())));
 }
 
 export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
@@ -118,7 +141,9 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
   const [loaded, setLoaded] = useState(false);
   // MapLibre aborts (and logs) an image still loading when updateImage is called again,
   // so zone images are applied one at a time and only the newest waiting one is kept.
-  const zoneImage = useRef<ZoneImageQueue>({ loading: false, next: null, timer: 0 });
+  const zoneImage = useRef<ZoneImageQueue>({ loading: false, next: null, timer: 0, sent: null, shown: null });
+  // Painting resolves asynchronously; only the newest paint may reach the map.
+  const zonePaint = useRef(0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -169,7 +194,8 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       map.addSource('links', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'zone-outlines', type: 'line', source: 'zone-outlines', layout: line, paint: {
         'line-width': 1.5, 'line-opacity': ['case', ['get', 'faint'], 0.25, 0.9],
-        'line-color': ['match', ['get', 'id'], 'sensitivity', token('--blue'), 'required', token('--green'), token('--red')],
+        // Each edge takes its band's colour: the sensitivity, protected-margin and safe bands are all yellow.
+        'line-color': ['match', ['get', 'id'], 'sensitivity', token('--yellow'), 'required', token('--green'), token('--red')],
       } });
       map.addLayer({ id: 'links-intended', type: 'line', source: 'links', filter: ['==', ['get', 'kind'], 'intended'], layout: line, paint: {
         'line-width': ['case', ['get', 'emphasis'], 3, 2],
@@ -199,13 +225,17 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
         if (!list.length) return;
         const bounds = new maplibregl.LngLatBounds();
         for (const s of list) bounds.extend([s.lon, s.lat]);
-        map.fitBounds(bounds, { padding: { top: 110, bottom: 70, left: 320, right: 420 }, maxZoom: 16, duration: reduceMotion ? 0 : 400 });
+        // Leave room for the floating cards only where they float over the map; otherwise the padding can exceed the canvas and the fit is refused.
+        const overlaid = container.clientWidth > 1000 && !container.closest('.panels-hidden');
+        const padding = overlaid ? { top: 110, bottom: 70, left: 320, right: 420 } : 48;
+        map.fitBounds(bounds, { padding, maxZoom: 16, duration: reduceMotion ? 0 : 400 });
       },
       zoomBy(delta) { map.easeTo({ zoom: map.getZoom() + delta, duration: reduceMotion ? 0 : 250 }); },
     };
     return () => {
       for (const { marker } of markers.current.values()) marker.remove();
       markers.current.clear();
+      clearZoneImages(zoneImage.current);
       map.remove();
       mapRef.current = null;
       handleRef.current = null;
@@ -266,36 +296,37 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     const outlines = map.getSource('zone-outlines') as GeoJSONSource | undefined;
     outlines?.setData({
       type: 'FeatureCollection',
-      features: zones && !zones.range ? (['sensitivity', 'required', 'interference'] as const).flatMap((id) => lineFeatures(zones.outlines[id], { id, faint: !zones.showAll && !zones.totalInterference && !zones.placement && zones.objective === 'avoidance' && id !== 'interference' })) : [],
+      features: zones && !zones.range ? (['sensitivity', 'required', 'interference'] as const).filter((id) => zones.outlines[id].length).map((id) => outlineFeature(zones.outlines[id], { id, faint: !zones.showAll && !zones.totalInterference && !zones.placement && zones.objective === 'avoidance' && id !== 'interference' })) : [],
     });
-    const existing = map.getSource('zones') as ImageSource | undefined;
     const queue = zoneImage.current;
+    const paint = ++zonePaint.current;
     if (!zones) {
-      queue.next = null;
-      queue.loading = false;
-      window.clearTimeout(queue.timer);
-      if (existing) { map.removeLayer('zones'); map.removeSource('zones'); }
+      clearZoneImages(queue);
+      if (map.getSource('zones')) { map.removeLayer('zones'); map.removeSource('zones'); }
       return;
     }
     const coordinates = zones.corners.map((p) => [p.lon, p.lat]) as [[number, number], [number, number], [number, number], [number, number]];
-    const url = paintZones(zones.result, zones.objective, zones.showAll, zones.range, zones.totalInterference, zones.placement);
-    if (existing) {
-      if (queue.loading) queue.next = { url, coordinates };
-      else pushZoneImage(queue, existing, { url, coordinates });
-    } else {
-      queue.next = null;
-      queue.loading = true;
-      window.clearTimeout(queue.timer);
-      queue.timer = window.setTimeout(() => settleZoneImage(queue, map.getSource('zones') as ImageSource | undefined), ZONE_IMAGE_TIMEOUT_MS);
-      map.addSource('zones', { type: 'image', url, coordinates });
-      map.addLayer({ id: 'zones', type: 'raster', source: 'zones', paint: { 'raster-opacity': 1, 'raster-fade-duration': 0 } }, 'zone-outlines');
-    }
+    void paintZones(zones.result, zones.objective, zones.showAll, zones.range, zones.totalInterference, zones.placement).then((url) => {
+      if (paint !== zonePaint.current || mapRef.current !== map) { URL.revokeObjectURL(url); return; }
+      const existing = map.getSource('zones') as ImageSource | undefined;
+      if (existing) {
+        if (queue.loading) { if (queue.next) URL.revokeObjectURL(queue.next.url); queue.next = { url, coordinates }; }
+        else pushZoneImage(queue, existing, { url, coordinates });
+      } else {
+        clearZoneImages(queue);
+        queue.loading = true;
+        queue.sent = url;
+        queue.timer = window.setTimeout(() => settleZoneImage(queue, map.getSource('zones') as ImageSource | undefined), ZONE_IMAGE_TIMEOUT_MS);
+        map.addSource('zones', { type: 'image', url, coordinates });
+        map.addLayer({ id: 'zones', type: 'raster', source: 'zones', paint: { 'raster-opacity': 1, 'raster-fade-duration': 0 } }, 'zone-outlines');
+      }
+    });
   }, [zones, loaded]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!loaded || !map) return;
-    (map.getSource('range-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.flatMap(r => lineFeatures([r.points], { id: r.id })) });
+    (map.getSource('range-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.map(r => outlineFeature([r.points], { id: r.id })) });
     const labels = rings.map(r => {
       const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label;
       return new maplibregl.Marker({ element: el }).setLngLat([r.points[0].lon, r.points[0].lat]).addTo(map);

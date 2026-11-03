@@ -648,6 +648,7 @@ tbody tr:hover { background: var(--surface-elevated); }
 .zone-legend li { display: flex; align-items: center; gap: 8px; }
 .swatch { width: 18px; height: 10px; border-radius: 3px; border: 1px solid currentColor; }
 .swatch-acceptable { color: var(--green); background: rgba(52, 211, 153, .25); }
+.swatch-safe { color: rgb(163, 217, 165); background: rgba(163, 217, 165, .37); }
 .swatch-weak { color: var(--yellow); background: rgba(255, 179, 71, .22); }
 .swatch-interference { color: var(--red); background: rgba(255, 107, 107, .32); }
 

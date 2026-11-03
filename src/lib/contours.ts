@@ -20,24 +20,26 @@ export function sampleGrid(bounds: Bounds, cols: number, rows: number, fn: (x: n
 export function isolineSegments(grid: ScalarGrid, level: number): Segment[] {
   const { x0, y0, dx, dy, cols, rows, values } = grid;
   const segments: Segment[] = [];
-  const at = (i: number, j: number) => values[j * (cols + 1) + i];
+  const width = cols + 1;
+  // Corner order around a cell: (i, j), (i+1, j), (i+1, j+1), (i, j+1). Reused per cell to avoid allocation.
+  const v = new Float64Array(4), cx = [0, 1, 1, 0], cy = [0, 0, 1, 1], crossings = new Float64Array(8);
   for (let j = 0; j < rows; j += 1) {
     for (let i = 0; i < cols; i += 1) {
-      const v = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)];
-      if (!v.every(Number.isFinite)) continue;
-      const corners = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]];
-      const crossings: number[][] = [];
+      const k = j * width + i;
+      v[0] = values[k]; v[1] = values[k + 1]; v[2] = values[k + width + 1]; v[3] = values[k + width];
+      if (!Number.isFinite(v[0]) || !Number.isFinite(v[1]) || !Number.isFinite(v[2]) || !Number.isFinite(v[3])) continue;
+      const below = v[0] < level;
+      if ((v[1] < level) === below && (v[2] < level) === below && (v[3] < level) === below) continue;
+      let n = 0;
       for (let edge = 0; edge < 4; edge += 1) {
         const next = (edge + 1) % 4;
         if ((v[edge] < level) !== (v[next] < level)) {
           const t = (level - v[edge]) / (v[next] - v[edge]);
-          crossings.push([
-            x0 + (corners[edge][0] + t * (corners[next][0] - corners[edge][0])) * dx,
-            y0 + (corners[edge][1] + t * (corners[next][1] - corners[edge][1])) * dy,
-          ]);
+          crossings[n++] = x0 + (i + cx[edge] + t * (cx[next] - cx[edge])) * dx;
+          crossings[n++] = y0 + (j + cy[edge] + t * (cy[next] - cy[edge])) * dy;
         }
       }
-      for (let k = 0; k + 1 < crossings.length; k += 2) segments.push([crossings[k][0], crossings[k][1], crossings[k + 1][0], crossings[k + 1][1]]);
+      for (let c = 0; c + 3 < n; c += 4) segments.push([crossings[c], crossings[c + 1], crossings[c + 2], crossings[c + 3]]);
     }
   }
   return segments;

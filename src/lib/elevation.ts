@@ -27,8 +27,14 @@ export function tilePixel(p: LatLon, z: number): { x: number; y: number; px: num
  * (sea bathymetry) clamp to 0 m, the water surface an antenna would stand on.
  */
 export function createGroundSampler(lookup: TileLookup, z: number): GroundAt {
+  // Neighbouring samples almost always share a tile; remembering the last one skips most lookups.
+  let lastX = NaN, lastY = NaN, last: ElevationTile | undefined;
+  const tile = (x: number, y: number) => {
+    if (x !== lastX || y !== lastY) { lastX = x; lastY = y; last = lookup(z, x, y); }
+    return last;
+  };
   const pixel = (gx: number, gy: number): number | null => {
-    const t = lookup(z, Math.floor(gx / TILE_SIZE), Math.floor(gy / TILE_SIZE));
+    const t = tile(Math.floor(gx / TILE_SIZE), Math.floor(gy / TILE_SIZE));
     if (!t) return null;
     const i = ((gy % TILE_SIZE) * TILE_SIZE + (gx % TILE_SIZE)) * 4;
     return decodeTerrarium(t.data[i], t.data[i + 1], t.data[i + 2]);

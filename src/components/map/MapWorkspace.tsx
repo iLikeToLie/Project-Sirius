@@ -137,7 +137,8 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const linkedRxIds = zoneTx ? pairs.filter((p) => p.txId === zoneTx.id && p.intended).map((p) => p.rxId) : [];
 
   const zoneRequest = useMemo(() => {
-    if (!zoneTx || !zone || !view || view.width === 0) return null;
+    // Only the Range layer uses this grid; sampling ground over the view is costly, so skip it otherwise.
+    if (coverageLayer !== 'range' || !zoneTx || !zone || !view || view.width === 0) return null;
     // Local metres from the fixed Singapore reference, so results stay placed if Tx moves meanwhile.
     const sw = toLocalM(view.southWest);
     const ne = toLocalM(view.northEast);
@@ -169,7 +170,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
         state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version].join('|'),
     };
-  }, [zoneTx, zone, view, dragging, map.useTerrainElevation, map.rejectionModel, elevation.samplerAt, elevation.version, state.inputs, groundAt]);
+  }, [coverageLayer, zoneTx, zone, view, dragging, map.useTerrainElevation, map.rejectionModel, elevation.samplerAt, elevation.version, state.inputs, groundAt]);
 
   useEffect(() => {
     if (zoneRequest && view && map.useTerrainElevation) elevation.ensureBox(view.southWest, view.northEast, zoneRequest.z);
@@ -217,20 +218,24 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
   const multi = useMultiFieldWorker(multiRequest?.request ?? null, multiRequest?.key ?? coverageLayer);
   const free = useZoneWorker(coverageLayer === 'range' && !terrain ? zoneRequest?.request ?? null : null, `${coverageLayer}|${terrain}|${zoneRequest?.key}`);
   const coverage = useCoverageWorker(coverageLayer === 'range' ? coverageRequest : null, `${coverageLayer}|${terrain}|${zoneRequest?.key}`);
+  // Band edges are only drawn without the gradient; skip tracing them otherwise.
+  const bands = coverageLayer === 'placement' || coverageStyle !== 'gradient';
   const zoneResult = useMemo(() => coverageLayer !== 'range'
     ? multi.result && multiRequest && multi.resultKey === multiRequest.key
-      ? coverageLayer === 'placement' ? placement ? placementZones(placement, multiRequest.request.raster, multi.result) : null
-        : referenceRx ? interferenceZones(liveMap, referenceRx, multiRequest.request.raster, multi.result) : null : null
-    : terrain ? coverage.result && coverageRequest && zoneRequest ? coverageZones(coverage.result, coverageRequest, zoneRequest.request.ground) : null : free.result,
-  [coverageLayer, placement, multi.result, multi.resultKey, multiRequest, referenceRx, liveMap, terrain, coverage.result, coverageRequest, zoneRequest, free.result]);
+      ? coverageLayer === 'placement' ? placement ? placementZones(placement, multiRequest.request.raster, multi.result, bands) : null
+        : referenceRx ? interferenceZones(liveMap, referenceRx, multiRequest.request.raster, multi.result, bands) : null : null
+    : terrain ? coverage.result && coverageRequest && zoneRequest ? coverageZones(coverage.result, coverageRequest, zoneRequest.request.ground, bands) : null : free.result,
+  [coverageLayer, placement, multi.result, multi.resultKey, multiRequest, referenceRx, liveMap, terrain, coverage.result, coverageRequest, zoneRequest, free.result, bands]);
   const refining = coverageLayer !== 'range' ? multi.refining : terrain ? coverage.refining : free.refining;
   const objective = coverageLayer === 'interference' ? 'avoidance' : zone ? effectiveObjective(liveMap, zone.rx) : map.defaultObjective;
   // Rings are free-space reference ranges, so they would mislead once terrain diffraction is on.
-  const rings = useMemo(() => coverageLayer === 'range' && zoneTx && zoneRequest && !terrain ? (['sensitivity', 'required', 'interference'] as const).flatMap(id => {
-    const range = zoneRequest.request.slant[`${id}M`];
+  // Keyed on the ranges rather than the whole request, so panning does not rebuild the ring labels.
+  const slant = zoneRequest?.request.slant;
+  const rings = useMemo(() => coverageLayer === 'range' && zoneTx && slant && !terrain ? (['sensitivity', 'required', 'interference'] as const).flatMap(id => {
+    const range = slant[`${id}M`];
     if (!Number.isFinite(range)) return [];
     return [{ id, label: `${id} ${range >= 1000 ? (range / 1000).toFixed(2) + ' km' : range.toFixed(0) + ' m'}`, points: Array.from({ length: 129 }, (_, i) => offsetLatLon(zoneTx, Math.sin(i * 2 * Math.PI / 128) * range, Math.cos(i * 2 * Math.PI / 128) * range)) }];
-  }) : [], [zoneTx, zoneRequest, terrain, coverageLayer]);
+  }) : [], [zoneTx, slant?.sensitivityM, slant?.requiredM, slant?.interferenceM, terrain, coverageLayer]);
   useEffect(() => {
     if (!map.useTerrainElevation || !terrain) return;
     for (const p of pairs) {
@@ -255,34 +260,37 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     };
   }, [zoneResult, objective, showAll, zone, coverageStyle, coverageLayer, referenceRx]);
 
-  const byId = new Map(sensors.map((s) => [s.id, s]));
-  const links: MapLink[] = pairs
-    .filter((p) => {
-      if (p.intended) return true;
-      const a = assessments.get(p.rxId)!;
-      const verdict = pairVerdict(p, byId.get(p.rxId)!, a.marginDb);
-      return verdict === 'Possible interference' || verdict === 'Marginal interference' ||
-        (a.aggregate && a.status !== 'Below interference threshold' && a.contributors.some(c => c.txId === p.txId && c.share >= 0.1));
-    })
-    .map((p) => ({
-      from: byId.get(p.txId)!, to: byId.get(p.rxId)!,
-      kind: p.intended ? 'intended' : 'interference',
-      tone: statusTone(p.intended ? assessments.get(p.rxId)!.links.find(l => l.txId === p.txId)!.status : (() => {
+  // Memoised so map sources and the signal overlay only update when the links change, not on every pan.
+  const links = useMemo<MapLink[]>(() => {
+    const byId = new Map(sensors.map((s) => [s.id, s]));
+    return pairs
+      .filter((p) => {
+        if (p.intended) return true;
         const a = assessments.get(p.rxId)!;
         const verdict = pairVerdict(p, byId.get(p.rxId)!, a.marginDb);
-        return verdict === 'Below interference threshold' ? a.status : verdict;
-      })()),
-      emphasis: !selected || p.txId === selected.id || p.rxId === selected.id,
-      label: p.intended ? formatDistance(p.distanceM) : undefined,
-    }));
-  const tones: Record<string, string> = Object.fromEntries(sensors.map((s) => {
+        return verdict === 'Possible interference' || verdict === 'Marginal interference' ||
+          (a.aggregate && a.status !== 'Below interference threshold' && a.contributors.some(c => c.txId === p.txId && c.share >= 0.1));
+      })
+      .map((p) => ({
+        from: byId.get(p.txId)!, to: byId.get(p.rxId)!,
+        kind: p.intended ? 'intended' : 'interference',
+        tone: statusTone(p.intended ? assessments.get(p.rxId)!.links.find(l => l.txId === p.txId)!.status : (() => {
+          const a = assessments.get(p.rxId)!;
+          const verdict = pairVerdict(p, byId.get(p.rxId)!, a.marginDb);
+          return verdict === 'Below interference threshold' ? a.status : verdict;
+        })()),
+        emphasis: !selected || p.txId === selected.id || p.rxId === selected.id,
+        label: p.intended ? formatDistance(p.distanceM) : undefined,
+      }));
+  }, [pairs, assessments, sensors, selected]);
+  const tones = useMemo<Record<string, string>>(() => Object.fromEntries(sensors.map((s) => {
     if (s.role === 'tx') return [s.id, 'tx'];
     const summary = receiverSummary(pairs, s.id);
     const a = assessments.get(s.id)!;
     const link = worstAssessedLink(a, summary.links);
     const status = a.links.find(l => l.txId === link?.txId)?.status;
     return [s.id, a.status === 'Possible interference' || status === 'Interfered link' || status === 'No link' ? 'danger' : a.status === 'Marginal interference' ? 'warning' : status ? statusTone(status) : a.unknownPaths ? 'neutral' : 'safe'];
-  }));
+  })), [sensors, pairs, assessments]);
 
   return (
     <div
