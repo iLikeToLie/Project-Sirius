@@ -10,8 +10,9 @@ export function SignalOverlay({ map, links, frequencyGhz }: { map: Map; links: M
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     const colours = getComputedStyle(document.documentElement);
     const tokens: Record<string, string> = { good: '--green', warning: '--yellow', danger: '--red', safe: '--blue', neutral: '--mute' };
-    let visible = true, inView = false;
+    let visible = true, inView = false, frame = 0;
     const render = () => {
+      frame = 0;
       const { width, height } = map.getContainer().getBoundingClientRect();
       const scale = devicePixelRatio || 1;
       if (canvas.width !== Math.round(width * scale) || canvas.height !== Math.round(height * scale)) { canvas.width = width * scale; canvas.height = height * scale; }
@@ -32,12 +33,15 @@ export function SignalOverlay({ map, links, frequencyGhz }: { map: Map; links: M
       }
       canvas.dataset.packets = String(packets);
       canvas.dataset.animating = String(inView && !motion.matches && visible && !document.hidden);
-      if (inView && !motion.matches) map.triggerRepaint();
+      // Animate on our own frames: repainting the whole map every frame just to move packets is costly.
+      if (inView && !motion.matches) frame = requestAnimationFrame(render);
     };
-    const wake = () => { render(); };
+    const wake = () => { cancelAnimationFrame(frame); render(); };
+    // Map moves fire several times a frame; draw once on the next one.
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(render); };
     const observer = new IntersectionObserver(entries => { visible = entries[0].isIntersecting; wake(); });
-    observer.observe(canvas); map.on('render', render); document.addEventListener('visibilitychange', wake); motion.addEventListener('change', wake); render();
-    return () => { observer.disconnect(); map.off('render', render); document.removeEventListener('visibilitychange', wake); motion.removeEventListener('change', wake); };
+    observer.observe(canvas); map.on('move', schedule); map.on('resize', schedule); document.addEventListener('visibilitychange', wake); motion.addEventListener('change', wake); render();
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); map.off('move', schedule); map.off('resize', schedule); document.removeEventListener('visibilitychange', wake); motion.removeEventListener('change', wake); };
   }, [map, links, frequencyGhz]);
   return <canvas ref={canvasRef} className="signal-overlay" aria-hidden="true" />;
 }

@@ -64,6 +64,14 @@ describe('total interference layer', () => {
     rx.protectionMarginDb = 0;
     expect(interferenceZones(map, rx, grid, { jobId: 1, powers: [field([-60, -68, -75, -80])] }).outlines.sensitivity).toEqual([]);
   });
+  it('skips the band edges when the gradient is shown, keeping the classes', () => {
+    const { map } = freshDefaultState(), rx = map.sensors[1];
+    rx.interferenceThresholdDbm = -70; rx.protectionMarginDb = 3;
+    const out = { jobId: 1, powers: [field([-60, -68, -75, -80])] };
+    const plain = interferenceZones(map, rx, grid, out, false);
+    expect(plain.outlines).toEqual({ sensitivity: [], required: [], interference: [] });
+    expect(plain.classes).toEqual(interferenceZones(map, rx, grid, out).classes);
+  });
   it('outlines placement band edges and leaves unknown cells without lines', () => {
     const plan = { victims: [], served: [], sources: [] } as unknown as Parameters<typeof placementZones>[0];
     const g = sampleGrid({ minX: 0, maxX: 3, minY: 0, maxY: 1 }, 3, 1, () => 0);

@@ -34,7 +34,7 @@ export function CoverageLegend({ objective, showAll, onShowAll, terrain, range, 
     </div>
     <div className="legend-head"><b>{placement ? placementName ? `Placement for ${placementName}` : 'Select a transmitter to show safe placement' : total ? referenceName ? `Total interference at ${referenceName}'s settings (${aggregate ? 'aggregate' : 'worst single'})` : 'Add a receiver to show total interference' : terrain ? 'Terrain coverage' : 'Free-space zones'}</b>{!total && !placement && <span>{objective === 'desired' ? 'Desired' : 'Avoidance'}</span>}</div>
     {placement && <>
-      <span className="legend-swatches"><i className="swatch swatch-acceptable" /> Recommended <i className="swatch" style={{ background: '#a3d9a5' }} /> Safe <i className="swatch swatch-weak" /> Marginal <i className="swatch swatch-interference" /> Unsafe <i className="swatch" style={{ background: 'repeating-linear-gradient(45deg, #999 0 2px, transparent 2px 6px)' }} /> Unknown</span>
+      <span className="legend-swatches"><i className="swatch swatch-acceptable" /> Recommended <i className="swatch swatch-safe" /> Safe <i className="swatch swatch-weak" /> Marginal <i className="swatch swatch-interference" /> Unsafe <i className="swatch" style={{ background: 'repeating-linear-gradient(45deg, #999 0 2px, transparent 2px 6px)' }} /> Unknown</span>
       <span>Victims: {victimNames.join(', ') || 'None'}</span>
       <span>Served: {servedNames.join(', ') || 'None'}</span>
       <span>Paths are treated as reciprocal; terrain diffraction from the receiver side is an approximation. Grey hatching marks unknown paths or ground.</span>
