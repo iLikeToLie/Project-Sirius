@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
 import { sampleGrid } from './contours';
-import { interferenceSources, interferenceZones, referenceReceiver } from './interferenceLayer';
+import { interferenceSources, interferenceZones, placementZones, referenceReceiver } from './interferenceLayer';
 
 describe('total interference layer', () => {
   it('prefers the selected receiver, then zone receiver, then first receiver', () => {
@@ -53,5 +53,23 @@ describe('total interference layer', () => {
     expect(empty.classes[0]).toBe(255);
     expect(empty.classes[1]).toBe(0);
     expect(empty.powerDbm![1]).toBe(-Infinity);
+  });
+  it('outlines the interference and protected-margin edges so band layers match the range layer', () => {
+    const { map } = freshDefaultState(), rx = map.sensors[1];
+    rx.interferenceThresholdDbm = -70; rx.protectionMarginDb = 3;
+    map.aggregateInterference = 'never';
+    const zones = interferenceZones(map, rx, grid, { jobId: 1, powers: [field([-60, -68, -75, -80])] });
+    expect(zones.outlines.interference.length).toBeGreaterThan(0);
+    expect(zones.outlines.sensitivity.length).toBeGreaterThan(0);
+    rx.protectionMarginDb = 0;
+    expect(interferenceZones(map, rx, grid, { jobId: 1, powers: [field([-60, -68, -75, -80])] }).outlines.sensitivity).toEqual([]);
+  });
+  it('outlines placement band edges and leaves unknown cells without lines', () => {
+    const plan = { victims: [], served: [], sources: [] } as unknown as Parameters<typeof placementZones>[0];
+    const g = sampleGrid({ minX: 0, maxX: 3, minY: 0, maxY: 1 }, 3, 1, () => 0);
+    const zones = placementZones(plan, g, { jobId: 1, powers: [] });
+    // With no victims or served receivers every known cell is Recommended: one uniform band, no edges.
+    expect(zones.outlines.required).toEqual([]);
+    expect(zones.outlines.interference).toEqual([]);
   });
 });

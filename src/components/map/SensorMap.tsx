@@ -43,6 +43,27 @@ const lineFeatures = (lines: LatLon[][], props: Record<string, unknown>) => line
   type: 'Feature' as const, properties: props, geometry: { type: 'LineString' as const, coordinates: line.map((p) => [p.lon, p.lat]) },
 }));
 
+type ZoneImage = { url: string; coordinates: [[number, number], [number, number], [number, number], [number, number]] };
+interface ZoneImageQueue { loading: boolean; next: ZoneImage | null; timer: number }
+/** MapLibre does not always report the end of an image update; never let one missed event pin an old layer on screen. */
+const ZONE_IMAGE_TIMEOUT_MS = 400;
+
+function pushZoneImage(queue: ZoneImageQueue, source: ImageSource, image: ZoneImage) {
+  queue.loading = true;
+  window.clearTimeout(queue.timer);
+  queue.timer = window.setTimeout(() => settleZoneImage(queue, source), ZONE_IMAGE_TIMEOUT_MS);
+  source.updateImage(image);
+}
+
+/** Marks the in-flight image as finished and sends the newest queued one, if any. */
+function settleZoneImage(queue: ZoneImageQueue, source: ImageSource | undefined) {
+  window.clearTimeout(queue.timer);
+  queue.loading = false;
+  const next = queue.next;
+  queue.next = null;
+  if (next && source) pushZoneImage(queue, source, next);
+}
+
 /** Paints zone classes into an image, north row first (grid row 0 is the south edge). */
 function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', showAll = false, range?: { lo: number; hi: number }, totalInterference = false, placement = false): string {
   const width = result.cols + 1;
@@ -97,7 +118,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
   const [loaded, setLoaded] = useState(false);
   // MapLibre aborts (and logs) an image still loading when updateImage is called again,
   // so zone images are applied one at a time and only the newest waiting one is kept.
-  const zoneImage = useRef<{ loading: boolean; next: { url: string; coordinates: [[number, number], [number, number], [number, number], [number, number]] } | null }>({ loading: false, next: null });
+  const zoneImage = useRef<ZoneImageQueue>({ loading: false, next: null, timer: 0 });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -167,12 +188,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     });
     map.on('sourcedata', (event) => {
       if (event.sourceId !== 'zones' || !event.isSourceLoaded) return;
-      const queue = zoneImage.current;
-      queue.loading = false;
-      const next = queue.next;
-      queue.next = null;
-      const source = map.getSource('zones') as ImageSource | undefined;
-      if (next && source) { queue.loading = true; source.updateImage(next); }
+      settleZoneImage(zoneImage.current, map.getSource('zones') as ImageSource | undefined);
     });
     map.on('moveend', reportView);
     map.on('resize', reportView);
@@ -250,13 +266,14 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     const outlines = map.getSource('zone-outlines') as GeoJSONSource | undefined;
     outlines?.setData({
       type: 'FeatureCollection',
-      features: zones && !zones.range ? (['sensitivity', 'required', 'interference'] as const).flatMap((id) => lineFeatures(zones.outlines[id], { id, faint: !zones.showAll && zones.objective === 'avoidance' && id !== 'interference' })) : [],
+      features: zones && !zones.range ? (['sensitivity', 'required', 'interference'] as const).flatMap((id) => lineFeatures(zones.outlines[id], { id, faint: !zones.showAll && !zones.totalInterference && !zones.placement && zones.objective === 'avoidance' && id !== 'interference' })) : [],
     });
     const existing = map.getSource('zones') as ImageSource | undefined;
     const queue = zoneImage.current;
     if (!zones) {
       queue.next = null;
       queue.loading = false;
+      window.clearTimeout(queue.timer);
       if (existing) { map.removeLayer('zones'); map.removeSource('zones'); }
       return;
     }
@@ -264,9 +281,12 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     const url = paintZones(zones.result, zones.objective, zones.showAll, zones.range, zones.totalInterference, zones.placement);
     if (existing) {
       if (queue.loading) queue.next = { url, coordinates };
-      else { queue.loading = true; existing.updateImage({ url, coordinates }); }
+      else pushZoneImage(queue, existing, { url, coordinates });
     } else {
+      queue.next = null;
       queue.loading = true;
+      window.clearTimeout(queue.timer);
+      queue.timer = window.setTimeout(() => settleZoneImage(queue, map.getSource('zones') as ImageSource | undefined), ZONE_IMAGE_TIMEOUT_MS);
       map.addSource('zones', { type: 'image', url, coordinates });
       map.addLayer({ id: 'zones', type: 'raster', source: 'zones', paint: { 'raster-opacity': 1, 'raster-fade-duration': 0 } }, 'zone-outlines');
     }

@@ -1,5 +1,5 @@
 import type { LinkInputs, MapScenario, Sensor } from '../types';
-import type { ScalarGrid } from './contours';
+import { isolineSegments, type ScalarGrid } from './contours';
 import type { GroundAt } from './elevation';
 import { effectiveMarginDb, placementAllowance, placementClass, PLACEMENT, sumDbm, usesAggregate } from './interference';
 import type { MultiFieldRequest, MultiFieldResult } from './multiField';
@@ -50,7 +50,17 @@ export function placementZones(plan: ReturnType<typeof placementPlan>, raster: S
   }
   return { jobId: out.jobId, cols: raster.cols, rows: raster.rows, cellSizeM: Math.max(raster.dx, raster.dy),
     bounds: { minX: raster.x0, maxX: raster.x0 + raster.cols * raster.dx, minY: raster.y0, maxY: raster.y0 + raster.rows * raster.dy },
-    classes, interference: new Uint8Array(classes.length), outlines: { sensitivity: [], required: [], interference: [] } };
+    classes, interference: new Uint8Array(classes.length), outlines: placementOutlines(raster, classes) };
+}
+
+/** Band edges for the placement layer: Recommended (green), Safe or better (yellow), and the Unsafe edge (red). */
+function placementOutlines(raster: ScalarGrid, classes: Uint8Array): ZoneResult['outlines'] {
+  const rank = { ...raster, values: Float64Array.from(classes, c => c === PLACEMENT.unknown ? NaN : c) };
+  return {
+    required: isolineSegments(rank, PLACEMENT.recommended - 0.5),
+    sensitivity: isolineSegments(rank, PLACEMENT.safe - 0.5),
+    interference: isolineSegments(rank, PLACEMENT.marginal - 0.5),
+  };
 }
 
 /** Unknown paths remain hatched: a partial sum cannot establish a safe placement. */
@@ -71,5 +81,10 @@ export function interferenceZones(map: MapScenario, rx: Sensor, raster: ScalarGr
   }
   return { jobId: out.jobId, cols: raster.cols, rows: raster.rows, cellSizeM: Math.max(raster.dx, raster.dy),
     bounds: { minX: raster.x0, maxX: raster.x0 + raster.cols * raster.dx, minY: raster.y0, maxY: raster.y0 + raster.rows * raster.dy },
-    classes, interference, powerDbm, outlines: { sensitivity: [], required: [], interference: [] } };
+    classes, interference, powerDbm, outlines: {
+      required: [],
+      // The protected-margin edge only differs from the interference edge when a margin is set.
+      sensitivity: limit < threshold ? isolineSegments({ ...raster, values: Float64Array.from(powerDbm) }, limit) : [],
+      interference: isolineSegments({ ...raster, values: Float64Array.from(powerDbm) }, threshold),
+    } };
 }
