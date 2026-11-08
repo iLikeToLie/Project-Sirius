@@ -1,10 +1,14 @@
 import type { LinkInputs, MapScenario, Sensor } from '../types';
 import { isolineSegments, type ScalarGrid } from './contours';
+import { buildingsOf } from './buildings';
 import type { GroundAt } from './elevation';
 import { effectiveMarginDb, placementAllowance, placementClass, PLACEMENT, sumDbm, usesAggregate } from './interference';
 import type { MultiFieldRequest, MultiFieldResult } from './multiField';
 import { groundOf, pairLinkInputs, resolveDesiredTxs, type PairResult } from './sensors';
 import { ZONE, type ZoneResult } from './zones';
+
+/** The building a street-mounted sensor stands in, whose height its coverage rays skip; 0 otherwise. */
+export const streetBuildingM = (s: Sensor, groundAt: GroundAt) => s.mount === 'street' ? buildingsOf(groundAt)?.(s) ?? 0 : 0;
 
 export function referenceReceiver(map: MapScenario, selected: Sensor | null, zoneRx: Sensor | null): Sensor | null {
   return selected?.role === 'rx' ? selected : zoneRx ?? map.sensors.find(s => s.role === 'rx') ?? null;
@@ -14,7 +18,7 @@ export function interferenceSources(map: MapScenario, shared: LinkInputs, rx: Se
   const desired = new Set(resolveDesiredTxs(map, rx, groundAt).map(s => s.id));
   return map.sensors.filter(s => s.role === 'tx' && !desired.has(s.id)).map(tx => {
     const ground = groundOf(tx, groundAt, map.useTerrainElevation);
-    return { lat: tx.lat, lon: tx.lon, elevationM: ground === null ? NaN : ground + tx.aglM,
+    return { lat: tx.lat, lon: tx.lon, elevationM: ground === null ? NaN : ground + tx.aglM, ownBuildingM: streetBuildingM(tx, groundAt),
       inputs: pairLinkInputs(map, shared, tx, rx, 1).inputs };
   });
 }
@@ -33,7 +37,7 @@ export function placementPlan(map: MapScenario, shared: LinkInputs, tx: Sensor, 
   // Reverse the geometry only: power, gains, channel rejection and losses retain Tx-to-Rx roles.
   const sources = [...victims.map(v => v.rx), ...served].map(rx => {
     const ground = groundOf(rx, groundAt, map.useTerrainElevation);
-    return { lat: rx.lat, lon: rx.lon, elevationM: ground === null ? NaN : ground + rx.aglM,
+    return { lat: rx.lat, lon: rx.lon, elevationM: ground === null ? NaN : ground + rx.aglM, ownBuildingM: streetBuildingM(rx, groundAt),
       inputs: pairLinkInputs(map, shared, tx, rx, 1).inputs };
   });
   return { victims, served, sources };

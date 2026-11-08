@@ -102,6 +102,8 @@ export interface Sensor {
   acrDb: number;
   rejectionMask: RejectionStep[];
   polarization: 'V' | 'H' | 'RHCP' | 'LHCP';
+  /** Where the antenna stands when it is on a building: its height counts from the roof, or from the street. */
+  mount: 'roof' | 'street';
 }
 
 export interface MapScenario {
@@ -115,10 +117,12 @@ export interface MapScenario {
   aggregateInterference: 'objective' | 'always' | 'never';
   rejectionModel: 'simple' | 'mask';
   crossPolarDiscriminationDb: number;
+  /** Building heights block paths (terrain diffraction only). */
+  buildings: boolean;
 }
 
 export interface AppState {
-  schemaVersion: 6;
+  schemaVersion: 7;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;

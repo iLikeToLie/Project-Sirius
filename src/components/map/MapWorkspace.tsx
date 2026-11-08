@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Expand, Eye, EyeOff, Maximize2, Minus, Plus, Shrink, SlidersHorizontal } from 'lucide-react';
 import { activePair, applyInputEdit, zoneReceiver, type LinkPin } from '../../lib/activeLink';
-import { coverageZones } from '../../lib/coverage';
+import { buildingsActive, sensorPaths, withBuildings } from '../../lib/buildings';
+import { coverageStepM, coverageZones } from '../../lib/coverage';
 import { groundForCoverage } from '../../lib/coverageGround';
 import { signalRange } from '../../lib/signalColour';
-import { sampleGrid } from '../../lib/contours';
+import { sampleGrid, type ScalarGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
 import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairLinkInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { assessAll, pairVerdict, usesAggregate, worstAssessedLink } from '../../lib/interference';
-import { interferenceSources, interferenceZones, placementPlan, placementZones, referenceReceiver } from '../../lib/interferenceLayer';
+import { interferenceSources, interferenceZones, placementPlan, placementZones, referenceReceiver, streetBuildingM } from '../../lib/interferenceLayer';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useMultiFieldWorker, useZoneWorker } from '../useFieldWorker';
@@ -21,6 +22,7 @@ import { LinkSettingsCard } from './LinkSettingsCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
 import { SensorListCard } from './SensorListCard';
 import { type Basemap, type MapLink, type MapView, SensorMap, type SensorMapHandle } from './SensorMap';
+import type { BuildingTiles } from './useBuildingTiles';
 import type { useElevationTiles } from './useElevationTiles';
 
 type Elevation = ReturnType<typeof useElevationTiles>;
@@ -29,13 +31,16 @@ type Elevation = ReturnType<typeof useElevationTiles>;
 const formatDistance = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(0)} m`);
 const isDrawerSize = (v: unknown): v is DrawerSize => v === null || v === 'max' || (typeof v === 'number' && Number.isFinite(v) && v >= 120);
 
+/** Building tile zoom whose (max-pooled) pixels are no coarser than about one grid cell. */
+const buildingZoomFor = (g: ScalarGrid) => { const cell = Math.max(g.dx, g.dy); return cell < 7 ? 15 : cell < 14 ? 14 : 13; };
+
 /** Elevation tile zoom whose pixels are no coarser than one zone grid cell. */
 function zoomForCell(cellM: number, lat: number) {
   const metresPerPixelZ0 = 156_543.03 * Math.cos((lat * Math.PI) / 180);
   return Math.min(14, Math.max(10, Math.ceil(Math.log2(metresPerPixelZ0 / cellM))));
 }
 
-export function MapWorkspace({ state, setState, elevation, pin, setPin }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation; pin: LinkPin | null; setPin: (pin: LinkPin | null) => void }) {
+export function MapWorkspace({ state, setState, elevation, buildings, pin, setPin }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation; buildings: BuildingTiles; pin: LinkPin | null; setPin: (pin: LinkPin | null) => void }) {
   const handle = useRef<SensorMapHandle | null>(null);
   const [view, setView] = useState<MapView | null>(null);
   const [draft, setDraft] = useState<Record<string, LatLon>>({});
@@ -81,10 +86,23 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     else if (document.fullscreenElement) void document.exitFullscreen();
     else void root.current?.requestFullscreen();
   };
-  const groundAt: GroundAt = elevation.groundAt;
+  const withBuildingsOn = buildingsActive(map);
+  const groundAt: GroundAt = useMemo(() => withBuildings(elevation.groundAt, withBuildingsOn ? buildings.buildingAt : undefined), [elevation.groundAt, buildings.buildingAt, withBuildingsOn]);
   const dragging = Object.keys(draft).length > 0;
 
   const sensors = useMemo(() => map.sensors.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s)), [map.sensors, draft]);
+  useEffect(() => { if (withBuildingsOn) buildings.ensurePaths(sensorPaths(sensors)); }, [sensors, withBuildingsOn, buildings.ensurePaths]);
+  /** Loads the building tiles a ray grid reads (in effects: loading sets state). */
+  const ensureBuildingsFor = (g: ScalarGrid | undefined) => {
+    if (!g) return;
+    buildings.ensureBox(toLatLon({ xM: g.x0, yM: g.y0 }), toLatLon({ xM: g.x0 + g.cols * g.dx, yM: g.y0 + g.rows * g.dy }), buildingZoomFor(g));
+  };
+  /** Building heights on the same nodes as a ground grid, from the tile zoom that matches its cell; undefined when off. */
+  const buildingGrid = (g: ScalarGrid) => {
+    if (!withBuildingsOn) return undefined;
+    const sample = buildings.samplerAt(buildingZoomFor(g));
+    return sampleGrid({ minX: g.x0, maxX: g.x0 + g.cols * g.dx, minY: g.y0, maxY: g.y0 + g.rows * g.dy }, g.cols, g.rows, (xM, yM) => sample(toLatLon({ xM, yM })));
+  };
   const liveMap: MapScenario = useMemo(() => ({ ...map, sensors }), [map, sensors]);
   const pairs = useMemo(() => evaluatePairs(liveMap, state.inputs, groundAt), [liveMap, state.inputs, groundAt]);
   const assessments = useMemo(() => assessAll(liveMap, pairs), [liveMap, pairs]);
@@ -168,9 +186,9 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
       },
       key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, zoneTx.gainDbi, zoneTx.cableLossDb, zone.rx.id, zone.rx.aglM, zone.rx.gainDbi, zone.rx.cableLossDb,
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
-        state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version].join('|'),
+        state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version, withBuildingsOn, withBuildingsOn && buildings.version, zoneTx.mount, zone.rx.mount].join('|'),
     };
-  }, [coverageLayer, zoneTx, zone, view, dragging, map.useTerrainElevation, map.rejectionModel, elevation.samplerAt, elevation.version, state.inputs, groundAt]);
+  }, [coverageLayer, zoneTx, zone, view, dragging, map.useTerrainElevation, map.rejectionModel, elevation.samplerAt, elevation.version, state.inputs, groundAt, withBuildingsOn, buildings.version]);
 
   useEffect(() => {
     if (zoneRequest && view && map.useTerrainElevation) elevation.ensureBox(view.southWest, view.northEast, zoneRequest.z);
@@ -185,8 +203,11 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     // The rays start at the transmitter, which may be off-screen when zoomed in: give them ground that reaches it.
     const sampler = elevation.samplerAt(zoneRequest.z);
     const rayGround = groundForCoverage(g, req.tx, (xM, yM) => (map.useTerrainElevation ? sampler(toLatLon({ xM, yM })) ?? NaN : 0));
-    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1).inputs, maxRangeM, radials: dragging ? 180 : 720, stepM: Math.max(30, maxRangeM / 400), ground: { origin: SG_REFERENCE, grid: rayGround } };
-  }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs, elevation.samplerAt]);
+    const rayBuildings = buildingGrid(rayGround);
+    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1).inputs, maxRangeM, radials: dragging ? 180 : 720, stepM: coverageStepM(maxRangeM, !!rayBuildings), ground: { origin: SG_REFERENCE, grid: rayGround },
+      buildings: rayBuildings && { grid: rayBuildings, rxOnRoof: zone.rx.mount === 'roof', txOwnM: streetBuildingM(zoneTx, groundAt) } };
+  }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs, elevation.samplerAt, withBuildingsOn, buildings.samplerAt]);
+  useEffect(() => ensureBuildingsFor(coverageRequest?.buildings?.grid), [coverageRequest?.buildings?.grid]);
   useEffect(() => {
     const grid = coverageRequest?.ground.grid;
     if (!grid || !coverageRequest || !zoneRequest || !map.useTerrainElevation) return;
@@ -207,14 +228,16 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
     // Include off-screen sources and their paths in one shared ray ground grid.
     const extent = sources.reduce((g, source) => groundForCoverage(g, toLocalM(source), sample), raster);
     const rayGround = extent === raster ? raster : sampleGrid({ minX: extent.x0, maxX: extent.x0 + extent.cols * extent.dx, minY: extent.y0, maxY: extent.y0 + extent.rows * extent.dy }, extent.cols, extent.rows, sample);
-    return { z, request: { raster, rayGround, origin: SG_REFERENCE, mode: map.propagationModel, rxAglM: anchor.aglM, sources, radials: dragging ? 180 : 360 },
-      key: JSON.stringify([coverageLayer, liveMap, state.inputs, view, dragging, elevation.version]) };
-  }, [coverageLayer, referenceRx, placement, selected, view, dragging, liveMap, state.inputs, groundAt, map.useTerrainElevation, map.propagationModel, elevation.samplerAt, elevation.version]);
+    const rayBuildings = map.propagationModel === 'terrain' ? buildingGrid(rayGround) : undefined;
+    return { z, request: { raster, rayGround, rayBuildings, rxOnRoof: anchor.mount === 'roof', origin: SG_REFERENCE, mode: map.propagationModel, rxAglM: anchor.aglM, sources, radials: dragging ? 180 : 360 },
+      key: JSON.stringify([coverageLayer, liveMap, state.inputs, view, dragging, elevation.version, withBuildingsOn && buildings.version]) };
+  }, [coverageLayer, referenceRx, placement, selected, view, dragging, liveMap, state.inputs, groundAt, map.useTerrainElevation, map.propagationModel, elevation.samplerAt, elevation.version, withBuildingsOn, buildings.samplerAt, buildings.version]);
   useEffect(() => {
     if (!multiRequest || !map.useTerrainElevation) return;
     const g = multiRequest.request.rayGround;
     elevation.ensureBox(toLatLon({ xM: g.x0, yM: g.y0 }), toLatLon({ xM: g.x0 + g.cols * g.dx, yM: g.y0 + g.rows * g.dy }), multiRequest.z);
   }, [multiRequest, map.useTerrainElevation, elevation.ensureBox]);
+  useEffect(() => ensureBuildingsFor(multiRequest?.request.rayBuildings), [multiRequest?.request.rayBuildings]);
   const multi = useMultiFieldWorker(multiRequest?.request ?? null, multiRequest?.key ?? coverageLayer);
   const free = useZoneWorker(coverageLayer === 'range' && !terrain ? zoneRequest?.request ?? null : null, `${coverageLayer}|${terrain}|${zoneRequest?.key}`);
   const coverage = useCoverageWorker(coverageLayer === 'range' ? coverageRequest : null, `${coverageLayer}|${terrain}|${zoneRequest?.key}`);
@@ -299,7 +322,7 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
       style={typeof drawerSize === 'number' ? { '--drawer-h': `${drawerSize}px` } as React.CSSProperties : undefined}
     >
       <SensorMap
-        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} basemap={basemap} onBasemapFallback={() => { setBasemap('onemap'); setBasemapNotice(true); }} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
+        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} basemap={basemap} buildings={withBuildingsOn} onBasemapFallback={() => { setBasemap('onemap'); setBasemapNotice(true); }} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
         onSelect={select}
         onDrag={(id, at) => setDraft((d) => ({ ...d, [id]: at }))}
         onDragEnd={(id, at) => { updateSensor(id, at); setDraft((d) => { const { [id]: _done, ...rest } = d; return rest; }); }}
@@ -324,6 +347,10 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
           <input type="checkbox" aria-label="Use terrain elevation" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
           <span>Terrain elevation</span>
         </label>
+        <label className="tool-group switch-group" title={terrain ? 'Building heights block paths; antennas on a roof count their height from it' : 'Buildings need the Terrain diffraction model'}>
+          <input type="checkbox" aria-label="Buildings" checked={map.buildings && terrain} disabled={!terrain} onChange={(event) => setMap((m) => ({ ...m, buildings: event.target.checked }))} />
+          <span>Buildings</span>
+        </label>
         <label className="tool-group select-group" title="Light vector map, OneMap street map, or plain terrain"><span className="tool-label">Map</span>
           <select aria-label="Basemap" value={basemap} onChange={e => { setBasemap(e.target.value as Basemap); setBasemapNotice(false); }}><option value="light">Light</option><option value="onemap">OneMap</option><option value="plain">Plain terrain</option></select>
         </label>
@@ -332,6 +359,8 @@ export function MapWorkspace({ state, setState, elevation, pin, setPin }: { stat
         <button type="button" className="tool tool-group" aria-pressed={fullscreen} title={fullscreen ? 'Exit full screen (Esc or F)' : 'Full screen (F)'} onClick={toggleFullscreen}>{fullscreen ? <Shrink size={14} /> : <Expand size={14} />}{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
         {basemapNotice && <span role="status" className="map-notice">Light map unavailable. Switched to OneMap.</span>}
         {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
+        {withBuildingsOn && buildings.status === 'offline' && <span className="map-notice" role="status">Some building tiles failed to load: those buildings are missing.</span>}
+        {withBuildingsOn && buildings.status === 'loading' && <span className="refining" role="status">Loading buildings…</span>}
         {refining && <span className="refining" role="status">Refining coverage…</span>}
       </div>
 

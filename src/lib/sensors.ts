@@ -1,4 +1,5 @@
 import type { LinkInputs, MapScenario, Sensor, SensorRole } from '../types';
+import { buildingsOf, flatGround } from './buildings';
 import type { GroundAt } from './elevation';
 import { type LatLon, toLocalM } from './geo';
 import { buildProfile, bullingtonLossDb, type Clearance } from './propagation';
@@ -44,6 +45,7 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     acrDb: 30,
     rejectionMask: defaultRejectionMask(),
     polarization: 'V',
+    mount: 'roof',
   };
 }
 
@@ -72,8 +74,14 @@ export const removeSensor = (sensors: Sensor[], id: string) => sensors
   .filter((s) => s.id !== id)
   .map((s) => withoutDesired(s, id));
 
+/**
+ * The base an antenna's height above ground counts from: the ground, plus the roof when buildings
+ * are on and the sensor is roof-mounted on one. Null when the ground is not known.
+ */
 export function groundOf(s: Sensor, groundAt: GroundAt, useTerrain: boolean): number | null {
-  return useTerrain ? groundAt(s) : 0;
+  const ground = useTerrain ? groundAt(s) : 0;
+  const buildingAt = buildingsOf(groundAt);
+  return ground === null || !buildingAt || s.mount === 'street' ? ground : ground + buildingAt(s);
 }
 
 /** 3D separation in metres. Unknown ground counts as 0 for the arithmetic; callers flag it. */
@@ -149,8 +157,8 @@ export function meterScale(links: PairResult[], inputs: LinkInputs): { scaleMin:
 
 export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, frequencyGhz: number, groundAt: GroundAt): { lossDb: number; clearance: Clearance | 'unknown' } {
   if (map.propagationModel !== 'terrain') return { lossDb: 0, clearance: 'unknown' };
-  const sampler = map.useTerrainElevation ? groundAt : () => 0;
-  const profile = buildProfile(tx, rx, sampler);
+  const sampler = map.useTerrainElevation ? groundAt : flatGround(groundAt);
+  const profile = buildProfile(tx, rx, sampler, 30, { from: tx.mount === 'street', to: rx.mount === 'street' });
   if (!profile) return { lossDb: NaN, clearance: 'unknown' };
   return bullingtonLossDb(profile, profile.groundM[0] + tx.aglM, profile.groundM[profile.groundM.length - 1] + rx.aglM, frequencyGhz);
 }

@@ -24,6 +24,24 @@ describe('radial coverage', () => {
     const lowDeficit = low.powerDbm[north] - low.powerDbm[east], highDeficit = high.powerDbm[north] - high.powerDbm[east];
     expect(highDeficit).toBeGreaterThan(lowDeficit);
   });
+  it('shadows the sector behind a building, with a street-level receiver lower than a rooftop one', () => {
+    const base = request();
+    const grid = sampleGrid({ minX: -4100, maxX: 4100, minY: -4100, maxY: 4100 }, 410, 410, (x, y) => x > 800 && x < 900 && Math.abs(y) < 200 ? 60 : 0);
+    const off = computeCoverage(base), on = computeCoverage({ ...base, buildings: { grid, rxOnRoof: true, txOwnM: 0 } });
+    const east = 2 * on.steps + 99, north = 99;
+    expect(on.powerDbm[north]).toBeCloseTo(off.powerDbm[north], 6);
+    expect(on.powerDbm[east]).toBeLessThan(off.powerDbm[east] - 10);
+  });
+  it('ignores a street-level transmitter\'s own building', () => {
+    const base = request();
+    const grid = sampleGrid({ minX: -4100, maxX: 4100, minY: -4100, maxY: 4100 }, 410, 410, (x, y) => Math.hypot(x, y) < 60 ? 80 : 0);
+    const roof = computeCoverage({ ...base, tx: { ...base.tx, elevationM: 90 }, buildings: { grid, rxOnRoof: false, txOwnM: 0 } });
+    const street = computeCoverage({ ...base, buildings: { grid, rxOnRoof: false, txOwnM: 80 } });
+    const inside = computeCoverage({ ...base, buildings: { grid, rxOnRoof: false, txOwnM: 0 } });
+    expect(street.powerDbm[99]).toBeCloseTo(computeCoverage(base).powerDbm[99], 6);
+    expect(inside.powerDbm[99]).toBeLessThan(street.powerDbm[99] - 10);
+    expect(Number.isFinite(roof.powerDbm[99])).toBe(true);
+  });
   it('marks downstream samples unknown after missing ground', () => {
     const out = computeCoverage(request((x, y) => y > 800 && y < 1000 ? NaN : 0));
     expect(out.unknown[49]).toBe(1); expect(out.powerDbm[49]).toBeNaN(); expect(out.unknown[150]).toBe(1);

@@ -10,6 +10,7 @@ import type { Sensor } from '../../types';
 import { lightStyle, lightSourceIds, installLightBasemap, showBasemap, type Basemap } from './lightBasemap';
 export type { Basemap } from './lightBasemap';
 import { SignalOverlay } from './SignalOverlay';
+import { showBuildings } from './buildingLayer';
 import type { LinkObjective } from '../../types';
 import { SG_BOUNDS } from './SelectedSensorCard';
 
@@ -113,7 +114,7 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : canvas.toDataURL())));
 }
 
-export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
+export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, buildings = false, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
   sensors: Sensor[];
   selectedId: string | null;
   tones: Record<string, string>;
@@ -121,6 +122,8 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
   zones: MapZones | null;
   rings: { id: string; points: LatLon[]; label: string }[];
   basemap: Basemap;
+  /** Shade building footprints by height (when the model uses them). */
+  buildings?: boolean;
   onBasemapFallback: () => void;
   frequencyGhz: number;
   handleRef: React.MutableRefObject<SensorMapHandle | null>;
@@ -372,5 +375,9 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     }, 15000) : undefined;
     return () => { map.off('error', onError); window.clearTimeout(timeout); };
   }, [basemap, loaded]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (loaded && map) showBuildings(map, buildings);
+  }, [buildings, loaded]);
   return <><div ref={containerRef} className="map-canvas" />{loaded && mapRef.current && <SignalOverlay map={mapRef.current} links={links} frequencyGhz={frequencyGhz} />}</>;
 }

@@ -461,3 +461,43 @@ Terrain limitations from 1.6.0 still apply. Task 16 records 302 passing tests,
 a warning-free build, independent review fixes and all eleven Review Focus
 checks. Two minor findings remain deferred in the review record. This entry
 does not claim deployment or approval to merge.
+
+-------------------------------------------------------------------------------
+Web Version 1.10.0 (based on workbook Version 3)
+Target deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-11-08
+Status: branch claude/dreamy-bell-a3obkr; not merged or deployed.
+
+Function:
+Building heights block paths in the Singapore Link workspace (terrain
+diffraction model, Buildings switch in the map toolbar, off by default).
+
+Key changes:
+- Building-height tiles in public/buildings/ (zooms 13-15, about 6 MB), built
+  by scripts/buildings/build_buildings.py from Overture Maps buildings
+  (release 2026-10-21.0, ODbL) and the NUS Urban Analytics Lab HDB model.
+  Height order: OSM height; HDB model height; OSM storeys x 3.5 m; a class
+  default (2 storeys for houses, 4 for other buildings). Open structures
+  without a height are left out. Measured or storey-based heights cover 33 %
+  of footprint area; the rest are class defaults, shown fainter on the map.
+- Path profiles sample every 5 m with buildings on (up to 4,095 intervals) and
+  stand building heights on the AW3D30 surface. Bullington diffraction is
+  unchanged and enters through Other loss as before.
+- Per-sensor mount: on the roof (height counts from the roof, the default) or
+  at street level (the sensor's own building is ignored; touching buildings of
+  another height still count).
+- Range, Interference and Placement coverage include buildings, with 5 m ray
+  steps and building grids at the zoom matching the view.
+- Map layer shading footprints by height; buildings drawn in the path profile;
+  building height and source on the sensor card; ODbL attribution.
+- Schema 7: map.buildings (default false) and sensor.mount (default roof).
+  Older scenarios open with buildings off and results unchanged.
+
+Calculation scope and limitations:
+The Version 3 Friis engine is unchanged. Heights are partly estimates: HDB
+blocks built after 2019 and most private buildings use storey counts or class
+defaults until the data.gov.sg HDB join is added. One Bullington equivalent edge
+understates loss over many rooftops; there is no building penetration,
+reflection or street-canyon modelling. The AW3D30 surface carries a few metres
+of building mass, so heights are counted that much twice. A coverage pass takes
+about 92 ms with buildings against 21 ms without (720 radials, Node, 8 Nov).

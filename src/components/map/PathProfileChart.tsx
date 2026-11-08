@@ -8,14 +8,15 @@ import { buildProfile, bullingtonLossDb, earthBulgeM, fresnelRadiusM } from '../
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
 
-type End = LatLon & { aglM: number };
+type End = LatLon & { aglM: number; mount?: 'roof' | 'street' };
 
-/** Ground (with Earth bulge), direct ray and the 60 % first Fresnel envelope along the Tx→Rx path. */
+/** Ground (with Earth bulge), buildings when on, direct ray and the 60 % first Fresnel envelope along the Tx→Rx path. */
 export function PathProfileChart({ tx, rx, groundAt, frequencyGhz }: { tx: End; rx: End; groundAt: GroundAt; frequencyGhz: number }) {
   const chart = useMemo(() => {
-    const profile = buildProfile(tx, rx, groundAt);
+    const profile = buildProfile(tx, rx, groundAt, 30, { from: tx.mount === 'street', to: rx.mount === 'street' });
     if (!profile) return null;
-    const { distancesM: d, groundM } = profile;
+    const { distancesM: d, groundM, buildingM } = profile;
+    const terrainM = buildingM ? groundM.map((g, i) => g - buildingM[i]) : groundM;
     const length = d[d.length - 1];
     const txElev = groundM[0] + tx.aglM, rxElev = groundM[groundM.length - 1] + rx.aglM;
     const wavelength = SPEED_OF_LIGHT_MPS / (frequencyGhz * 1e9);
@@ -26,18 +27,19 @@ export function PathProfileChart({ tx, rx, groundAt, frequencyGhz }: { tx: End; 
     return {
       labels: Array.from(d, (x) => (x / 1000).toFixed(2)),
       datasets: [
-        { label: 'Ground + Earth bulge', data: Array.from(groundM), borderColor: '#b08968', backgroundColor: 'rgba(176, 137, 104, .28)', fill: 'origin', pointRadius: 0, borderWidth: 1.5 },
-        { label: 'Ground', data: Array.from(groundM, (g, i) => g - earthBulgeM(d[i], length - d[i])), borderColor: '#7c6a58', borderDash: [3, 3], fill: false, pointRadius: 0, borderWidth: 1 },
+        { label: 'Ground + Earth bulge', data: Array.from(terrainM), borderColor: '#b08968', backgroundColor: 'rgba(176, 137, 104, .28)', fill: 'origin', pointRadius: 0, borderWidth: 1.5 },
+        ...(buildingM ? [{ label: 'Buildings', data: Array.from(groundM), borderColor: '#8f9bb3', backgroundColor: 'rgba(143, 155, 179, .45)', fill: '-1', pointRadius: 0, borderWidth: 1, stepped: true }] : []),
+        { label: 'Ground', data: Array.from(terrainM, (g, i) => g - earthBulgeM(d[i], length - d[i])), borderColor: '#7c6a58', borderDash: [3, 3], fill: false, pointRadius: 0, borderWidth: 1 },
         { label: 'Direct ray', data: ray, borderColor: '#59d499', fill: false, pointRadius: 0, borderWidth: 2 },
         { label: '60% Fresnel zone', data: ray.map((y, i) => y - f1[i]), borderColor: '#5aa9ff', borderDash: [5, 4], fill: false, pointRadius: 0, borderWidth: 1.5 },
         { label: 'Worst obstruction', data: Array.from(groundM, (g, i) => point(g, i)), borderColor: '#ff6161', backgroundColor: '#ff6161', showLine: false, pointRadius: 6, fill: false },
       ],
     };
-  }, [tx.lat, tx.lon, tx.aglM, rx.lat, rx.lon, rx.aglM, groundAt, frequencyGhz]);
+  }, [tx.lat, tx.lon, tx.aglM, tx.mount, rx.lat, rx.lon, rx.aglM, rx.mount, groundAt, frequencyGhz]);
 
   if (!chart) return <p className="field-note">Path profile unavailable: ground elevation for this path has not loaded.</p>;
   return (
-    <div className="path-profile" role="img" aria-label="Path profile: ground, direct ray and Fresnel zone between transmitter and receiver">
+    <div className="path-profile" role="img" aria-label="Path profile: ground, buildings, direct ray and Fresnel zone between transmitter and receiver">
       <Line
         data={chart}
         options={{

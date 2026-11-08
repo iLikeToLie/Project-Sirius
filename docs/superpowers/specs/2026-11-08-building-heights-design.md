@@ -1,6 +1,6 @@
 # Building heights and clutter: data sources and design
 
-Status: **draft for review** (8 November 2026). The data-source research is done. The design below needs the three decisions in "Open decisions" before the plan is written.
+Status: **built on branch `claude/dreamy-bell-a3obkr` as web 1.10.0** (8 November 2026). Decisions B1–B3 were taken with the recommendations (hub D6–D8). Section 7 records where the build differs from this draft.
 
 Hub decision D1 (6 Nov) chose building heights and clutter as the next feature, with the note "search and find open data sources for building heights". This document answers that note, then proposes how buildings would enter the propagation model.
 
@@ -96,3 +96,14 @@ Also needed: a way to fetch HDB data. Either run the build script on a local mac
 ## 6. Reproducing the numbers
 
 `scripts/buildings/overture_coverage.py` reads the Overture release for the Singapore bounds and prints the coverage figures in section 2. `scripts/buildings/dsm_samples.mjs` prints the DEM table in section 1.
+
+## 7. As built (8 November)
+
+- **Decisions:** B1 (b) class defaults, B2 (c) per-sensor mount with roof as default, B3 off by default.
+- **HDB heights** come from the NUS Urban Analytics Lab `hdb3d-data` model (2019), joined to Overture by OSM way id, because data.gov.sg is blocked from cloud sessions. 9,488 footprints take that height. The data.gov.sg join stays open for blocks built after 2019 (for example newer Punggol blocks read the 14 m default).
+- **Storey height** is 3.5 m for all OSM storey counts; the HDB model supplies its own heights.
+- **Result:** 326,403 footprints in the build bounds (which include part of Johor). Area share by kind: measured 2.8 %, from storeys 30.0 %, class default 67.2 %. Tiles: 1,216 files, 6.2 MB, zooms 13–15. Spot checks: Marina Bay Sands hotel 207 m, Pinnacle@Duxton 150 m.
+- **Own building at street level:** only the run of samples at the sensor's own building height is skipped. The first draft skipped every touching building, which dropped a 158 m tower beside a 33 m block in the CBD check.
+- **Coverage:** ray step 5 m (at most 2,000 steps) with buildings; building grids use the max-pooled zoom 13–15 tiles nearest the grid cell size. Wide views therefore blur and slightly overstate buildings.
+- **Performance:** one 720-radial coverage pass, 3.6 km, 480 × 300 grid: 92 ms with buildings, 21 ms without (Node, this session). Not yet measured in the browser against the 1.9.0 figures.
+- **Checks:** 319 unit tests; production build; `scripts/e2e/buildings.mjs` passes (CBD path: diffraction 43.0 dB without buildings, 60.9 dB with the receiver at street level, 59.3 dB on its roof).

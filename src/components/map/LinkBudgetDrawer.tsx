@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { activePair, type LinkPin } from '../../lib/activeLink';
+import { buildingsOf, flatGround } from '../../lib/buildings';
 import type { GroundAt } from '../../lib/elevation';
 import { calculateLink, formatNumber } from '../../lib/rf';
 import { effectiveObjective, groundOf, pairLinkInputs, pairPropagation, receiverSummary, separationM, type PairResult } from '../../lib/sensors';
@@ -162,7 +163,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
               <Metric label="Interference margin" value={formatNumber(result.interferenceMarginDb)} unit="dB" note="Threshold minus received power" />
               {objective === 'avoidance' && <Metric label="Protected margin" value={known ? formatNumber(assessment.limitDbm - result.receivedPowerDbm) : 'Unknown'} unit="dB" note="Protected limit minus received power" />}
               <Metric label="Free-space path loss" value={formatNumber(result.fsplDb)} unit="dB" />
-              <Metric label="Diffraction loss" value={map.propagationModel === 'terrain' ? formatNumber(propagation.lossDb) : 'off'} unit={map.propagationModel === 'terrain' ? 'dB' : ''} note={map.propagationModel === 'terrain' ? `Clearance: ${propagation.clearance}` : 'Free-space model'} />
+              <Metric label="Diffraction loss" value={map.propagationModel === 'terrain' ? formatNumber(propagation.lossDb) : 'off'} unit={map.propagationModel === 'terrain' ? 'dB' : ''} note={map.propagationModel === 'terrain' ? `Clearance: ${propagation.clearance}${buildingsOf(groundAt) ? ' · terrain and buildings' : ''}` : 'Free-space model'} />
               {model.rejectionDb > 0 && <Metric label="Frequency rejection" value={formatNumber(model.rejectionDb)} unit="dB" />}
               <Metric label="Per-sensor polarization mismatch" value={formatNumber(model.polarizationDb)} unit="dB" note={`${pair.tx.polarization} → ${pair.rx.polarization}`} />
               <Metric label="Total system losses" value={formatNumber(result.totalLossDb)} unit="dB" />
@@ -170,7 +171,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
             </div>
             {!known && map.useTerrainElevation && <p className="field-note" role="status">Elevation unavailable for this path; terrain prediction is unknown.</p>}
             <RxMeterStack links={meterLinks} inputs={inputs} objective={objective} assessment={assessment} />
-            {map.propagationModel === 'terrain' && <PathProfileChart tx={pair.tx} rx={pair.rx} groundAt={map.useTerrainElevation ? groundAt : () => 0} frequencyGhz={inputs.frequencyGhz} />}
+            {map.propagationModel === 'terrain' && <PathProfileChart tx={pair.tx} rx={pair.rx} groundAt={map.useTerrainElevation ? groundAt : flatGround(groundAt)} frequencyGhz={inputs.frequencyGhz} />}
           </div>
         </div>
       )}
