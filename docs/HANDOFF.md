@@ -38,6 +38,7 @@ Last updated 2 November 2026. Everything needed to continue this work on another
 ## Read in this order
 
 1. This file, then `docs/BACKLOG.md` (open ideas, with done items marked).
+   For building heights (web 1.10.0 on branch `claude/dreamy-bell-a3obkr`, not merged), read `docs/superpowers/specs/2026-11-08-building-heights-design.md`; its section 7 records what was built.
    For the current branch, read `docs/superpowers/plans/2026-11-02-interference-avoidance.md` and `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` next.
 2. `REPOSITORY_BRIEF.md`: the original repo review (pre-1.4.0 baseline and the calculation rules to preserve). Its URLs predate the rename.
 3. `docs/superpowers/specs/2026-10-26-link-workspace-v2-design.md`: the approved v2 design (terrain, coverage, drawer).

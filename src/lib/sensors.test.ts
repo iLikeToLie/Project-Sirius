@@ -11,7 +11,7 @@ import {
 const flat: GroundAt = () => 0;
 const defaults = DEFAULT_STATE.inputs;
 const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSensor(sensors, createSensor(sensors, role, offsetLatLon(SG_REFERENCE, dx, dy), defaults));
-const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation, protectionMarginDb: 3, aggregateInterference: 'objective', rejectionModel: 'simple', crossPolarDiscriminationDb: 15 });
+const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation, protectionMarginDb: 3, aggregateInterference: 'objective', rejectionModel: 'simple', crossPolarDiscriminationDb: 15, buildings: false });
 const LINK = ['Acceptable link', 'Weak link', 'No link'];
 const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
 const [T1, T2, T3, R1, R2] = place(place(place(place(place([], 'tx', 0), 'tx', 1000), 'tx', 2000), 'rx', 200), 'rx', 400);

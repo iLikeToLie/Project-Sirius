@@ -1,6 +1,6 @@
 import type { LinkInputs } from '../types';
 import type { ScalarGrid } from './contours';
-import { computeCoverage, reprojectPowers } from './coverage';
+import { computeCoverage, coverageStepM, reprojectPowers } from './coverage';
 import { toLocalM, type LatLon } from './geo';
 import { calculateLink } from './rf';
 import { MAX_SENSORS } from './sensors';
@@ -12,7 +12,11 @@ export interface MultiFieldRequest {
   origin: LatLon;
   mode: 'free-space' | 'terrain';
   rxAglM: number;
-  sources: (LatLon & { elevationM: number; inputs: LinkInputs })[];
+  /** ownBuildingM: the height of a street-level source's own building, which its rays ignore. */
+  sources: (LatLon & { elevationM: number; inputs: LinkInputs; ownBuildingM?: number })[];
+  /** Building heights on the rayGround nodes, terrain mode only; receivers on roofs stand on them. */
+  rayBuildings?: ScalarGrid;
+  rxOnRoof?: boolean;
   /** Callers use 360 normally, or 180 while dragging. */
   radials: number;
 }
@@ -33,7 +37,8 @@ export function computeMultiField(req: MultiFieldRequest): MultiFieldResult {
       const maxRangeM = Math.max(30, ...[raster.x0, raster.x0 + raster.cols * raster.dx].flatMap(x =>
         [raster.y0, raster.y0 + raster.rows * raster.dy].map(y => Math.hypot(x - tx.xM, y - tx.yM))));
       const out = computeCoverage({ jobId: req.jobId, tx: source, rxAglM: req.rxAglM, inputs: source.inputs,
-        maxRangeM, radials: req.radials, stepM: Math.max(30, maxRangeM / 400), ground: { origin: req.origin, grid: req.rayGround } });
+        maxRangeM, radials: req.radials, stepM: coverageStepM(maxRangeM, !!req.rayBuildings), ground: { origin: req.origin, grid: req.rayGround },
+        buildings: req.rayBuildings && { grid: req.rayBuildings, rxOnRoof: req.rxOnRoof ?? true, txOwnM: source.ownBuildingM ?? 0 } });
       return Float32Array.from(reprojectPowers(out, tx, raster));
     }
     const basePower = calculateLink({ ...source.inputs, distanceM: 1 }).receivedPowerDbm;

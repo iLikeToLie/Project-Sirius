@@ -87,6 +87,8 @@ function readSensor(value: unknown): Sensor | undefined {
   sensor.acrDb = value.acrDb as number ?? 30;
   if (value.polarization !== undefined && !['V', 'H', 'RHCP', 'LHCP'].includes(value.polarization as string)) return undefined;
   sensor.polarization = value.polarization as Sensor['polarization'] ?? 'V';
+  if (value.mount !== undefined && value.mount !== 'roof' && value.mount !== 'street') return undefined;
+  sensor.mount = value.mount as Sensor['mount'] ?? 'roof';
   sensor.rejectionMask = isRejectionMask(value.rejectionMask) ? value.rejectionMask.map(s => ({ ...s })) : defaultRejectionMask();
   return valid ? sensor : undefined;
 }
@@ -100,6 +102,7 @@ function readMap(value: unknown): MapScenario | undefined {
   if (value.aggregateInterference !== undefined && !['objective', 'always', 'never'].includes(value.aggregateInterference as string)) return undefined;
   if (value.rejectionModel !== undefined && !['simple', 'mask'].includes(value.rejectionModel as string)) return undefined;
   if (value.crossPolarDiscriminationDb !== undefined && (!isFiniteNumber(value.crossPolarDiscriminationDb) || value.crossPolarDiscriminationDb < 0)) return undefined;
+  if (value.buildings !== undefined && typeof value.buildings !== 'boolean') return undefined;
   const sensors = value.sensors.map(readSensor);
   if (sensors.some((s) => !s)) return undefined;
   const list = sensors as Sensor[];
@@ -121,6 +124,7 @@ function readMap(value: unknown): MapScenario | undefined {
     aggregateInterference: value.aggregateInterference as MapScenario['aggregateInterference'] ?? 'objective',
     rejectionModel: value.rejectionModel as MapScenario['rejectionModel'] ?? 'simple',
     crossPolarDiscriminationDb: value.crossPolarDiscriminationDb as number ?? 15,
+    buildings: value.buildings as boolean ?? false,
   };
 }
 
@@ -131,7 +135,7 @@ export function normalizeState(saved?: unknown): AppState {
   const inputs = { ...defaults.inputs, ...s.inputs };
   const map = 'map' in s ? readMap(s.map) ?? defaults.map : migrateWorkspace(readWorkspace(s.workspace, inputs.distanceM), inputs);
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     linkObjective: s.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
     inputs,
     distanceSweep: { ...defaults.distanceSweep, ...s.distanceSweep },

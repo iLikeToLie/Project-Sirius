@@ -1,0 +1,47 @@
+{
+  "sources": [
+    {
+      "name": "Overture Maps buildings",
+      "release": "2026-10-21.0",
+      "licence": "ODbL-1.0",
+      "attribution": "\u00a9 OpenStreetMap contributors, Overture Maps Foundation"
+    },
+    {
+      "name": "NUS Urban Analytics Lab hdb3d-data",
+      "version": "2019-08-25",
+      "used": true,
+      "attribution": "NUS Urban Analytics Lab, HDB, OpenStreetMap contributors, OneMap"
+    }
+  ],
+  "licence": "ODbL-1.0 (derived database)",
+  "bounds": [
+    103.596,
+    1.2,
+    104.1,
+    1.4835
+  ],
+  "zooms": [
+    13,
+    14,
+    15
+  ],
+  "sourceZoom": 15,
+  "encoding": "height above ground in decimetres = R*256 + G; B = kind (1 measured, 2 from storeys, 3 class default)",
+  "storeyM": 3.5,
+  "defaultLowRiseM": 7.0,
+  "defaultOtherM": 14.0,
+  "footprints": 326403,
+  "rules": {
+    "class-default": 272276,
+    "osm-levels": 40351,
+    "open-structure": 1468,
+    "osm-height": 2820,
+    "hdb3d": 9488
+  },
+  "areaShareByKind": {
+    "1": 0.0277,
+    "2": 0.2999,
+    "3": 0.6724
+  },
+  "bytes": 6174895
+}

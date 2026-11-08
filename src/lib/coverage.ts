@@ -7,6 +7,8 @@ import { calculateLink, SPEED_OF_LIGHT_MPS } from './rf';
 export interface CoverageRequest {
   jobId: number; tx: LatLon & { elevationM: number }; rxAglM: number; inputs: LinkInputs;
   maxRangeM: number; radials: number; stepM: number; ground: { origin: LatLon; grid: ScalarGrid };
+  /** Building heights above ground on the same nodes as the ground grid; absent when buildings are off. */
+  buildings?: { grid: ScalarGrid; rxOnRoof: boolean; /** A street-level transmitter's own building height, skipped near it; 0 for none or a roof mount. */ txOwnM: number };
 }
 export interface CoverageResult {
   jobId: number; powerDbm: Float32Array; radials: number; steps: number; stepM: number; unknown: Uint8Array;
@@ -32,6 +34,9 @@ export function gridGroundNear(grid: ScalarGrid, x: number, y: number, slack: nu
   return Number.isNaN(cx) || Number.isNaN(cy) ? NaN : gridGroundAt(grid, cx, cy);
 }
 
+/** Ray step: 30 m, or 5 m with buildings so a block is not stepped over; at most 400 (or 2,000) steps. */
+export const coverageStepM = (maxRangeM: number, buildings: boolean) => buildings ? Math.max(5, maxRangeM / 2000) : Math.max(30, maxRangeM / 400);
+
 /** Incremental horizon edge: constant work per receiver, without rebuilding each path profile. */
 export function computeCoverage(req: CoverageRequest): CoverageResult {
   if (!Number.isInteger(req.radials) || req.radials < 1 || req.radials > 1440 || !Number.isFinite(req.stepM) || req.stepM <= 0 || !Number.isFinite(req.maxRangeM) || req.maxRangeM <= 0) throw new Error('Invalid coverage dimensions');
@@ -44,13 +49,20 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
   for (let r = 0; r < req.radials; r++) {
     const angle = r * 2 * Math.PI / req.radials, sx = Math.sin(angle), sy = Math.cos(angle);
     let horizon = -Infinity, edgeD = 0, edgeGround = 0;
+    // A street-level transmitter's own building does not block its rays: skip the run at its height.
+    let ownBuilding = (req.buildings?.txOwnM ?? 0) > 0;
     let missing = !Number.isFinite(req.tx.elevationM) || !Number.isFinite(gridGroundAt(req.ground.grid, tx.xM, tx.yM));
     for (let s = 0; s < steps; s++) {
       const d = (s + 1) * req.stepM, index = r * steps + s;
       const ground = gridGroundNear(req.ground.grid, tx.xM + sx * d, tx.yM + sy * d, req.stepM * 0.51);
       missing ||= !Number.isFinite(ground);
       if (missing) { unknown[index] = 1; powerDbm[index] = NaN; continue; }
-      const rxElevation = ground + req.rxAglM;
+      let building = req.buildings ? gridGroundNear(req.buildings.grid, tx.xM + sx * d, tx.yM + sy * d, req.stepM * 0.51) : 0;
+      if (!Number.isFinite(building) || building < 0.5) { building = 0; ownBuilding = false; }
+      else if (ownBuilding && Math.abs(building - req.buildings!.txOwnM) < 1) building = 0;
+      else ownBuilding = false;
+      const surface = ground + building;
+      const rxElevation = (req.buildings?.rxOnRoof ? surface : ground) + req.rxAglM;
       let loss = 0;
       if (edgeD > 0) {
         const ray = req.tx.elevationM + (rxElevation - req.tx.elevationM) * edgeD / d;
@@ -59,8 +71,8 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
         if (deficit > -0.6 * fresnel) loss = knifeEdgeLossDb(deficit * Math.SQRT2 / fresnel);
       }
       powerDbm[index] = basePower - 20 * Math.log10(Math.hypot(d, rxElevation - req.tx.elevationM)) - loss;
-      const slope = (ground - req.tx.elevationM) / d - d / (2 * EFFECTIVE_EARTH_RADIUS_M);
-      if (slope > horizon) { horizon = slope; edgeD = d; edgeGround = ground; }
+      const slope = (surface - req.tx.elevationM) / d - d / (2 * EFFECTIVE_EARTH_RADIUS_M);
+      if (slope > horizon) { horizon = slope; edgeD = d; edgeGround = surface; }
     }
   }
   return { jobId: req.jobId, powerDbm, radials: req.radials, steps, stepM: req.stepM, unknown };

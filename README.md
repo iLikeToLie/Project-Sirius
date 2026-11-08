@@ -18,11 +18,12 @@ A browser-based RF link-budget and interference-screening tool using the Friis f
 - Per-transmitter allowed power ranges and fix suggestions, plus a clickable Tx × Rx interference matrix in the drawer.
 - Per-sensor frequency overrides, bandwidth and polarization (V, H, RHCP, LHCP); simple ACR or stepped-mask receiver rejection, an adjustable fixed XPD, and a noise-floor helper for setting interference thresholds. Frequency defaults to the shared setting.
 - Range, total Interference and transmitter Placement map layers. Placement classifies cells as Recommended, Safe, Marginal, Unsafe or Unknown against fixed victim and served receiver sets.
-- Antenna elevation = ground + height above ground.
+- Buildings (web 1.10.0, branch): a Buildings switch makes building heights block paths under terrain diffraction, with each sensor on its roof or at street level, a footprint layer shaded by height, and buildings in the path profile. Heights come from Overture Maps (OpenStreetMap heights and storeys) and the NUS Urban Analytics Lab HDB model, with class defaults where neither has one.
+- Antenna elevation = ground (+ roof, when on a building) + height above ground.
 - Distance sweep with received-power, sensitivity, and interference-threshold curves.
 - Antenna-gain sweep with a Tx/Rx selector and three editable comparison distances.
 - Ten-row placement comparison with editable gains, distances, losses, rankings, and statuses.
-- Automatic device-local saving plus JSON scenario import/export (schema 6). Schema 5 and older files receive defaults for new fields. Received powers are preserved with default frequency and polarization; interference statuses can change under the new margin and aggregation defaults. Scenarios from 1.5.0 and earlier open with the terrain model; 1.4.0 and earlier open as two map sensors with terrain elevation off.
+- Automatic device-local saving plus JSON scenario import/export (schema 7). Older files receive defaults for new fields; schema 6 files open with buildings off. Received powers are preserved with default frequency and polarization; interference statuses can change under the new margin and aggregation defaults. Scenarios from 1.5.0 and earlier open with the terrain model; 1.4.0 and earlier open as two map sensors with terrain elevation off.
 - Responsive layout for desktop, tablet, and mobile browsers.
 - Mission-control interface with monospaced editorial typography, deep-space surfaces, solar-amber emphasis, compact instrument controls, and accessible status colours.
 - Automated tests against known Version 3 workbook results.
@@ -39,6 +40,8 @@ Prerequisites: Node.js 22 or newer and pnpm.
 pnpm install
 pnpm dev
 ```
+
+The building tiles in `public/buildings/` are derived from Overture Maps buildings and © OpenStreetMap contributors under the ODbL, which also covers the tiles; rebuild them with `python3 scripts/buildings/build_buildings.py --hdb3d hdb.json` (see the script header).
 
 The terrain tiles in `public/dem/` are generated from JAXA AW3D30 and committed. To rebuild them, put the AW3D30 v4 tiles `N001E103.zip` and `N001E104.zip` (JAXA, free registration) in `Map/` and run `pnpm dem:build`.
 

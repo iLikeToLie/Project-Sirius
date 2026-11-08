@@ -42,7 +42,7 @@ describe('scenario state', () => {
   });
   it('returns defaults when nothing is saved', () => {
     expect(normalizeState()).toEqual(DEFAULT_STATE);
-    expect(DEFAULT_STATE.schemaVersion).toBe(6);
+    expect(DEFAULT_STATE.schemaVersion).toBe(7);
     expect(DEFAULT_STATE.map.sensors.map((s) => s.role)).toEqual(['tx', 'rx']);
     expect(DEFAULT_STATE.map.useTerrainElevation).toBe(true);
   });
@@ -75,7 +75,7 @@ describe('scenario state', () => {
   it('migrates a 1.4.0 workspace without changing its result', () => {
     const workspace: LinkWorkspace = { tx: { xM: 300, yM: 400, aglM: 12 }, rx: { xM: 0, yM: 0, aglM: 10 }, terrain: { ...DEFAULT_TERRAIN, enabled: true } };
     const state = normalizeState(v2(workspace) as unknown as Partial<AppState>);
-    expect(state.schemaVersion).toBe(6);
+    expect(state.schemaVersion).toBe(7);
     expect(state.map.sensors).toHaveLength(2);
     expect(state.map.useTerrainElevation).toBe(false);
     expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(separation3dM(workspace), 6);
@@ -134,7 +134,7 @@ describe('schema 6 interference settings', () => {
       delete sensor.requiredCiDb;
     }
     const next = validateImport(old)!;
-    expect(next.schemaVersion).toBe(6);
+    expect(next.schemaVersion).toBe(7);
     expect(next.map.protectionMarginDb).toBe(3);
     expect(next.map.aggregateInterference).toBe('objective');
     for (const sensor of next.map.sensors) {
@@ -146,7 +146,7 @@ describe('schema 6 interference settings', () => {
 
   it('round-trips custom schema 6 settings including zero and receiver overrides', () => {
     const raw = JSON.parse(JSON.stringify(freshDefaultState()));
-    raw.schemaVersion = 6;
+    raw.schemaVersion = 7;
     raw.map.protectionMarginDb = 0;
     raw.map.sensors[1].protectionMarginDb = 4;
     raw.map.sensors[1].requiredCiDb = 0;

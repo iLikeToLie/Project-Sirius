@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { formatNumber } from '../../lib/rf';
 import { mitigations, pairVerdict, transmitterPowerRange, type ReceiverAssessment } from '../../lib/interference';
 import { effectiveObjective, groundOf, type PairResult, receiverSummary, toggleDesired } from '../../lib/sensors';
+import { BUILDING_KIND_LABEL, buildingsOf } from '../../lib/buildings';
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
 import { CommitField, StatusBadge } from '../ui';
@@ -32,7 +33,11 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
   const [interferenceToNoiseDb, setInterferenceToNoiseDb] = useState(-6);
   const noiseDbm = noiseFloorDbm(sensor.bandwidthMhz, noiseFigureDb);
   const derivedThresholdDbm = noiseDbm + interferenceToNoiseDb;
+  const bareGround = map.useTerrainElevation ? groundAt(sensor) : 0;
   const ground = groundOf(sensor, groundAt, map.useTerrainElevation);
+  const buildingAt = buildingsOf(groundAt);
+  const buildingHere = buildingAt ? buildingAt(sensor) : 0;
+  const buildingKind = buildingAt?.kindAt?.(sensor) ?? 0;
   const name = (id: string) => map.sensors.find((s) => s.id === id)?.name ?? '—';
   const transmitters = map.sensors.filter((s) => s.role === 'tx');
   const summary = sensor.role === 'rx' ? receiverSummary(pairs, sensor.id) : null;
@@ -102,9 +107,13 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
         </dl>
         <button type="button" className="ghost" disabled={!Number.isFinite(derivedThresholdDbm)} onClick={() => onChange({ interferenceThresholdDbm: derivedThresholdDbm })}>Use as interference threshold</button>
       </details>}
+      {buildingsOf(groundAt) && <label className="field"><span>Mount</span><select aria-label="Sensor mount" value={sensor.mount} onChange={e => onChange({ mount: e.target.value as Sensor['mount'] })}>
+        <option value="roof">On the roof (height above roof)</option><option value="street">At street level (ignore own building)</option>
+      </select></label>}
       <dl className="readouts">
-        <div><dt>Ground elevation</dt><dd>{!map.useTerrainElevation ? '0 m (terrain off)' : ground === null ? 'Elevation unavailable' : `${formatNumber(ground, 1)} m`}</dd></div>
-        <div><dt>Total antenna elevation</dt><dd>{formatNumber((ground ?? 0) + sensor.aglM, 1)} m{map.useTerrainElevation && ground === null ? ' (ground taken as 0)' : ''}</dd></div>
+        {buildingsOf(groundAt) && <div><dt>Building here</dt><dd>{buildingHere > 0 ? `${formatNumber(buildingHere, 1)} m · ${BUILDING_KIND_LABEL[buildingKind]}` : 'None'}</dd></div>}
+        <div><dt>Ground elevation</dt><dd>{!map.useTerrainElevation ? '0 m (terrain off)' : bareGround === null ? 'Elevation unavailable' : `${formatNumber(bareGround, 1)} m`}</dd></div>
+        <div><dt>Total antenna elevation</dt><dd>{formatNumber((ground ?? 0) + sensor.aglM, 1)} m{buildingHere > 0 && sensor.mount === 'roof' ? ' (on the roof)' : ''}{map.useTerrainElevation && ground === null ? ' (ground taken as 0)' : ''}</dd></div>
       </dl>
 
       </div>

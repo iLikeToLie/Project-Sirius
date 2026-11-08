@@ -46,6 +46,7 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     bandwidthMhz: 20,
     acrDb: 30,
     polarization: 'V' as const,
+    mount: 'roof' as const,
   };
   return {
     sensors: [
@@ -61,6 +62,7 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     aggregateInterference: 'objective',
     rejectionModel: 'simple',
     crossPolarDiscriminationDb: 15,
+    buildings: false,
   };
 }
 
@@ -86,7 +88,7 @@ const DEFAULT_INPUTS: LinkInputs = {
 const defaultPlacements = workspaceForDistance(500);
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   linkObjective: 'desired',
   inputs: DEFAULT_INPUTS,
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },
