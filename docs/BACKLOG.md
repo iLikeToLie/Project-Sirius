@@ -87,3 +87,9 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
 
 - **Want:** azimuth, beamwidth and front-to-back ratio per sensor, so antennas can be pointed away from victim receivers.
 - **Notes:** pattern loss would apply per Tx–Rx pair and per coverage radial in `computeCoverage`. The web app deliberately left out the workbook Version 4 antenna patterns, so this needs its own design pass before it is planned. Kept out of item 7 by decision on 2 Nov.
+
+## 9. Building heights and clutter — design draft (8 Nov)
+
+- **Want:** buildings block links like terrain does, for urban Singapore paths. Chosen as the next feature in the project hub (decision D1, 6 Nov), starting with a search for open height data.
+- **State (8 Nov):** data-source research done and a design drafted in `docs/superpowers/specs/2026-11-08-building-heights-design.md`. Best open option: Overture Maps buildings (ODbL; OSM heights and storeys cover 32.6 % of footprint area) plus HDB storey counts from data.gov.sg. The bundled AW3D30 DSM carries only a few metres of building mass, so heights can be added to it directly.
+- **Needs before planning:** decisions B1 (footprints with no height), B2 (sensors standing on a building) and B3 (default on or off) in the spec, and access to data.gov.sg for the HDB join (local run, or allow the host in the cloud environment).
