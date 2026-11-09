@@ -882,3 +882,8 @@ tbody tr:hover { background: var(--surface-elevated); }
 .link-budget-drawer { bottom: max(10px, env(safe-area-inset-bottom)); }
 .drawer-open .coverage-legend { bottom: calc(var(--drawer-h, 40%) + 22px); }
 .coverage-legend { bottom: 66px; }
+
+/* Keep the sensor list clear of the coverage legend when the drawer is open */
+@media (min-width: 1001px) {
+  .drawer-open .sensor-list-card { max-height: calc(100% - var(--drawer-h, 40%) - 250px); min-height: 96px; overflow-y: auto; }
+}
