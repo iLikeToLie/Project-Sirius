@@ -88,10 +88,10 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
 - **Want:** azimuth, beamwidth and front-to-back ratio per sensor, so antennas can be pointed away from victim receivers.
 - **Notes:** pattern loss would apply per Tx–Rx pair and per coverage radial in `computeCoverage`. The web app deliberately left out the workbook Version 4 antenna patterns, so this needs its own design pass before it is planned. Kept out of item 7 by decision on 2 Nov.
 
-## 9. Building heights and clutter — built on branch (web 1.10.0, 8 Nov)
+## 9. Building heights and clutter — merged (web 1.10.0, PR #12, 8 Nov)
 
 - **Want:** buildings block links like terrain does, for urban Singapore paths. Chosen as the next feature in the project hub (decision D1, 6 Nov), starting with a search for open height data.
 - **State (8 Nov):** data-source research done and a design drafted in `docs/superpowers/specs/2026-11-08-building-heights-design.md`. Best open option: Overture Maps buildings (ODbL; OSM heights and storeys cover 32.6 % of footprint area) plus HDB storey counts from data.gov.sg. The bundled AW3D30 DSM carries only a few metres of building mass, so heights can be added to it directly.
 - **Decisions (8 Nov, hub D6–D8):** class-default heights for footprints with none; per-sensor mount, roof by default; buildings off by default.
-- **Built (8 Nov):** on `claude/dreamy-bell-a3obkr`; see VERSION_HISTORY web 1.10.0. Not merged.
+- **Built (8 Nov):** merged to `main` as PR #12; see VERSION_HISTORY web 1.10.0. UI fixes followed in PR #13 (9 Nov).
 - **Open:** join HDB Property Information (`max_floor_lvl`) from data.gov.sg to cover HDB blocks built after 2019 (the NUS model is from 2019; data.gov.sg is blocked from cloud sessions). Multi-edge diffraction for urban paths. A light-theme check of the footprint layer.

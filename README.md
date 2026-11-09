@@ -1,6 +1,6 @@
 # Friis RF Link & Interference Calculator
 
-A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.9.0** is based on **workbook Version 3** and adds multi-transmitter interference planning to the Singapore Link workspace. This version is verified on `feature/interference-avoidance`, pending user review and deployment; see [the review record](docs/INTERFERENCE_AVOIDANCE_REVIEW.md).
+A browser-based RF link-budget and interference-screening tool using the Friis free-space model. **Web Version 1.10.0** is based on **workbook Version 3**. The Singapore Link workspace plans multi-transmitter interference (1.9.0, live since 3 November; see [the review record](docs/INTERFERENCE_AVOIDANCE_REVIEW.md)) and, from 1.10.0, lets building heights block paths. Both are merged to `main`, which deploys to GitHub Pages.
 
 **Live calculator:** [iliketolie.github.io/Project-Sirius](https://iliketolie.github.io/Project-Sirius/)
 
@@ -18,7 +18,7 @@ A browser-based RF link-budget and interference-screening tool using the Friis f
 - Per-transmitter allowed power ranges and fix suggestions, plus a clickable Tx × Rx interference matrix in the drawer.
 - Per-sensor frequency overrides, bandwidth and polarization (V, H, RHCP, LHCP); simple ACR or stepped-mask receiver rejection, an adjustable fixed XPD, and a noise-floor helper for setting interference thresholds. Frequency defaults to the shared setting.
 - Range, total Interference and transmitter Placement map layers. Placement classifies cells as Recommended, Safe, Marginal, Unsafe or Unknown against fixed victim and served receiver sets.
-- Buildings (web 1.10.0, branch): a Buildings switch makes building heights block paths under terrain diffraction, with each sensor on its roof or at street level, a footprint layer shaded by height, and buildings in the path profile. Heights come from Overture Maps (OpenStreetMap heights and storeys) and the NUS Urban Analytics Lab HDB model, with class defaults where neither has one.
+- Buildings (web 1.10.0): a Buildings switch makes building heights block paths under terrain diffraction, with each sensor on its roof or at street level, a footprint layer shaded by height, and buildings in the path profile. Heights come from Overture Maps (OpenStreetMap heights and storeys) and the NUS Urban Analytics Lab HDB model, with class defaults where neither has one.
 - Antenna elevation = ground (+ roof, when on a building) + height above ground.
 - Distance sweep with received-power, sensitivity, and interference-threshold curves.
 - Antenna-gain sweep with a Tx/Rx selector and three editable comparison distances.
