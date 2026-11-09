@@ -1,4 +1,4 @@
-import { chromium } from 'playwright-core';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 import zlib from 'node:zlib';
 
 const OUT = process.argv[2];
@@ -18,7 +18,7 @@ const DEM_20M = png([128, 20, 0]); // terrarium: 128*256 + 20 - 32768 = 20 m
 
 const errors = [];
 const log = (...a) => console.log(...a);
-const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }), args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 await context.route('https://www.onemap.gov.sg/**', (r) => r.fulfill({ contentType: 'image/png', body: GREY, headers: { 'access-control-allow-origin': '*' } }));
 await context.route('**/elevation-tiles-prod/**', (r) => r.fulfill({ contentType: 'image/png', body: DEM_20M, headers: { 'access-control-allow-origin': '*' } }));
@@ -42,7 +42,7 @@ await rxRow.click();
 await page.waitForSelector('.selected-sensor-card');
 const status = async () => (await page.locator('.selected-sensor-card .result-line').first().innerText()).replace(/\s+/g, ' ');
 log('R1 before drag:', await status());
-log('ground readout:', (await page.locator('.selected-sensor-card .readouts').innerText()).replace(/\s+/g, ' '));
+log('ground readout:', (await page.locator('.selected-sensor-card .readouts', { hasText: 'Ground elevation' }).innerText()).replace(/\s+/g, ' '));
 
 // Drag the transmitter marker 200 px left.
 const tx = page.locator('.sensor-marker.role-tx');
@@ -64,7 +64,7 @@ await page.locator('.selected-sensor-card').getByRole('button', { name: 'Transmi
 const newName = await page.locator('.selected-sensor-card .sensor-name-input').inputValue();
 log('new sensor', newName, 'role toggled');
 await rxRow.click();
-await page.locator('.selected-sensor-card select').first().selectOption({ label: newName });
+await page.locator('.selected-sensor-card .desired-transmitters').getByLabel(newName, { exact: true }).evaluate((el) => el.click()); // the switch input is visually hidden
 await page.waitForTimeout(300);
 log('R1 intended now:', await status());
 
@@ -80,15 +80,15 @@ await page.screenshot({ path: `${OUT}/m2-zones.png` });
 // Terrain toggle
 await rxRow.click();
 await page.getByLabel('Use terrain elevation').uncheck();
-log('terrain off:', (await page.locator('.selected-sensor-card .readouts').innerText()).replace(/\s+/g, ' '));
+log('terrain off:', (await page.locator('.selected-sensor-card .readouts', { hasText: 'Ground elevation' }).innerText()).replace(/\s+/g, ' '));
 await page.getByLabel('Use terrain elevation').check();
 await page.waitForTimeout(500);
-log('terrain on:', (await page.locator('.selected-sensor-card .readouts').innerText()).replace(/\s+/g, ' '));
+log('terrain on:', (await page.locator('.selected-sensor-card .readouts', { hasText: 'Ground elevation' }).innerText()).replace(/\s+/g, ' '));
 
-// Fill to six
-for (let i = 0; i < 6; i += 1) { const b = page.locator('.add-sensor'); if (await b.isEnabled()) await b.click(); }
+// Fill to the sensor cap (MAX_SENSORS = 12)
+for (let i = 0; i < 12; i += 1) { const b = page.locator('.add-sensor'); if (await b.isEnabled()) await b.click(); }
 const rows = await page.locator('.sensor-row').count();
-log('rows', rows, 'add disabled', await page.locator('.add-sensor').isDisabled(), rows === 6 ? 'PASS' : 'FAIL');
+log('rows', rows, 'add disabled', await page.locator('.add-sensor').isDisabled(), rows === 12 ? 'PASS' : 'FAIL');
 await page.locator('.sensor-row').nth(1).click();
 await page.screenshot({ path: `${OUT}/m3-six.png` });
 

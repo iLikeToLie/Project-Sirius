@@ -40,8 +40,14 @@ try {
       if (this.width > 10 && this.width < 600) window.coverageProbe.rasters++;
       return toDataURL.apply(this, args);
     };
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (...args) {
+      if (this.width > 10 && this.width < 600) window.coverageProbe.rasters++;
+      return toBlob.apply(this, args);
+    };
     const raf = window.requestAnimationFrame;
-    window.requestAnimationFrame = callback => { window.coverageProbe.raf++; return raf(callback); };
+    // Count only the app's own frames: MapLibre schedules its own while tiles settle, which is not an app idle loop.
+    window.requestAnimationFrame = callback => { if (!/maplibre/.test(new Error().stack ?? '')) window.coverageProbe.raf++; return raf(callback); };
   });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
