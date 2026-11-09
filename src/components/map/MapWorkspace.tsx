@@ -335,6 +335,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
           <button type="button" className="tool icon-only" aria-label="Fit all sensors" title="Fit all sensors" onClick={() => handle.current?.fitSensors()}><Maximize2 size={15} /></button>
           <button type="button" className="tool icon-only" aria-label="Zoom in" title="Zoom in" onClick={() => handle.current?.zoomBy(1)}><Plus size={15} /></button>
           <button type="button" className="tool icon-only" aria-label="Zoom out" title="Zoom out" onClick={() => handle.current?.zoomBy(-1)}><Minus size={15} /></button>
+          <button type="button" className="tool icon-only" aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} aria-pressed={fullscreen} title={fullscreen ? 'Exit full screen (Esc or F)' : 'Full screen (F)'} onClick={toggleFullscreen}>{fullscreen ? <Shrink size={15} /> : <Expand size={15} />}</button>
         </div>
         <div className="tool-group" role="group" aria-label="Default objective">
           <span className="tool-label">Objective</span>
@@ -356,7 +357,6 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
         </label>
         <button type="button" className={`tool tool-group${showSettings ? ' active' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={14} /> Link settings</button>
         <button type="button" className="tool tool-group" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? <Eye size={14} /> : <EyeOff size={14} />}{hidePanels ? 'Show panels' : 'Hide panels'}</button>
-        <button type="button" className="tool tool-group" aria-pressed={fullscreen} title={fullscreen ? 'Exit full screen (Esc or F)' : 'Full screen (F)'} onClick={toggleFullscreen}>{fullscreen ? <Shrink size={14} /> : <Expand size={14} />}{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
         {basemapNotice && <span role="status" className="map-notice">Light map unavailable. Switched to OneMap.</span>}
         {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
         {withBuildingsOn && buildings.status === 'offline' && <span className="map-notice" role="status">Some building tiles failed to load: those buildings are missing.</span>}

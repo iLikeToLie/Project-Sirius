@@ -864,3 +864,26 @@ tbody tr:hover { background: var(--surface-elevated); }
 @media (max-width: 900px) {
   .map-workspace .maplibregl-ctrl-bottom-right { bottom: 0; }
 }
+
+/* UI fixes: single-row toolbar (no wrapped controls over cards) and an uncropped link-budget bar */
+@media (min-width: 1001px) {
+  .map-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .map-toolbar::-webkit-scrollbar { display: none; }
+  .map-toolbar > * { flex: none; white-space: nowrap; }
+}
+.sensor-list-card, .selected-sensor-card { top: 60px; }
+.selected-sensor-card { max-height: calc(100% - 72px); }
+.link-settings-card { top: 60px; }
+.map-card.link-budget-drawer { padding: 0; gap: 0; }
+.link-budget-drawer.collapsed { height: auto; min-height: 44px; }
+.drawer-bar { min-height: 44px; }
+.drawer-bar .ghost { min-height: 32px; padding-block: 0; line-height: 1.2; }
+.map-workspace { padding-bottom: 0; }
+.link-budget-drawer { bottom: max(10px, env(safe-area-inset-bottom)); }
+.drawer-open .coverage-legend { bottom: calc(var(--drawer-h, 40%) + 22px); }
+.coverage-legend { bottom: 66px; }
+
+/* Keep the sensor list clear of the coverage legend when the drawer is open */
+@media (min-width: 1001px) {
+  .drawer-open .sensor-list-card { max-height: calc(100% - var(--drawer-h, 40%) - 250px); overflow-y: auto; }
+}
