@@ -1,6 +1,6 @@
-import { chromium } from 'playwright-core';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
-const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : { channel: 'chrome' }), args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 await page.goto('http://localhost:5199/friis-rf-calculator/');
 await page.evaluate(() => localStorage.clear());

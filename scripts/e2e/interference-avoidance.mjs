@@ -50,7 +50,7 @@ try {
   legacy.map.sensors.forEach(sensor => { sensor.desiredTxIds = sensor.intendedTxId === 'auto' ? 'auto' : [sensor.intendedTxId]; delete sensor.intendedTxId; });
   const migrated = state.validateImport(legacy);
   assert.ok(migrated);
-  assert.equal(migrated.schemaVersion, 6);
+  assert.equal(migrated.schemaVersion, 7);
   assert.equal(migrated.map.protectionMarginDb, 3);
   assert.equal(migrated.map.aggregateInterference, 'objective');
   const oldPairs = baseline.evaluatePairs(migrated.map, migrated.inputs, () => 0);
@@ -151,7 +151,7 @@ try {
   legacy.map.sensors.forEach(s => { s.desiredTxIds = s.intendedTxId === 'auto' ? 'auto' : [s.intendedTxId]; delete s.intendedTxId; });
   let { page, card, drawer } = await open(legacy);
   const restored = await saved(page);
-  assert.equal(restored.schemaVersion, 6);
+  assert.equal(restored.schemaVersion, 7);
   assert.equal(restored.map.protectionMarginDb, 3);
   assert.equal(restored.map.aggregateInterference, 'objective');
   assert.ok(restored.map.sensors.every(s => s.polarization === 'V' && s.frequencyGhz === 'default'));
