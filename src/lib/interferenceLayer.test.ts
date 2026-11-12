@@ -34,9 +34,10 @@ describe('total interference layer', () => {
     const { map } = freshDefaultState(), rx = map.sensors[1];
     rx.interferenceThresholdDbm = -70; rx.protectionMarginDb = 3;
     map.aggregateInterference = 'never';
-    const powers = [field([-70, -73, -74, -80]), field([-80, -80, -80, -80])];
+    const powers = [field([-70, -72, -73, -80]), field([-80, -80, -80, -80])];
     const worst = interferenceZones(map, rx, grid, { jobId: 1, powers });
     expect([...worst.interference].slice(0, 4)).toEqual([1, 0, 0, 0]);
+    // Threshold equality interferes; just above the protected limit is weak; exact limit equality is safe (-73 = -70 - 3).
     expect([...worst.classes].slice(0, 4)).toEqual([0, 1, 0, 0]);
     map.aggregateInterference = 'always';
     const total = interferenceZones(map, rx, grid, { jobId: 1, powers: [field([-72, -80, -80, -80]), field([-72, -80, -80, -80])] });

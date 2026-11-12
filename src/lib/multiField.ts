@@ -23,6 +23,21 @@ export interface MultiFieldRequest {
 
 export interface MultiFieldResult { jobId: number; powers: Float32Array[] }
 
+/**
+ * What the sweep actually reads from a source: where it stands and the power one metre away
+ * (which already folds in power, gains, losses, polarization and rejection), plus the frequency
+ * for terrain diffraction. Names, ids, thresholds and sensitivities only affect classification,
+ * so a change to them must not look like a new request.
+ */
+const sourceSignature = (s: MultiFieldRequest['sources'][number]) =>
+  [s.lat, s.lon, s.elevationM, s.ownBuildingM ?? 0, calculateLink({ ...s.inputs, distanceM: 1 }).receivedPowerDbm, s.inputs.frequencyGhz];
+
+/** Identity of a multi-field request that depends only on inputs that change the computed fields. */
+export function multiFieldKey(parts: { layer: string; sources: MultiFieldRequest['sources']; victimCount?: number; mode: MultiFieldRequest['mode']; rxAglM: number; rxOnRoof: boolean; radials: number; view: unknown; dragging: boolean; elevationVersion: number; buildingsVersion: number | false; terrain: boolean }): string {
+  const { sources, ...rest } = parts;
+  return JSON.stringify([rest, sources.map(sourceSignature)]);
+}
+
 /** One received-power raster per source, in request order. Combining fields needs no new sweep. */
 export function computeMultiField(req: MultiFieldRequest): MultiFieldResult {
   if (req.sources.length > MAX_SENSORS) throw new Error(`At most ${MAX_SENSORS} field sources are supported`);

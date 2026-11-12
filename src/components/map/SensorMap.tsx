@@ -11,6 +11,7 @@ import { lightStyle, lightSourceIds, installLightBasemap, showBasemap, type Base
 export type { Basemap } from './lightBasemap';
 import { SignalOverlay } from './SignalOverlay';
 import { showBuildings } from './buildingLayer';
+import { placeLabels } from './markerLabels';
 import type { LinkObjective } from '../../types';
 import { SG_BOUNDS } from './SelectedSensorCard';
 
@@ -283,6 +284,29 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       entry.element.querySelector('.sensor-marker-label')!.textContent = sensor.name;
     }
   }, [sensors, selectedId, tones, loaded]);
+
+  // Marker labels: each label sits on the side of its marker with the least collision against neighbours (markers do not move).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      const items = sensors.flatMap((s) => {
+        const entry = markers.current.get(s.id);
+        const label = entry?.element.querySelector<HTMLElement>('.sensor-marker-label');
+        if (!entry || !label) return [];
+        const p = map.project(entry.marker.getLngLat());
+        return [{ id: s.id, x: p.x, y: p.y, width: label.offsetWidth }];
+      });
+      const sides = placeLabels(items);
+      for (const [id, side] of sides) { const el = markers.current.get(id)?.element; if (el && el.dataset.label !== side) el.dataset.label = side; }
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(place); };
+    place();
+    map.on('move', schedule);
+    return () => { map.off('move', schedule); if (frame) cancelAnimationFrame(frame); };
+  }, [sensors, loaded]);
 
   useEffect(() => {
     const source = mapRef.current?.getSource('links') as GeoJSONSource | undefined;

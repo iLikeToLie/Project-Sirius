@@ -2,6 +2,10 @@ import type { LatLon } from './geo';
 
 export const ELEVATION_TILE_URL = import.meta.env.BASE_URL + 'dem/{z}/{x}/{y}.png';
 export const ELEVATION_ZOOM = 14;
+/** Waits before retrying a tile that failed for a network or server reason; a missing tile (404) is never retried. */
+export const ELEVATION_RETRY_DELAYS_MS = [1500, 5000, 15000] as const;
+/** Delay before retry number `failures` (1 = first failure), or null once the attempts are used up. */
+export const elevationRetryDelayMs = (failures: number): number | null => ELEVATION_RETRY_DELAYS_MS[failures - 1] ?? null;
 const TILE_SIZE = 256;
 
 export interface ElevationTile { z: number; x: number; y: number; data: Uint8ClampedArray }

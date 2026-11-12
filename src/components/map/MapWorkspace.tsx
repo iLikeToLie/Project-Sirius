@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Expand, Eye, EyeOff, Maximize2, Minus, Plus, Shrink, SlidersHorizontal } from 'lucide-react';
+import { Ellipsis, Expand, Eye, EyeOff, Maximize2, Minus, Plus, Shrink, SlidersHorizontal } from 'lucide-react';
 import { activePair, applyInputEdit, zoneReceiver, type LinkPin } from '../../lib/activeLink';
 import { buildingsActive, sensorPaths, withBuildings } from '../../lib/buildings';
 import { coverageStepM, coverageZones } from '../../lib/coverage';
@@ -11,16 +11,20 @@ import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../
 import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairLinkInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { assessAll, pairVerdict, usesAggregate, worstAssessedLink } from '../../lib/interference';
 import { interferenceSources, interferenceZones, placementPlan, placementZones, referenceReceiver, streetBuildingM } from '../../lib/interferenceLayer';
+import { multiFieldKey } from '../../lib/multiField';
+import { sameZoneResult } from '../../lib/zones';
 import { thresholdSlantRangeM } from '../../lib/thresholds';
 import type { AppState, LinkInputs, MapScenario, Sensor } from '../../types';
 import { useCoverageWorker, useMultiFieldWorker, useZoneWorker } from '../useFieldWorker';
 import { isBoolean, oneOf, usePref } from '../usePref';
+import { useKeyed, useStableValue } from './useStable';
 import { statusTone } from '../ui';
 import { CoverageLegend, type CoverageLayer, type CoverageStyle } from './CoverageLegend';
 import { type DrawerSize, LinkBudgetDrawer } from './LinkBudgetDrawer';
 import { LinkSettingsCard } from './LinkSettingsCard';
 import { SelectedSensorCard } from './SelectedSensorCard';
 import { SensorListCard } from './SensorListCard';
+import { useMediaQuery } from './mediaQuery';
 import { type Basemap, type MapLink, type MapView, SensorMap, type SensorMapHandle } from './SensorMap';
 import type { BuildingTiles } from './useBuildingTiles';
 import type { useElevationTiles } from './useElevationTiles';
@@ -57,6 +61,18 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
   const [drawerSize, setDrawerSize] = usePref<DrawerSize>('drawerSize', null, isDrawerSize);
   const root = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // Narrow screens fold the secondary map controls into a "More" popover so the toolbar never overflows.
+  const compactBar = useMediaQuery('(max-width: 1360px)');
+  const phoneBar = useMediaQuery('(max-width: 640px)');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const close = (event: Event) => { if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false); };
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMoreOpen(false); moreRef.current?.querySelector<HTMLElement>('.more-toggle')?.focus(); } };
+    document.addEventListener('pointerdown', close); document.addEventListener('focusin', close); document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('focusin', close); document.removeEventListener('keydown', key); };
+  }, [moreOpen]);
   const { map } = state;
 
   useEffect(() => {
@@ -154,23 +170,32 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     [selected, liveMap, state.inputs, groundAt, pairs]);
   const linkedRxIds = zoneTx ? pairs.filter((p) => p.txId === zoneTx.id && p.intended).map((p) => p.rxId) : [];
 
-  const zoneRequest = useMemo(() => {
+  // The ground grid depends on the view, tile data and the zoom the transmitter's latitude picks, not on
+  // names, thresholds or other edits, so it is sampled only when those change.
+  const hasZone = zoneTx !== null && zone !== null;
+  const zoneGrid = useMemo(() => {
     // Only the Range layer uses this grid; sampling ground over the view is costly, so skip it otherwise.
-    if (coverageLayer !== 'range' || !zoneTx || !zone || !view || view.width === 0) return null;
+    if (coverageLayer !== 'range' || !hasZone || !view || view.width === 0) return null;
     // Local metres from the fixed Singapore reference, so results stay placed if Tx moves meanwhile.
     const sw = toLocalM(view.southWest);
     const ne = toLocalM(view.northEast);
-    const txLocal = toLocalM(zoneTx);
     const pixelsPerCell = dragging ? 14 : 3;
     const cols = Math.max(16, Math.ceil(view.width / pixelsPerCell));
     const rows = Math.max(10, Math.ceil(view.height / pixelsPerCell));
     const cellM = Math.max((ne.xM - sw.xM) / cols, (ne.yM - sw.yM) / rows);
-    const z = zoomForCell(cellM, zoneTx.lat);
+    const z = zoomForCell(cellM, zoneTx!.lat);
     const sampler = elevation.samplerAt(z);
     const ground = sampleGrid({ minX: sw.xM, maxX: ne.xM, minY: sw.yM, maxY: ne.yM }, cols, rows, (xM, yM) => {
       if (!map.useTerrainElevation) return 0;
       return sampler(toLatLon({ xM, yM })) ?? NaN;
     });
+    return { z, cols, rows, ground };
+  }, [coverageLayer, hasZone, zoneTx?.lat, view, dragging, map.useTerrainElevation, elevation.samplerAt]);
+
+  const zoneRequest = useMemo(() => {
+    if (!zoneGrid || !zoneTx || !zone || !view) return null;
+    const { z, cols, rows, ground } = zoneGrid;
+    const txLocal = toLocalM(zoneTx);
     const { inputs } = pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1);
     return {
       z,
@@ -188,25 +213,30 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
         state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version, withBuildingsOn, withBuildingsOn && buildings.version, zoneTx.mount, zone.rx.mount].join('|'),
     };
-  }, [coverageLayer, zoneTx, zone, view, dragging, map.useTerrainElevation, map.rejectionModel, elevation.samplerAt, elevation.version, state.inputs, groundAt, withBuildingsOn, buildings.version]);
+  }, [zoneGrid, zoneTx, zone, view, map.useTerrainElevation, map.rejectionModel, elevation.version, state.inputs, groundAt, withBuildingsOn, buildings.version]);
 
   useEffect(() => {
     if (zoneRequest && view && map.useTerrainElevation) elevation.ensureBox(view.southWest, view.northEast, zoneRequest.z);
   }, [zoneRequest?.key]);
 
   const terrain = map.propagationModel === 'terrain';
+  // Ray ground and building grids follow the view grid and the transmitter position only.
+  const txX = zoneRequest?.request.tx.xM, txY = zoneRequest?.request.tx.yM;
+  const rayGround = useMemo(() => {
+    if (!terrain || !zoneGrid || txX === undefined || txY === undefined) return null;
+    // The rays start at the transmitter, which may be off-screen when zoomed in: give them ground that reaches it.
+    const sampler = elevation.samplerAt(zoneGrid.z);
+    return groundForCoverage(zoneGrid.ground, { xM: txX, yM: txY }, (xM, yM) => (map.useTerrainElevation ? sampler(toLatLon({ xM, yM })) ?? NaN : 0));
+  }, [terrain, zoneGrid, txX, txY, map.useTerrainElevation, elevation.samplerAt]);
+  const rayBuildings = useMemo(() => rayGround ? buildingGrid(rayGround) : undefined, [rayGround, withBuildingsOn, buildings.samplerAt]);
   const coverageRequest = useMemo(() => {
-    if (!terrain || !zoneRequest || !zoneTx || !zone) return null;
+    if (!terrain || !zoneRequest || !zoneTx || !zone || !rayGround) return null;
     const req = zoneRequest.request, g = req.ground;
     const maxView = Math.max(...[[g.x0, g.y0], [g.x0 + g.cols * g.dx, g.y0 + g.rows * g.dy]].map(([x,y]) => Math.hypot(x - req.tx.xM, y - req.tx.yM)));
     const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM * 2));
-    // The rays start at the transmitter, which may be off-screen when zoomed in: give them ground that reaches it.
-    const sampler = elevation.samplerAt(zoneRequest.z);
-    const rayGround = groundForCoverage(g, req.tx, (xM, yM) => (map.useTerrainElevation ? sampler(toLatLon({ xM, yM })) ?? NaN : 0));
-    const rayBuildings = buildingGrid(rayGround);
     return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1).inputs, maxRangeM, radials: dragging ? 180 : 720, stepM: coverageStepM(maxRangeM, !!rayBuildings), ground: { origin: SG_REFERENCE, grid: rayGround },
       buildings: rayBuildings && { grid: rayBuildings, rxOnRoof: zone.rx.mount === 'roof', txOwnM: streetBuildingM(zoneTx, groundAt) } };
-  }, [terrain, zoneRequest, zoneTx, zone, dragging, groundAt, map.useTerrainElevation, state.inputs, elevation.samplerAt, withBuildingsOn, buildings.samplerAt]);
+  }, [terrain, zoneRequest, zoneTx, zone, rayGround, rayBuildings, dragging, groundAt, map.useTerrainElevation, state.inputs]);
   useEffect(() => ensureBuildingsFor(coverageRequest?.buildings?.grid), [coverageRequest?.buildings?.grid]);
   useEffect(() => {
     const grid = coverageRequest?.ground.grid;
@@ -214,9 +244,15 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     const sw = toLatLon({ xM: grid.x0, yM: grid.y0 }), ne = toLatLon({ xM: grid.x0 + grid.cols * grid.dx, yM: grid.y0 + grid.rows * grid.dy });
     elevation.ensureBox(sw, ne, zoneRequest.z);
   }, [coverageRequest?.ground.grid]);
-  const multiRequest = useMemo(() => {
-    const anchor = coverageLayer === 'placement' ? placement && selected : coverageLayer === 'interference' ? referenceRx : null;
-    if (!anchor || !view || view.width === 0) return null;
+  // The request key covers only what changes the fields (positions, heights, power budget, frequency, model, tiles),
+  // so a rename, a selection or a threshold edit reclassifies the existing result instead of recomputing it.
+  const multiAnchor = coverageLayer === 'placement' ? placement && selected : coverageLayer === 'interference' ? referenceRx : null;
+  const multiSources = multiAnchor && view && view.width > 0 ? coverageLayer === 'placement' ? placement!.sources : interferenceSources(liveMap, state.inputs, referenceRx!, groundAt) : null;
+  const multiKey = multiAnchor && multiSources ? multiFieldKey({ layer: coverageLayer, sources: multiSources, victimCount: placement?.victims.length, mode: map.propagationModel, rxAglM: multiAnchor.aglM, rxOnRoof: multiAnchor.mount === 'roof',
+    radials: dragging ? 180 : 360, view, dragging, elevationVersion: elevation.version, buildingsVersion: withBuildingsOn && buildings.version, terrain: map.useTerrainElevation }) + `|${multiAnchor.lat}` : null;
+  const multiRequest = useKeyed(multiKey, () => {
+    if (!multiAnchor || !multiSources || !view) return null;
+    const anchor = multiAnchor, sources = multiSources;
     const sw = toLocalM(view.southWest), ne = toLocalM(view.northEast);
     const cols = Math.max(16, Math.ceil(view.width / (dragging ? 14 : 3)));
     const rows = Math.max(10, Math.ceil(view.height / (dragging ? 14 : 3)));
@@ -224,14 +260,12 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     const sampler = elevation.samplerAt(z);
     const sample = (xM: number, yM: number) => map.useTerrainElevation ? sampler(toLatLon({ xM, yM })) ?? NaN : 0;
     const raster = sampleGrid({ minX: sw.xM, maxX: ne.xM, minY: sw.yM, maxY: ne.yM }, cols, rows, sample);
-    const sources = coverageLayer === 'placement' ? placement!.sources : interferenceSources(liveMap, state.inputs, referenceRx!, groundAt);
     // Include off-screen sources and their paths in one shared ray ground grid.
     const extent = sources.reduce((g, source) => groundForCoverage(g, toLocalM(source), sample), raster);
     const rayGround = extent === raster ? raster : sampleGrid({ minX: extent.x0, maxX: extent.x0 + extent.cols * extent.dx, minY: extent.y0, maxY: extent.y0 + extent.rows * extent.dy }, extent.cols, extent.rows, sample);
     const rayBuildings = map.propagationModel === 'terrain' ? buildingGrid(rayGround) : undefined;
-    return { z, request: { raster, rayGround, rayBuildings, rxOnRoof: anchor.mount === 'roof', origin: SG_REFERENCE, mode: map.propagationModel, rxAglM: anchor.aglM, sources, radials: dragging ? 180 : 360 },
-      key: JSON.stringify([coverageLayer, liveMap, state.inputs, view, dragging, elevation.version, withBuildingsOn && buildings.version]) };
-  }, [coverageLayer, referenceRx, placement, selected, view, dragging, liveMap, state.inputs, groundAt, map.useTerrainElevation, map.propagationModel, elevation.samplerAt, elevation.version, withBuildingsOn, buildings.samplerAt, buildings.version]);
+    return { z, key: multiKey!, request: { raster, rayGround, rayBuildings, rxOnRoof: anchor.mount === 'roof', origin: SG_REFERENCE, mode: map.propagationModel, rxAglM: anchor.aglM, sources, radials: dragging ? 180 : 360 } };
+  });
   useEffect(() => {
     if (!multiRequest || !map.useTerrainElevation) return;
     const g = multiRequest.request.rayGround;
@@ -243,12 +277,13 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
   const coverage = useCoverageWorker(coverageLayer === 'range' ? coverageRequest : null, `${coverageLayer}|${terrain}|${zoneRequest?.key}`);
   // Band edges are only drawn without the gradient; skip tracing them otherwise.
   const bands = coverageLayer === 'placement' || coverageStyle !== 'gradient';
-  const zoneResult = useMemo(() => coverageLayer !== 'range'
+  // Reclassifying after a rename or a threshold edit often paints the same map; keep the old result then so the map is not repainted.
+  const zoneResult = useStableValue(useMemo(() => coverageLayer !== 'range'
     ? multi.result && multiRequest && multi.resultKey === multiRequest.key
       ? coverageLayer === 'placement' ? placement ? placementZones(placement, multiRequest.request.raster, multi.result, bands) : null
         : referenceRx ? interferenceZones(liveMap, referenceRx, multiRequest.request.raster, multi.result, bands) : null : null
     : terrain ? coverage.result && coverageRequest && zoneRequest ? coverageZones(coverage.result, coverageRequest, zoneRequest.request.ground, bands) : null : free.result,
-  [coverageLayer, placement, multi.result, multi.resultKey, multiRequest, referenceRx, liveMap, terrain, coverage.result, coverageRequest, zoneRequest, free.result, bands]);
+  [coverageLayer, placement, multi.result, multi.resultKey, multiRequest, referenceRx, liveMap, terrain, coverage.result, coverageRequest, zoneRequest, free.result, bands]), sameZoneResult);
   const refining = coverageLayer !== 'range' ? multi.refining : terrain ? coverage.refining : free.refining;
   const objective = coverageLayer === 'interference' ? 'avoidance' : zone ? effectiveObjective(liveMap, zone.rx) : map.defaultObjective;
   // Rings are free-space reference ranges, so they would mislead once terrain diffraction is on.
@@ -266,6 +301,9 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
       elevation.ensureBox({ lat: Math.min(a.lat, b.lat), lon: Math.min(a.lon, b.lon) }, { lat: Math.max(a.lat, b.lat), lon: Math.max(a.lon, b.lon) }, 14);
     }
   }, [sensors, terrain, map.useTerrainElevation, elevation.ensureBox]);
+  // The gradient span is two numbers; keying on them keeps the map layer from repainting when only names or selection change.
+  const rangeSpec = coverageLayer !== 'placement' && zoneResult?.powerDbm && coverageStyle === 'gradient' ? coverageLayer === 'interference' && referenceRx ? signalRange(referenceRx, 'avoidance', false) : zone ? signalRange(zone.rx, objective, showAll) : undefined : undefined;
+  const rangeLo = rangeSpec?.lo, rangeHi = rangeSpec?.hi;
   const zones = useMemo(() => {
     if (!zoneResult) return null;
     const { bounds } = zoneResult;
@@ -277,11 +315,11 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
       placement: coverageLayer === 'placement',
       objective, showAll,
       // Without a range the map paints the threshold bands and their outlines instead of the gradient.
-      range: coverageLayer !== 'placement' && zoneResult.powerDbm && coverageStyle === 'gradient' ? coverageLayer === 'interference' && referenceRx ? signalRange(referenceRx, 'avoidance', false) : zone ? signalRange(zone.rx, objective, showAll) : undefined : undefined,
+      range: rangeLo !== undefined && rangeHi !== undefined ? { lo: rangeLo, hi: rangeHi } : undefined,
       corners: [at(bounds.minX, bounds.maxY), at(bounds.maxX, bounds.maxY), at(bounds.maxX, bounds.minY), at(bounds.minX, bounds.minY)] as [LatLon, LatLon, LatLon, LatLon],
       outlines: { sensitivity: lines(zoneResult.outlines.sensitivity), required: lines(zoneResult.outlines.required), interference: lines(zoneResult.outlines.interference) },
     };
-  }, [zoneResult, objective, showAll, zone, coverageStyle, coverageLayer, referenceRx]);
+  }, [zoneResult, objective, showAll, rangeLo, rangeHi, coverageLayer]);
 
   // Memoised so map sources and the signal overlay only update when the links change, not on every pan.
   const links = useMemo<MapLink[]>(() => {
@@ -315,6 +353,28 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     return [s.id, a.status === 'Possible interference' || status === 'Interfered link' || status === 'No link' ? 'danger' : a.status === 'Marginal interference' ? 'warning' : status ? statusTone(status) : a.unknownPaths ? 'neutral' : 'safe'];
   })), [sensors, pairs, assessments]);
 
+  const modelControl = (
+        <label className="tool-group select-group"><span className="tool-label">Model</span>
+          <select value={map.propagationModel} onChange={e => setMap(m => ({ ...m, propagationModel: e.target.value as MapScenario['propagationModel'] }))}><option value="terrain">Terrain diffraction</option><option value="free-space">Free space</option></select>
+        </label>
+  );
+  const secondaryControls = (
+    <>
+        <label className="tool-group switch-group" title="Use ground elevation from the terrain data; off assumes flat ground">
+          <input type="checkbox" aria-label="Use terrain elevation" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
+          <span>Terrain elevation</span>
+        </label>
+        <label className="tool-group switch-group" title={terrain ? 'Building heights block paths; antennas on a roof count their height from it' : 'Buildings need the Terrain diffraction model'}>
+          <input type="checkbox" aria-label="Buildings" checked={map.buildings && terrain} disabled={!terrain} onChange={(event) => setMap((m) => ({ ...m, buildings: event.target.checked }))} />
+          <span>Buildings</span>
+        </label>
+        <label className="tool-group select-group" title="Light vector map, OneMap street map, or plain terrain"><span className="tool-label">Map</span>
+          <select aria-label="Basemap" value={basemap} onChange={e => { setBasemap(e.target.value as Basemap); setBasemapNotice(false); }}><option value="light">Light</option><option value="onemap">OneMap</option><option value="plain">Plain terrain</option></select>
+        </label>
+        <button type="button" className="tool tool-group" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? <Eye size={14} /> : <EyeOff size={14} />}{hidePanels ? 'Show panels' : 'Hide panels'}</button>
+    </>
+  );
+
   return (
     <div
       ref={root}
@@ -341,22 +401,18 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
           <span className="tool-label">Objective</span>
           {(['desired', 'avoidance'] as const).map(o => <button key={o} type="button" className={`tool${map.defaultObjective === o ? ' active' : ''}`} aria-pressed={map.defaultObjective === o} title={o === 'desired' ? 'Receivers should hear their intended transmitter' : 'Receivers should stay isolated from transmitters'} onClick={() => setMap(m => ({ ...m, defaultObjective: o }))}>{o === 'desired' ? 'Desired' : 'Avoidance'}</button>)}
         </div>
-        <label className="tool-group select-group"><span className="tool-label">Model</span>
-          <select value={map.propagationModel} onChange={e => setMap(m => ({ ...m, propagationModel: e.target.value as MapScenario['propagationModel'] }))}><option value="terrain">Terrain diffraction</option><option value="free-space">Free space</option></select>
-        </label>
-        <label className="tool-group switch-group" title="Use ground elevation from the terrain data; off assumes flat ground">
-          <input type="checkbox" aria-label="Use terrain elevation" checked={map.useTerrainElevation} onChange={(event) => setMap((m) => ({ ...m, useTerrainElevation: event.target.checked }))} />
-          <span>Terrain elevation</span>
-        </label>
-        <label className="tool-group switch-group" title={terrain ? 'Building heights block paths; antennas on a roof count their height from it' : 'Buildings need the Terrain diffraction model'}>
-          <input type="checkbox" aria-label="Buildings" checked={map.buildings && terrain} disabled={!terrain} onChange={(event) => setMap((m) => ({ ...m, buildings: event.target.checked }))} />
-          <span>Buildings</span>
-        </label>
-        <label className="tool-group select-group" title="Light vector map, OneMap street map, or plain terrain"><span className="tool-label">Map</span>
-          <select aria-label="Basemap" value={basemap} onChange={e => { setBasemap(e.target.value as Basemap); setBasemapNotice(false); }}><option value="light">Light</option><option value="onemap">OneMap</option><option value="plain">Plain terrain</option></select>
-        </label>
+        {!phoneBar && modelControl}
+        {!compactBar && secondaryControls}
         <button type="button" className={`tool tool-group${showSettings ? ' active' : ''}`} aria-pressed={showSettings} onClick={() => setShowSettings(!showSettings)}><SlidersHorizontal size={14} /> Link settings</button>
-        <button type="button" className="tool tool-group" aria-pressed={hidePanels} onClick={() => setHidePanels(!hidePanels)}>{hidePanels ? <Eye size={14} /> : <EyeOff size={14} />}{hidePanels ? 'Show panels' : 'Hide panels'}</button>
+        {(compactBar || phoneBar) && (
+          <div className="more-menu" ref={moreRef}>
+            <button type="button" className={`tool tool-group more-toggle${moreOpen ? ' active' : ''}`} aria-expanded={moreOpen} aria-haspopup="true" aria-controls="map-more" onClick={() => setMoreOpen(o => !o)}><Ellipsis size={14} /> More</button>
+            {moreOpen && <div id="map-more" className="more-popover" role="group" aria-label="More map controls">
+              {phoneBar && modelControl}
+              {secondaryControls}
+            </div>}
+          </div>
+        )}
         {basemapNotice && <span role="status" className="map-notice">Light map unavailable. Switched to OneMap.</span>}
         {elevation.status === 'offline' && <span className="map-notice" role="status">Elevation tiles unavailable: terrain predictions are unknown.</span>}
         {withBuildingsOn && buildings.status === 'offline' && <span className="map-notice" role="status">Some building tiles failed to load: those buildings are missing.</span>}

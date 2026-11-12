@@ -39,8 +39,10 @@ export function SensorListCard({ sensors, pairs, assessments, selectedId, onSele
             <li key={sensor.id} className={sensor.id === selectedId ? 'selected' : ''}>
               <button type="button" className="sensor-row" aria-pressed={sensor.id === selectedId} onClick={() => onSelect(sensor.id)}>
                 <span className={`role-badge role-${sensor.role}`}>{sensor.role.toUpperCase()}</span>
-                <span className="sensor-name">{sensor.name}</span>
-                <span className={`sensor-status tone-${status.tone}`} title={status.text}>{status.text}</span>
+                <span className="sensor-text" title={`${sensor.name}: ${status.text}`}>
+                  <span className="sensor-name">{sensor.name}</span>
+                  <span className={`sensor-status tone-${status.tone}`}>{status.text}</span>
+                </span>
               </button>
               <button type="button" className="icon-button" aria-label={`Delete ${sensor.name}`} onClick={() => onRemove(sensor.id)}><Trash2 size={14} /></button>
             </li>
