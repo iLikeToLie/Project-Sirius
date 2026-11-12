@@ -1,20 +1,21 @@
 # Handoff — Friis RF calculator / Link workspace
 
-Last updated 9 November 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
+Last updated 12 November 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
 
 ## Where things stand
 
 | Item | State |
 |---|---|
 | Repository | `github.com/iLikeToLie/Project-Sirius` (renamed from `friis-rf-calculator`; GitHub forwards the old repo URL). |
-| Live site | **https://iliketolie.github.io/Project-Sirius/**. Web **1.9.0** went live on 3 November (PR #9), with fixes in PRs #10–#11 (recorded as 1.9.1). Web **1.10.0** (building heights, PR #12) and UI fixes (PR #13) are merged to `main`; the Pages deployment was not rechecked for this update. |
+| Live site | **https://iliketolie.github.io/Project-Sirius/**. Web **1.9.0** went live on 3 November (PR #9), with fixes in PRs #10–#11 (recorded as 1.9.1). Web **1.10.0** (building heights, PR #12) and UI fixes (PR #13) are merged to `main` and live (Pages run #23 succeeded on 9 November). Web **1.11.0** (polish) is on branch `claude/hub-housekeeping-app-polish-vxhtc8`, not merged. |
 | Branch to work from | **`main`** (head `56b80b0`, 9 November). Feature branches `feature/interference-avoidance` and `claude/dreamy-bell-a3obkr` are merged. |
-| Tests | 319 unit tests across 31 files (`corepack pnpm test`, 9 November). Some `scripts/e2e` browser scripts were refreshed on 9 November. |
+| Tests | 331 unit tests across 32 files on the 1.11.0 branch (`corepack pnpm test`, 12 November); 319 on `main`. Browser scripts workspace-layout, link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer, placement-layer and buildings pass against the 1.11.0 build. |
 
 ### Release history (newest first)
 
 | Version | PR | What it added |
 |---|---|---|
+| 1.11.0 | branch | Polish (hub decision D1): responsive nav with accessible names, compact phone header, favicon; toolbar More menu; readable sensor list that keeps the selection in view; legend tabs, Channel fieldset and card heights fixed; collision-aware marker labels; drawer chevron, metric tiles and Rx power meter (backlog item 5); Interference layer protected-limit equality safe; field key ignores names/selection/thresholds; zone grid memoised; elevation retry; frame-paced drawer resize; Guide text current. |
 | 1.10.0 | #12, #13 | Building heights block paths and coverage under terrain diffraction: Buildings switch (off by default), per-sensor roof or street mount, footprint layer, buildings in the path profile; tiles from Overture Maps and the NUS HDB model; schema 7. PR #13 fixed the link-budget bar, full screen button and sensor list/legend overlap. |
 | 1.9.1 | #10, #11 | Stuck zone-image layer fix, band outlines on all layers, map speed-ups, Fit all sensors on narrow maps. Docs-only version entry; package.json not bumped. |
 | 1.9.0 | #9 | Twelve sensors, aggregate interference and protection margin, desired-link C/I, power limits and fixes, Tx × Rx matrix, frequency/bandwidth and polarization isolation, noise-floor helper, total Interference and transmitter Placement layers; schema 6. Whole-branch review complete; live 3 November. |
@@ -113,20 +114,18 @@ Last updated 9 November 2026. Everything needed to continue this work on another
 ## Known minor issues (deferred)
 
 - Selecting a receiver can draw zones with another linked receiver's settings (the card names it).
-- Elevation tiles that fail for network reasons are not retried until reload (404s outside the DEM are now ignored).
 - The zone fill can be up to half a grid cell off its outline.
-- The zone ground grid is resampled on unrelated renders.
 - A typed separation over unloaded tiles drifts sub-metre after load; very large values can leave Singapore.
-- A very tall Link budget drawer covers the lower part of the sensor list (the list scrolls).
-- Pre-existing: a missing favicon (404), and empty nav buttons at 850 px and below.
+- Below 1001 px the cards stack under the map. With seven or more sensors clustered tightly, marker and distance labels can still overlap.
+- Fixed in 1.11.0 (branch): elevation tiles now retry after network errors; the zone ground grid is memoised; the drawer no longer covers the sensor list; favicon added; nav buttons keep labels at every width.
 
 ## Open items
 
 - **Old URL redirect:** create a public repo `iLikeToLie/friis-rf-calculator` with a redirect page to `/Project-Sirius/` (keep path and hash) and enable Pages. **First** run `git remote set-url origin https://github.com/iLikeToLie/Project-Sirius.git` in every clone, because creating that repo ends GitHub's forwarding of the old repo URL. This step was blocked by a permission prompt and is not done.
-- **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) and item 5 (match the drawer Rx meter to the reference) are open. See `docs/BACKLOG.md`.
+- **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) is open; item 5 (drawer Rx meter) is done in 1.11.0 on the branch. Item 8 (directional antennas) is the recommended next feature. See `docs/BACKLOG.md`.
 - **OneMap API terms:** confirm tile use from a public site (registration may be required).
 - **Buildings:** join data.gov.sg HDB Property Information (`max_floor_lvl`) for post-2019 blocks (the host is blocked in cloud sessions; run `scripts/buildings/build_buildings.py` locally); multi-edge diffraction; a light-theme check of the footprint layer.
-- **Final review (1.9.0):** Task 16 completed all eleven Review Focus cases and independent code review. Three Important findings were reproduced and fixed; two Minor findings are deferred (protected-limit equality colour and unnecessary field recomputation). In the twelve-sensor terrain fixture, p95 input-to-frame delay was 7.1 ms and worker requests peaked at 374.7 ms. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for measurement limits and screenshots.
+- **Final review (1.9.0):** Task 16 completed all eleven Review Focus cases and independent code review. Three Important findings were reproduced and fixed; the two Minor findings (protected-limit equality colour and unnecessary field recomputation) are fixed in 1.11.0 on the branch. In the twelve-sensor terrain fixture, p95 input-to-frame delay was 7.1 ms and worker requests peaked at 374.7 ms. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for measurement limits and screenshots.
 
 ## Not in git (copy manually or re-create)
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGroundSampler, decodeTerrarium, tilePixel, type ElevationTile } from './elevation';
+import { createGroundSampler, decodeTerrarium, elevationRetryDelayMs, tilePixel, type ElevationTile } from './elevation';
 
 const Z = 14;
 const TX = 12916;

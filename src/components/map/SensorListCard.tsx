@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, List, Plus, Trash2 } from 'lucide-react';
 import { MAX_SENSORS, type PairResult, receiverSummary } from '../../lib/sensors';
 import { worstAssessedLink, type ReceiverAssessment } from '../../lib/interference';
@@ -29,10 +29,33 @@ export function SensorListCard({ sensors, pairs, assessments, selectedId, onSele
   onSelect: (id: string) => void; onAdd: () => void; onRemove: (id: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const rowsRef = useRef<HTMLUListElement>(null);
+  // Keep the selected sensor visible when the list is short enough to scroll (for example, with the drawer open),
+  // and mark the list when rows overflow so a fade shows there is more to scroll.
+  useEffect(() => {
+    const list = rowsRef.current;
+    if (!list) return;
+    const sync = () => {
+      const row = list.querySelector<HTMLElement>('li.selected');
+      if (row) {
+        const top = row.offsetTop, bottom = top + row.offsetHeight;
+        if (top < list.scrollTop) list.scrollTop = top;
+        else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+      }
+      fade();
+    };
+    // The fade only shows while rows remain below the visible part of the list.
+    const fade = () => list.toggleAttribute('data-overflow', list.scrollHeight - list.scrollTop > list.clientHeight + 1);
+    sync();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sync);
+    observer?.observe(list);
+    list.addEventListener('scroll', fade, { passive: true });
+    return () => { observer?.disconnect(); list.removeEventListener('scroll', fade); };
+  }, [selectedId, sensors.length]);
   return (
     <section className={`map-card sensor-list-card${collapsed ? ' collapsed' : ''}`} aria-label="Sensors">
       <div className="map-card-heading"><button type="button" className="ghost" aria-label={collapsed ? 'Expand sensors' : 'Collapse sensors'} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <List size={15} /> : <><ChevronLeft size={14} /> Sensors</>}</button><span className="tag">{sensors.length} of {MAX_SENSORS}</span></div>
-      <ul className="sensor-rows">
+      <ul className="sensor-rows" ref={rowsRef}>
         {sensors.map((sensor) => {
           const status = sensorStatus(sensor, pairs, assessments);
           return (

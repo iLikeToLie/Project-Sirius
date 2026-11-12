@@ -47,7 +47,7 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
 - **Want:** in desired-communication mode, each link line drawn on the map shows its distance as a label.
 - **Notes:** the lines are the `intended` links from `MapLink` in `SensorMap.tsx`. Show the label at the midpoint, in the same units the workspace already uses (check the existing distance formatting before choosing km or m).
 
-## 5. Rx power meter in the Link budget tab
+## 5. Rx power meter in the Link budget tab — done in 1.11.0 (branch)
 
 - **Want:** add the Rx power meter graphic to the Link budget drawer at the bottom, as in the reference below.
 - **Reference (from the review screenshot):**

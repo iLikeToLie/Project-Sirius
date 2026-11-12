@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ellipsis, Expand, Eye, EyeOff, Maximize2, Minus, Plus, Shrink, SlidersHorizontal } from 'lucide-react';
 import { activePair, applyInputEdit, zoneReceiver, type LinkPin } from '../../lib/activeLink';
 import { buildingsActive, sensorPaths, withBuildings } from '../../lib/buildings';
@@ -147,6 +147,13 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     setState(edited.state);
     return undefined;
   };
+
+  // Stable callbacks and state for the memoised drawer, so panning or a worker result does not re-render it.
+  const drawerHandlers = useRef({ editInput, select, setPin });
+  drawerHandlers.current = { editInput, select, setPin };
+  const drawerEdit = useCallback(<K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => drawerHandlers.current.editInput(key, value), []);
+  const drawerPin = useCallback((p: LinkPin | null) => { if (p) drawerHandlers.current.select(p.rxId); drawerHandlers.current.setPin(p); }, []);
+  const drawerState = useMemo(() => ({ ...state, map: liveMap }), [state, liveMap]);
 
   const addAtCentre = () => setMap((m) => {
     const centre = view?.center ?? m.sensors[0] ?? { lat: 1.3521, lon: 103.8198 };
@@ -426,7 +433,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
         onRemove={(id) => setMap((m) => ({ ...m, sensors: removeSensor(m.sensors, id), selectedId: m.selectedId === id ? null : m.selectedId, zonesForRxId: m.zonesForRxId === id ? 'auto' : m.zonesForRxId }))}
       />
 
-      <LinkBudgetDrawer state={{ ...state, map: liveMap }} pairs={pairs} assessments={assessments} groundAt={groundAt} onEdit={editInput} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={p => { if (p) select(p.rxId); setPin(p); }} size={drawerSize} onResize={setDrawerSize} />
+      <LinkBudgetDrawer state={drawerState} pairs={pairs} assessments={assessments} groundAt={groundAt} onEdit={drawerEdit} open={drawerOpen} onToggle={setDrawerOpen} pin={pin} onPin={drawerPin} size={drawerSize} onResize={setDrawerSize} />
 
       {showSettings && <LinkSettingsCard inputs={state.inputs} onChange={setShared} map={map} setMap={setMap} />}
 

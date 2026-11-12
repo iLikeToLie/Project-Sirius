@@ -46,10 +46,11 @@ try {
   rx.name = 'R1'; rx.aglM = 7; rx.interferenceThresholdDbm = -65; rx.protectionMarginDb = 3;
   const second = { ...tx, id: 'extra-tx', name: 'T2' };
   base.map.sensors = [tx, rx, second]; base.map.selectedId = rx.id;
-  const upload = async state => {
+  // `recompute` is false for edits that only change classification (thresholds, aggregation): the field key ignores them, so no new job is sent.
+  const upload = async (state, recompute = true) => {
     const count = await page.evaluate(() => window.jobs.length);
     await page.locator('input[type=file]').setInputFiles({ name: 'layer.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(state)) });
-    if (count) await page.waitForFunction(n => window.jobs.length > n, count);
+    if (count && recompute) await page.waitForFunction(n => window.jobs.length > n, count);
   };
   const waitField = async () => {
     await page.waitForFunction(() => window.jobs.length && window.jobs.at(-1).done);
@@ -63,7 +64,7 @@ try {
       const powers = job.powers.map(p => p[k]);
       const max = Math.max(...powers);
       const power = aggregate ? max + 10 * Math.log10(powers.reduce((sum, p) => sum + 10 ** ((p - max) / 10), 0)) : max;
-      const alpha = power >= threshold ? 54 : power >= threshold - margin ? 46 : 0;
+      const alpha = power >= threshold ? 54 : power > threshold - margin ? 46 : 0;
       const row = Math.floor(k / (cols + 1)), col = k % (cols + 1);
       if (pixels[((rows - row) * (cols + 1) + col) * 4 + 3] !== alpha) return false;
     }
@@ -86,8 +87,10 @@ try {
   const expected = job.powers[0][index] + 10 * Math.log10(2);
   assert.ok(Number.isFinite(expected));
   const sorted = job.powers[0].filter(Number.isFinite).sort((a, b) => a - b);
+  const jobsBefore = await page.evaluate(() => window.jobs.length);
   rx.interferenceThresholdDbm = sorted[Math.floor(sorted.length / 2)] + 10 * Math.log10(2) + 3;
-  await upload(base); await waitField();
+  await upload(base, false); await waitField();
+  assert.equal(await page.evaluate(() => window.jobs.length), jobsBefore, 'a threshold edit reclassifies without a new field job');
   await checkBands(true);
   const colours = await page.evaluate(() => {
     const counts = { red: 0, amber: 0, clear: 0 };
@@ -103,7 +106,7 @@ try {
   assert.equal(await legend.getByRole('button', { name: 'Interference', exact: true }).getAttribute('aria-pressed'), 'true');
   assert.equal(await legend.getByRole('button', { name: 'Bands', exact: true }).getAttribute('aria-pressed'), 'true');
   base.map.aggregateInterference = 'never';
-  await upload(base); await waitField();
+  await upload(base, false); await waitField();
   await checkBands(false);
   assert.match(await legend.innerText(), /worst single/);
   base.map.defaultObjective = 'desired'; rx.desiredTxIds = [tx.id];

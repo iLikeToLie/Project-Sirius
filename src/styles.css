@@ -807,7 +807,7 @@ tbody tr:hover { background: var(--surface-elevated); }
   .drawer-open .sensor-list-card { max-height: calc(100% - var(--drawer-h) - 220px); overflow-y: auto; }
   .coverage-legend { z-index: 3; }
   .drawer-open .selected-sensor-card { max-height: calc(100% - var(--drawer-h) - 80px); }
-  .drawer-max .map-card:not(.link-budget-drawer), .drawer-max .coverage-legend { visibility: hidden; }
+  .drawer-max .map-card:not(.link-budget-drawer), .drawer-max .coverage-legend, .drawer-max .map-toolbar, .drawer-max .more-popover { visibility: hidden; }
 }
 @media (max-width: 1000px) {
   .drawer-resize, .drawer-expand { display: none; }
@@ -944,3 +944,38 @@ tbody tr:hover { background: var(--surface-elevated); }
   .selected-sensor-card, .link-settings-card, .more-popover { animation: none; }
   .map-card, .coverage-legend, .tool, .icon-button, .sensor-row, .segmented button, .panels-hidden .map-card, .panels-hidden .coverage-legend { transition: none; }
 }
+
+/* Link-budget drawer: chevron toggle, open/close motion, tidy metric tiles and the Rx power meter */
+.drawer-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; }
+.drawer-chevron { flex: none; transition: transform 160ms ease-out; }
+.drawer-toggle[aria-expanded="true"] .drawer-chevron { transform: rotate(180deg); }
+@keyframes drawer-rise { from { opacity: .4; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes drawer-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes drawer-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px); } }
+.link-budget-drawer:not(.collapsed) { animation: drawer-rise 180ms ease-out backwards; }
+.link-budget-drawer:not(.collapsed) .drawer-tabs, .link-budget-drawer:not(.collapsed) .drawer-body, .link-budget-drawer:not(.collapsed) .drawer-matrix-panel { animation: drawer-in 180ms ease-out backwards; }
+.link-budget-drawer.closing .drawer-tabs, .link-budget-drawer.closing .drawer-body, .link-budget-drawer.closing .drawer-matrix-panel { animation: drawer-out 160ms ease-out forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .link-budget-drawer, .link-budget-drawer .drawer-tabs, .link-budget-drawer .drawer-body, .link-budget-drawer .drawer-matrix-panel { animation: none !important; }
+  .drawer-chevron { transition: none; }
+}
+/* Separate tiles instead of a hairline-filled grid, so a short last row leaves no filled empty cell */
+.metric-grid.drawer-metrics { gap: 8px; border: 0; border-radius: 0; background: transparent; overflow: visible; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+.drawer-metrics .metric { border: 1px solid var(--hairline); border-radius: 8px; background: var(--surface-elevated); }
+.rx-meter-section { display: grid; gap: 8px; }
+.rx-meter-heading { margin: 0; color: var(--mute); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.rx-meter-section .power-meter .meter-title b { color: var(--blue); font-size: 13px; font-weight: 700; }
+.rx-meter-section .meter-fill { background: linear-gradient(90deg, color-mix(in srgb, var(--blue) 14%, var(--canvas)), var(--blue)); }
+.rx-meter-section .meter-marker { top: -3px; width: 2px; height: 13px; margin-left: -1px; border-radius: 1px; box-shadow: 0 0 0 1px var(--canvas); }
+.rx-meter-section .sensitivity-marker { background: var(--blue); }
+.rx-meter-section .sensitivity-key { color: var(--blue); }
+.rx-meter-section .threshold-key b { font-variant-numeric: tabular-nums; }
+/* The shell's .metric-grid span-2 rule must not turn the results column into two implicit columns */
+.drawer-results { grid-template-columns: minmax(0, 1fr); }
+.drawer-results > * { grid-column: 1 / -1; }
+/* Desired-mode Rx meter key has three entries: sensitivity, required level (centred) and interference. */
+.threshold-key .required-key:not(:last-child) { text-align: center; }
+/* Compact two-line sensor rows so at least two fit beside an open drawer on a 900 px tall screen. */
+.sensor-row { min-height: 38px; padding: 4px 10px; }
+.sensor-list-card .sensor-rows { position: relative; }
+.sensor-list-card .sensor-rows[data-overflow] { scrollbar-width: thin; mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); }

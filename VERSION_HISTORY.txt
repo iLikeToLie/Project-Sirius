@@ -535,3 +535,58 @@ Key changes:
 - Version chip and legend styling corrected; stale browser scripts under
   scripts/e2e updated.
 - 319 unit tests pass across 31 files.
+
+-------------------------------------------------------------------------------
+Web Version 1.11.0 (based on workbook Version 3)
+Target deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-11-12
+Status: on branch claude/hub-housekeeping-app-polish-vxhtc8; not merged.
+
+Function:
+Polish release (project hub decision D1 "Polish first", with the deferred
+minor findings bundled as decision D4 chose). No calculation results change,
+apart from the Interference layer's colour at exact protected-limit equality.
+
+Key changes:
+- Navigation: every tab keeps a readable label and an accessible name at all
+  widths (below 900 px it is a scrollable tab strip; it used to collapse into
+  an empty box). Short labels between 1001 and 1180 px. Compact phone header
+  (icon actions), so the map starts about 320 px higher on a phone. Favicon.
+- Map toolbar never overflows: below 1360 px, Terrain elevation, Buildings,
+  Map and Hide panels move into a More menu (Model too below 640 px).
+- Sensor list: full names on one line with the status underneath; it shrinks
+  and scrolls beside an open drawer and keeps the selected sensor in view.
+- Coverage legend tabs no longer clip ("Interference", "Placement"); the
+  Channel fieldset matches the card; the selected-sensor card stops above the
+  Link budget bar and the map attribution.
+- Marker labels pick the side that avoids neighbouring markers and labels.
+- Link budget drawer: chevron toggle, metric tiles that fill each row, an
+  Rx power meter section (backlog item 5): -95 to -55 dBm by default, widened
+  in 5 dB steps only when a level falls outside; blue sensitivity, green
+  required level and red interference ticks; avoidance adds the protected
+  limit. The expanded drawer hides the map toolbar instead of sitting under it.
+- Smooth motion: 120-220 ms opacity/transform transitions for cards, popover,
+  pages and drawer; drawer resizing writes to the DOM once per frame and
+  commits on release. Reduced motion is honoured.
+- Deferred 1.9.0 minors fixed: the Interference layer treats power exactly at
+  the protected limit as safe (as the cards and matrix do); the field request
+  key ignores names, selection and thresholds, so those edits only reclassify.
+- Known minors fixed: the zone ground grid is memoised on its real inputs;
+  elevation tiles that fail for network or server reasons retry at 1.5, 5 and
+  15 s (a 404 is never retried); the zone overlay canvas is read on the CPU,
+  removing the main cost of each repaint.
+- Measured in the twelve-sensor fixture (headless Chromium, software GL):
+  renaming a sensor sends 0 worker requests (was 5); a 40-step marker drag
+  sends 6 (was 41) with script time about 0.4 s (was about 11 s); selecting
+  sensors no longer produces long tasks.
+- Guide text updated to twelve sensors, the current version, coverage layers
+  and buildings.
+- 331 unit tests pass across 32 files. Browser scripts workspace-layout,
+  link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer,
+  placement-layer and buildings pass (workspace-layout, interference-layer and
+  placement-layer updated for the new drawer toggle and the key change).
+
+Calculation scope and limitations:
+The Version 3 Friis engine is unchanged. Below 1001 px the cards still stack
+under the map. With seven or more sensors clustered tightly, marker and
+distance labels can still overlap.

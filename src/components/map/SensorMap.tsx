@@ -91,7 +91,8 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const context = canvas.getContext('2d')!;
+  // A software canvas: the overlay is filled with putImageData and encoded once, so a GPU-backed canvas only adds a slow readback.
+  const context = canvas.getContext('2d', { willReadFrequently: true })!;
   const image = context.createImageData(width, height);
   // Style lookups are slow; read each token once per paint, never per pixel.
   const [green, yellow, red, mute] = [rgb(token('--green')), rgb(token('--yellow')), rgb(token('--red')), rgb(token('--mute'))];

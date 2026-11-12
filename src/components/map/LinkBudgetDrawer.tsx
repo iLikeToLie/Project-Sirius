@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronUp, Maximize2, Minimize2 } from 'lucide-react';
 import { activePair, type LinkPin } from '../../lib/activeLink';
 import { buildingsOf, flatGround } from '../../lib/buildings';
 import type { GroundAt } from '../../lib/elevation';
@@ -19,6 +19,8 @@ const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location 
 export type DrawerSize = number | 'max' | null;
 const MIN_DRAWER_PX = 120;
 const STEP_PX = 40;
+/** Matches the 160 ms drawer-out animation in styles.css. */
+const CLOSE_MS = 160;
 
 /** Height limits for the drawer inside its workspace: the workspace height minus the 10 px margins. */
 function drawerLimits(drawer: HTMLElement | null) {
@@ -28,7 +30,7 @@ function drawerLimits(drawer: HTMLElement | null) {
 }
 
 /** The Calculator's inputs, results and Rx meter for the active link, writing back through `onEdit`. */
-export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, open, onToggle, pin, onPin, size, onResize }: {
+export const LinkBudgetDrawer = memo(function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, open, onToggle, pin, onPin, size, onResize }: {
   state: AppState;
   pairs: PairResult[];
   assessments: Map<string, ReceiverAssessment>;
@@ -55,7 +57,24 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
     return { inputs, propagation, objective, result, known, rejectionDb, polarizationDb };
   }, [pair, map, state.inputs, groundAt, pairs]);
 
-  const rxPairs = pair ? pairs.filter(p => p.rxId === pair.rx.id) : [];
+  const rxPairs = useMemo(() => pair ? pairs.filter(p => p.rxId === pair.rx.id) : [], [pair, pairs]);
+  const links = useMemo(() => pair ? receiverSummary(rxPairs, pair.rx.id).links : [], [pair, rxPairs]);
+  // An avoidance receiver has no desired links, so its meter shows the shown pair against the interference threshold.
+  const avoidance = model?.objective === 'avoidance';
+  const meterLinks = useMemo(() => avoidance && pair ? rxPairs.filter((p) => p.txId === pair.tx.id) : links, [avoidance, pair, rxPairs, links]);
+  const pinMatrixCell = useCallback((p: LinkPin) => { onPin({ ...p, scope: 'pair' }); setView('budget'); document.getElementById('drawer-tab-budget')?.focus(); }, [onPin, setView]);
+
+  // Closing plays a short exit before the content unmounts; reduced motion closes at once.
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
+  useEffect(() => { if (open) setClosing(false); }, [open]);
+  const toggle = () => {
+    if (!open || closing) { window.clearTimeout(closeTimer.current); setClosing(false); onToggle(!open); return; }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { onToggle(false); return; }
+    setClosing(true);
+    closeTimer.current = window.setTimeout(() => { setClosing(false); onToggle(false); }, CLOSE_MS);
+  };
 
   if (!pair || !model) {
     return <section className="map-card link-budget-drawer collapsed" aria-label="Link budget"><div className="drawer-bar"><b>Link budget</b><span className="field-note">Add a transmitter and a receiver to see the link budget.</span></div></section>;
@@ -64,9 +83,6 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
   const assessment = assessments.get(pair.rx.id)!;
   const displayedPair = rxPairs.find(p => p.txId === pair.tx.id);
   const status = objective === 'avoidance' ? displayedPair ? pairVerdict(displayedPair, pair.rx, assessment.marginDb) : 'Invalid input' : assessment.links.find(l => l.txId === pair.tx.id)?.status ?? result.status;
-  const links = receiverSummary(rxPairs, pair.rx.id).links;
-  // An avoidance receiver has no desired links, so its meter shows the shown pair against the interference threshold.
-  const meterLinks = objective === 'avoidance' ? rxPairs.filter((p) => p.txId === pair.tx.id) : links;
   const num = <K extends keyof LinkInputs>(key: K) => (v: number) => { onEdit(key, v as LinkInputs[K]); };
   const text = (key: keyof typeof TEXT_LABELS) => (
     <label className="field"><span>{TEXT_LABELS[key]}</span><input type="text" value={inputs[key]} onChange={(e) => { onEdit(key, e.target.value); }} /></label>
@@ -76,11 +92,27 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
   const clamp = (px: number, max: number) => Math.round(Math.min(max, Math.max(MIN_DRAWER_PX, px)));
   const currentPx = (drawer: HTMLElement | null) => drawer?.getBoundingClientRect().height ?? MIN_DRAWER_PX;
   const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    const handle = e.currentTarget;
-    const { bottom, max } = drawerLimits(handle.parentElement);
+    const handle = e.currentTarget, drawer = handle.parentElement as HTMLElement, workspace = drawer.offsetParent as HTMLElement | null;
+    const { bottom, max } = drawerLimits(drawer);
     handle.setPointerCapture(e.pointerId);
-    const move = (ev: PointerEvent) => onResize(clamp(bottom - ev.clientY, max));
-    const end = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end); };
+    // While dragging, write the height straight to the DOM once per frame; React state (and the whole map
+    // workspace render) is only touched when the pointer is released.
+    let latest: number | null = null, frame = 0, final: number | null = null;
+    const paint = () => {
+      frame = 0;
+      if (latest === null) return;
+      drawer.style.height = `${latest}px`;
+      workspace?.style.setProperty('--drawer-h', `${latest}px`);
+      final = latest; latest = null;
+    };
+    const move = (ev: PointerEvent) => { latest = clamp(bottom - ev.clientY, max); if (!frame) frame = requestAnimationFrame(paint); };
+    const end = () => {
+      handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end);
+      if (frame) { cancelAnimationFrame(frame); paint(); }
+      drawer.style.height = '';
+      if (final !== null) onResize(final);
+      else workspace?.style.removeProperty('--drawer-h');
+    };
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', end);
     handle.addEventListener('pointercancel', end);
@@ -95,7 +127,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
   };
 
   return (
-    <section className={`map-card link-budget-drawer${open ? '' : ' collapsed'} link-tone-${tone}`} aria-label="Link budget">
+    <section className={`map-card link-budget-drawer${open ? '' : ' collapsed'}${closing ? ' closing' : ''} link-tone-${tone}`} aria-label="Link budget">
       {open && (
         <div
           className="drawer-resize" role="separator" aria-orientation="horizontal" aria-label="Resize link budget" tabIndex={0}
@@ -104,7 +136,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
         />
       )}
       <div className="drawer-bar">
-        <button type="button" className="ghost" aria-expanded={open} onClick={() => onToggle(!open)}>{open ? 'Link budget −' : 'Link budget +'}</button>
+        <button type="button" className="ghost drawer-toggle" aria-expanded={open} onClick={toggle}><ChevronUp size={14} aria-hidden="true" className="drawer-chevron" /><span>Link budget</span></button>
         <span className="drawer-summary">{inputs.txId} → {inputs.rxId} · <b>{formatNumber(result.receivedPowerDbm)} dBm</b></span>
         {open && (
           <button type="button" className="ghost drawer-expand" aria-pressed={size === 'max'} onClick={() => onResize(size === 'max' ? null : 'max')}>
@@ -124,7 +156,7 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
           }}>{v === 'budget' ? 'Link budget' : 'Matrix'}</button>)}
       </div>}
       {open && view === 'matrix' && <div id="drawer-panel-matrix" role="tabpanel" aria-labelledby="drawer-tab-matrix" className="drawer-matrix-panel" tabIndex={0}>
-        <InterferenceMatrix map={map} pairs={pairs} assessments={assessments} onPin={p => { onPin({ ...p, scope: 'pair' }); setView('budget'); document.getElementById('drawer-tab-budget')?.focus(); }} />
+        <InterferenceMatrix map={map} pairs={pairs} assessments={assessments} onPin={pinMatrixCell} />
       </div>}
       {open && view === 'budget' && (
         <div className="drawer-body" id="drawer-panel-budget" role="tabpanel" aria-labelledby="drawer-tab-budget">
@@ -170,11 +202,11 @@ export function LinkBudgetDrawer({ state, pairs, assessments, groundAt, onEdit, 
               <Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" />
             </div>
             {!known && map.useTerrainElevation && <p className="field-note" role="status">Elevation unavailable for this path; terrain prediction is unknown.</p>}
-            <RxMeterStack links={meterLinks} inputs={inputs} objective={objective} assessment={assessment} />
+            <section className="rx-meter-section" aria-label="Rx power meter"><h4 className="rx-meter-heading">Rx power meter</h4><RxMeterStack links={meterLinks} inputs={inputs} objective={objective} assessment={assessment} /></section>
             {map.propagationModel === 'terrain' && <PathProfileChart tx={pair.tx} rx={pair.rx} groundAt={map.useTerrainElevation ? groundAt : flatGround(groundAt)} frequencyGhz={inputs.frequencyGhz} />}
           </div>
         </div>
       )}
     </section>
   );
-}
+});

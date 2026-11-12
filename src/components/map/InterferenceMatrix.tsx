@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { MapScenario } from '../../types';
 import type { LinkPin } from '../../lib/activeLink';
 import { mitigations, pairVerdict, sumDbm, type ReceiverAssessment } from '../../lib/interference';
@@ -6,7 +7,7 @@ import type { PairResult } from '../../lib/sensors';
 import { statusTone } from '../ui';
 
 /** Pair margins use the same assessments as the map; totals remain receiver-level. */
-export function InterferenceMatrix({ map, pairs, assessments, onPin }: {
+export const InterferenceMatrix = memo(function InterferenceMatrix({ map, pairs, assessments, onPin }: {
   map: MapScenario;
   pairs: PairResult[];
   assessments: Map<string, ReceiverAssessment>;
@@ -55,5 +56,4 @@ export function InterferenceMatrix({ map, pairs, assessments, onPin }: {
       </table>
     </div>
   );
-}
-
+});

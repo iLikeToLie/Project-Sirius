@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { CategoryScale, Chart as ChartJS, Filler, Legend, LinearScale, LineElement, PointElement, Tooltip } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import type { GroundAt } from '../../lib/elevation';
@@ -10,8 +10,20 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 
 type End = LatLon & { aglM: number; mount?: 'roof' | 'street' };
 
+const CHART_OPTIONS = {
+  responsive: true, maintainAspectRatio: false, animation: false, spanGaps: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: { legend: { labels: { color: '#c8cacc', boxWidth: 14, font: { size: 11 } } } },
+  scales: {
+    x: { title: { display: true, text: 'Distance from Tx (km)', color: '#9c9c9d' }, ticks: { color: '#9c9c9d', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,.06)' } },
+    y: { title: { display: true, text: 'Elevation (m)', color: '#9c9c9d' }, ticks: { color: '#9c9c9d' }, grid: { color: 'rgba(255,255,255,.06)' } },
+  },
+} as const;
+
+const sameEnd = (a: End, b: End) => a.lat === b.lat && a.lon === b.lon && a.aglM === b.aglM && a.mount === b.mount;
+
 /** Ground (with Earth bulge), buildings when on, direct ray and the 60 % first Fresnel envelope along the Tx→Rx path. */
-export function PathProfileChart({ tx, rx, groundAt, frequencyGhz }: { tx: End; rx: End; groundAt: GroundAt; frequencyGhz: number }) {
+export const PathProfileChart = memo(function PathProfileChart({ tx, rx, groundAt, frequencyGhz }: { tx: End; rx: End; groundAt: GroundAt; frequencyGhz: number }) {
   const chart = useMemo(() => {
     const profile = buildProfile(tx, rx, groundAt, 30, { from: tx.mount === 'street', to: rx.mount === 'street' });
     if (!profile) return null;
@@ -42,16 +54,8 @@ export function PathProfileChart({ tx, rx, groundAt, frequencyGhz }: { tx: End; 
     <div className="path-profile" role="img" aria-label="Path profile: ground, buildings, direct ray and Fresnel zone between transmitter and receiver">
       <Line
         data={chart}
-        options={{
-          responsive: true, maintainAspectRatio: false, animation: false, spanGaps: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: { legend: { labels: { color: '#c8cacc', boxWidth: 14, font: { size: 11 } } } },
-          scales: {
-            x: { title: { display: true, text: 'Distance from Tx (km)', color: '#9c9c9d' }, ticks: { color: '#9c9c9d', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,.06)' } },
-            y: { title: { display: true, text: 'Elevation (m)', color: '#9c9c9d' }, ticks: { color: '#9c9c9d' }, grid: { color: 'rgba(255,255,255,.06)' } },
-          },
-        }}
+        options={CHART_OPTIONS as never}
       />
     </div>
   );
-}
+}, (a, b) => sameEnd(a.tx, b.tx) && sameEnd(a.rx, b.rx) && a.groundAt === b.groundAt && a.frequencyGhz === b.frequencyGhz);
