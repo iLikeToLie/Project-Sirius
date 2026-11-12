@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGroundSampler, decodeTerrarium, tilePixel, type ElevationTile } from './elevation';
+import { createGroundSampler, decodeTerrarium, elevationRetryDelayMs, tilePixel, type ElevationTile } from './elevation';
 
 const Z = 14;
 const TX = 12916;
@@ -57,5 +57,13 @@ describe('Terrarium elevation', () => {
     const t = tile(-20);
     const ground = createGroundSampler((z, x, y) => (x === TX && y === TY ? t : undefined), Z);
     expect(ground(at(100, 100))).toBe(0);
+  });
+});
+
+describe('elevation tile retry policy', () => {
+  it('backs off a few times and then gives up', () => {
+    const delays = [1, 2, 3, 4].map(elevationRetryDelayMs);
+    expect(delays.slice(0, 3).every((d, i, all) => d !== null && (i === 0 || d > all[i - 1]!))).toBe(true);
+    expect(delays[3]).toBeNull();
   });
 });

@@ -149,10 +149,18 @@ export function pairLinkInputs(map: MapScenario, shared: LinkInputs, tx: Sensor,
 
 export interface PairResult { txId: string; txName: string; rxId: string; intended: boolean; distanceM: number; result: LinkResult; elevationKnown: boolean; propagationLossDb: number; rejectionDb: number; polarizationDb: number; clearance: Clearance | 'unknown' }
 
-export function meterScale(links: PairResult[], inputs: LinkInputs): { scaleMin: number; scaleMax: number } {
-  const values = [inputs.sensitivityDbm, inputs.sensitivityDbm + inputs.fadeMarginTargetDb, inputs.interferenceThresholdDbm,
+/** The Rx meter's default span; it widens, in 5 dB steps, only when a power or a reference level falls outside it. */
+export const METER_DEFAULT_SCALE = { scaleMin: -95, scaleMax: -55 } as const;
+
+/** One scale for every Rx meter of a receiver: -95 to -55 dBm unless the sensitivity, required level, threshold, `extraDbm` levels or a known power fall outside it. */
+export function meterScale(links: PairResult[], inputs: LinkInputs, extraDbm: number[] = []): { scaleMin: number; scaleMax: number } {
+  const values = [inputs.sensitivityDbm, inputs.sensitivityDbm + inputs.fadeMarginTargetDb, inputs.interferenceThresholdDbm, ...extraDbm,
     ...links.filter((p) => p.elevationKnown).map((p) => p.result.receivedPowerDbm)].filter(Number.isFinite);
-  return { scaleMin: values.length ? Math.floor(Math.min(...values) - 10) : -120, scaleMax: values.length ? Math.ceil(Math.max(...values) + 10) : 0 };
+  const low = Math.min(...values), high = Math.max(...values);
+  return {
+    scaleMin: low < METER_DEFAULT_SCALE.scaleMin ? Math.floor((low - 2) / 5) * 5 : METER_DEFAULT_SCALE.scaleMin,
+    scaleMax: high > METER_DEFAULT_SCALE.scaleMax ? Math.ceil((high + 2) / 5) * 5 : METER_DEFAULT_SCALE.scaleMax,
+  };
 }
 
 export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, frequencyGhz: number, groundAt: GroundAt): { lossDb: number; clearance: Clearance | 'unknown' } {

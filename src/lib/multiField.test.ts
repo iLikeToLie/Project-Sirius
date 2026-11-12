@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_STATE } from '../data/defaults';
+import { DEFAULT_STATE, freshDefaultState } from '../data/defaults';
 import { sampleGrid } from './contours';
 import { computeCoverage, reprojectPowers } from './coverage';
 import { SG_REFERENCE, toLatLon, toLocalM } from './geo';
-import { computeMultiField, type MultiFieldRequest } from './multiField';
+import { computeMultiField, multiFieldKey, type MultiFieldRequest } from './multiField';
+import { interferenceSources } from './interferenceLayer';
 import { calculateLink } from './rf';
 import { thresholdSlantRangeM } from './thresholds';
 import { computeZones } from './zones';
@@ -104,5 +105,35 @@ describe('multi-source power fields', () => {
     expect(computeMultiField({ ...req, sources: [] })).toEqual({ jobId: 42, powers: [] });
     expect(computeMultiField({ ...req, sources: Array(12).fill(req.sources[0]) }).powers).toHaveLength(12);
     expect(() => computeMultiField({ ...req, sources: Array(13).fill(req.sources[0]) })).toThrow();
+  });
+});
+
+describe('multiFieldKey', () => {
+  const base = () => { const { map, inputs } = freshDefaultState(); map.useTerrainElevation = false; return { map, inputs }; };
+  const keyFor = (map: ReturnType<typeof base>['map'], inputs: ReturnType<typeof base>['inputs'], rxIndex = 1) => {
+    const rx = map.sensors[rxIndex];
+    return multiFieldKey({ layer: 'interference', sources: interferenceSources(map, inputs, rx, () => 0), mode: 'free-space', rxAglM: rx.aglM, rxOnRoof: false, radials: 360, view: null, dragging: false, elevationVersion: 0, buildingsVersion: false, terrain: false });
+  };
+  it('ignores names, selection, thresholds, sensitivities and shared identifiers that only classify the fields', () => {
+    const { map, inputs } = base();
+    map.sensors.push({ ...map.sensors[0], id: 'extra', name: 'Extra' });
+    const before = keyFor(map, inputs);
+    map.sensors[0].name = 'Renamed'; map.sensors[2].name = 'Other name'; map.selectedId = 'extra';
+    map.sensors[1].interferenceThresholdDbm += 6; map.sensors[1].sensitivityDbm -= 3; map.sensors[1].fadeMarginTargetDb += 2; map.protectionMarginDb += 4;
+    map.aggregateInterference = 'always';
+    expect(keyFor(map, { ...inputs, scenarioName: 'Another', txId: 'x', rxId: 'y', sensitivityDbm: -50, interferenceThresholdDbm: -40 })).toBe(before);
+  });
+  it('changes with anything that moves or rescales a field', () => {
+    const { map, inputs } = base();
+    map.sensors.push({ ...map.sensors[0], id: 'extra', name: 'Extra' });
+    const before = keyFor(map, inputs);
+    const moved = structuredClone(map); moved.sensors[2].lat += 0.001;
+    expect(keyFor(moved, inputs)).not.toBe(before);
+    const raised = structuredClone(map); raised.sensors[2].aglM += 5;
+    expect(keyFor(raised, inputs)).not.toBe(before);
+    const louder = structuredClone(map); louder.sensors[2].powerDbm += 3;
+    expect(keyFor(louder, inputs)).not.toBe(before);
+    expect(keyFor(map, { ...inputs, frequencyGhz: inputs.frequencyGhz + 1 })).not.toBe(before);
+    expect(keyFor(map, { ...inputs, obstructionLossDb: inputs.obstructionLossDb + 2 })).not.toBe(before);
   });
 });

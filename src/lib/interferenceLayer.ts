@@ -86,7 +86,8 @@ export function interferenceZones(map: MapScenario, rx: Sensor, raster: ScalarGr
     const power = aggregate ? sumDbm(powers) : powers.reduce((max, p) => Math.max(max, p), -Infinity);
     powerDbm[k] = power;
     interference[k] = power >= threshold ? 1 : 0;
-    classes[k] = power >= limit && power < threshold ? ZONE.weak : ZONE.none;
+    // Equality with the protected limit is safe, as on the cards and in the matrix (the band is (L,T)).
+    classes[k] = power > limit && power < threshold ? ZONE.weak : ZONE.none;
   }
   const levels = withOutlines ? { ...raster, values: Float64Array.from(powerDbm) } : raster;
   return { jobId: out.jobId, cols: raster.cols, rows: raster.rows, cellSizeM: Math.max(raster.dx, raster.dy),

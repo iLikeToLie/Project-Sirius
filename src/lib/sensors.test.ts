@@ -22,10 +22,22 @@ const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[]
 }));
 
 describe('desired transmitter sets', () => {
-  it('uses one meter scale covering every power, sensitivity and required level', () => {
-    const scale = meterScale(pairsWithPowers(R1.id, [['T1', -90], ['T2', -60]]), { ...defaults, sensitivityDbm: -85 });
-    expect(scale.scaleMin).toBeLessThanOrEqual(-100);
-    expect(scale.scaleMax).toBeGreaterThanOrEqual(-50);
+  it('defaults the meter scale to -95..-55 dBm when everything fits', () => {
+    const scale = meterScale(pairsWithPowers(R1.id, [['T1', -90], ['T2', -60]]), { ...defaults, sensitivityDbm: -85, interferenceThresholdDbm: -65, fadeMarginTargetDb: 10 });
+    expect(scale).toEqual({ scaleMin: -95, scaleMax: -55 });
+  });
+
+  it('widens the scale only for a power or reference level outside it, and keeps one scale for every row', () => {
+    const inputs = { ...defaults, sensitivityDbm: -85, interferenceThresholdDbm: -65, fadeMarginTargetDb: 10 };
+    const low = meterScale(pairsWithPowers(R1.id, [['T1', -101], ['T2', -60]]), inputs);
+    expect(low.scaleMin).toBeLessThanOrEqual(-101);
+    expect(Math.abs(low.scaleMin % 5)).toBe(0);
+    expect(low.scaleMax).toBe(-55);
+    const high = meterScale(pairsWithPowers(R1.id, [['T1', -40]]), inputs);
+    expect(high.scaleMax).toBeGreaterThanOrEqual(-40);
+    expect(high.scaleMin).toBe(-95);
+    expect(meterScale([], { ...inputs, sensitivityDbm: -120 }).scaleMin).toBeLessThanOrEqual(-120);
+    expect(meterScale([], inputs, [-30]).scaleMax).toBeGreaterThanOrEqual(-30);
   });
 
   it('keeps the meter scale finite with unknown powers and no links', () => {

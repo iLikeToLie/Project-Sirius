@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { LinkObjective } from '../../types';
 import { signalColour } from '../../lib/signalColour';
 
@@ -25,12 +26,23 @@ const SHOW_ALL_TIP = [
 ].join('\n');
 
 export function CoverageLegend({ objective, showAll, onShowAll, terrain, range, coverageStyle, onCoverageStyle, coverageLayer, onCoverageLayer, referenceName, aggregate, placementName, victimNames = [], servedNames = [] }: { objective: LinkObjective; showAll: boolean; onShowAll: (show: boolean) => void; terrain: boolean; range?: { lo: number; hi: number }; coverageStyle: CoverageStyle; onCoverageStyle: (style: CoverageStyle) => void; coverageLayer: CoverageLayer; onCoverageLayer: (layer: CoverageLayer) => void; referenceName?: string; aggregate?: boolean; placementName?: string; victimNames?: string[]; servedNames?: string[] }) {
+  const ref = useRef<HTMLElement | null>(null);
+  // Publish the legend's height so the sensor list above it can shrink to stay clear of it.
+  useEffect(() => {
+    const el = ref.current; const host = el?.parentElement;
+    if (!el || !host || typeof ResizeObserver === 'undefined') return;
+    const publish = () => host.style.setProperty('--legend-h', `${el.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => { observer.disconnect(); host.style.removeProperty('--legend-h'); };
+  }, []);
   const total = coverageLayer === 'interference';
   const placement = coverageLayer === 'placement';
   const stops = range ? Array.from({ length: 12 }, (_, i) => { const [r, g, b] = signalColour(range.lo + (range.hi - range.lo) * (i / 11), range.lo, range.hi); return `rgb(${r} ${g} ${b})`; }).join(', ') : '';
-  return <aside className="coverage-legend" aria-label="Coverage legend" title={placement ? 'Safe respects all protected victim allowances; Recommended also reaches every served receiver’s sensitivity plus fade margin. Receiver-side terrain diffraction uses a reciprocity approximation; grey hatching marks unknown paths.' : total || terrain ? 'Grey hatching marks unknown paths or ground with no elevation data.' : 'Dashed rings are free-space reference ranges; grey hatching marks ground with no elevation data.'}>
+  return <aside ref={ref} className="coverage-legend" aria-label="Coverage legend" title={placement ? 'Safe respects all protected victim allowances; Recommended also reaches every served receiver’s sensitivity plus fade margin. Receiver-side terrain diffraction uses a reciprocity approximation; grey hatching marks unknown paths.' : total || terrain ? 'Grey hatching marks unknown paths or ground with no elevation data.' : 'Dashed rings are free-space reference ranges; grey hatching marks ground with no elevation data.'}>
     <div className="segmented coverage-layers" role="group" aria-label="Coverage layer">
-      {(['range', 'interference', 'placement'] as const).map(layer => <button key={layer} type="button" className={coverageLayer === layer ? 'active' : ''} aria-label={layer === 'range' ? 'Range' : layer === 'interference' ? 'Interference' : 'Placement'} aria-pressed={coverageLayer === layer} disabled={layer === 'placement' && !placementName} title={layer === 'placement' && !placementName ? 'Select a transmitter to show safe placement' : LAYER_TIPS[layer]} onClick={() => onCoverageLayer(layer)}>{layer === 'range' ? 'Range' : layer === 'interference' ? 'Interf.' : 'Placement'}</button>)}
+      {(['range', 'interference', 'placement'] as const).map(layer => <button key={layer} type="button" className={coverageLayer === layer ? 'active' : ''} aria-label={layer === 'range' ? 'Range' : layer === 'interference' ? 'Interference' : 'Placement'} aria-pressed={coverageLayer === layer} disabled={layer === 'placement' && !placementName} title={layer === 'placement' && !placementName ? 'Select a transmitter to show safe placement' : LAYER_TIPS[layer]} onClick={() => onCoverageLayer(layer)}>{layer === 'range' ? 'Range' : layer === 'interference' ? 'Interference' : 'Placement'}</button>)}
     </div>
     <div className="legend-head"><b>{placement ? placementName ? `Placement for ${placementName}` : 'Select a transmitter to show safe placement' : total ? referenceName ? `Total interference at ${referenceName}'s settings (${aggregate ? 'aggregate' : 'worst single'})` : 'Add a receiver to show total interference' : terrain ? 'Terrain coverage' : 'Free-space zones'}</b>{!total && !placement && <span>{objective === 'desired' ? 'Desired' : 'Avoidance'}</span>}</div>
     {placement && <>

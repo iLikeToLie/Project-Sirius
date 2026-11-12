@@ -2,9 +2,15 @@
 // basemap switch, link distance labels and the log-true frequency scale.
 // Run against `vite preview --host 127.0.0.1 --port 5199 --strictPort`. Optional: PLAYWRIGHT_MODULE, CHROMIUM_EXECUTABLE, E2E_URL.
 import assert from 'node:assert/strict';
+import { PNG } from 'pngjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
-const browser = await chromium.launch({ ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
-const page = await browser.newPage({ viewport: { width: 1400, height: 860 } });
+const browser = await chromium.launch({ ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}), args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const context = await browser.newContext({ viewport: { width: 1400, height: 860 } });
+// Offline-safe: serve a flat OneMap tile so the map loads without the network.
+const basemap = new PNG({ width: 256, height: 256 });
+for (let k = 0; k < basemap.data.length; k += 4) basemap.data.set([200, 204, 210, 255], k);
+await context.route('https://www.onemap.gov.sg/**', r => r.fulfill({ contentType: 'image/png', body: PNG.sync.write(basemap), headers: { 'access-control-allow-origin': '*' } }));
+const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const open = async () => {
@@ -24,7 +30,8 @@ await page.waitForSelector('.link-distance-label');
 assert.match(await page.locator('.link-distance-label').first().innerText(), /^\d+ m$|^\d+\.\d{2} km$/, 'desired link shows its distance');
 
 // Drawer: drag, keyboard, expand, restore, reset.
-await page.getByRole('button', { name: 'Link budget +' }).click();
+await page.locator('.link-budget-drawer').getByRole('button', { name: /^Link budget/ }).first().click();
+await page.waitForTimeout(400); // let the open transition settle before measuring
 const base = await height(drawer);
 const handle = await page.locator('.drawer-resize').boundingBox();
 await page.mouse.move(handle.x + handle.width / 2, handle.y + 4);
@@ -53,7 +60,7 @@ assert.equal(await legend.isVisible(), false, 'legend is hidden behind the expan
 await page.getByRole('button', { name: 'Restore', exact: true }).click();
 await page.locator('.drawer-resize').dblclick();
 assert.equal(await height(drawer), base, 'double-click returns the drawer to its default height');
-await page.getByRole('button', { name: 'Link budget −' }).click();
+await page.locator('.link-budget-drawer').getByRole('button', { name: /^Link budget/ }).first().click();
 await page.getByRole('group', { name: 'Coverage style' }).getByRole('button', { name: 'Gradient', exact: true }).click();
 await page.getByLabel('Basemap').selectOption('onemap');
 

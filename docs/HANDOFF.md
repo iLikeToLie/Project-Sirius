@@ -1,21 +1,24 @@
 # Handoff — Friis RF calculator / Link workspace
 
-Last updated 2 November 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
+Last updated 12 November 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
 
 ## Where things stand
 
 | Item | State |
 |---|---|
 | Repository | `github.com/iLikeToLie/Project-Sirius` (renamed from `friis-rf-calculator`; GitHub forwards the old repo URL). |
-| Live site | **https://iliketolie.github.io/Project-Sirius/**. Last recorded release: web **1.8.0**; deployment not rechecked for this documentation task. Web 1.9.0 has not been pushed or merged. |
-| Branch to work from | **`feature/interference-avoidance`**, worktree `.worktrees/interference-avoidance`. Tasks 1–16 complete for web **1.9.0**, including independent review and fixes. Local `main` is at `edb7679`; no merge or push performed. Keep this branch for user review. |
-| Tests | 302 unit tests across 30 files (`corepack pnpm test`); production build passes without warnings. All eleven whole-branch Review Focus cases and ten existing browser scripts pass; commands, timing, screenshots, review fixes and two deferred minor findings are in `docs/INTERFERENCE_AVOIDANCE_REVIEW.md`. |
+| Live site | **https://iliketolie.github.io/Project-Sirius/**. Web **1.9.0** went live on 3 November (PR #9), with fixes in PRs #10–#11 (recorded as 1.9.1). Web **1.10.0** (building heights, PR #12) and UI fixes (PR #13) are merged to `main` and live (Pages run #23 succeeded on 9 November). Web **1.11.0** (polish) is on branch `claude/hub-housekeeping-app-polish-vxhtc8`, not merged. |
+| Branch to work from | **`main`** (head `56b80b0`, 9 November). Feature branches `feature/interference-avoidance` and `claude/dreamy-bell-a3obkr` are merged. |
+| Tests | 331 unit tests across 32 files on the 1.11.0 branch (`corepack pnpm test`, 12 November); 319 on `main`. Browser scripts workspace-layout, link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer, placement-layer and buildings pass against the 1.11.0 build. |
 
 ### Release history (newest first)
 
 | Version | PR | What it added |
 |---|---|---|
-| 1.9.0 (branch only) | — | Twelve sensors, aggregate interference and protection margin, desired-link C/I, power limits and fixes, Tx × Rx matrix, frequency/bandwidth and polarization isolation, noise-floor helper, total Interference and transmitter Placement layers; schema 6. Whole-branch review complete; pending user review and deployment. |
+| 1.11.0 | branch | Polish (hub decision D1): responsive nav with accessible names, compact phone header, favicon; toolbar More menu; readable sensor list that keeps the selection in view; legend tabs, Channel fieldset and card heights fixed; collision-aware marker labels; drawer chevron, metric tiles and Rx power meter (backlog item 5); Interference layer protected-limit equality safe; field key ignores names/selection/thresholds; zone grid memoised; elevation retry; frame-paced drawer resize; Guide text current. |
+| 1.10.0 | #12, #13 | Building heights block paths and coverage under terrain diffraction: Buildings switch (off by default), per-sensor roof or street mount, footprint layer, buildings in the path profile; tiles from Overture Maps and the NUS HDB model; schema 7. PR #13 fixed the link-budget bar, full screen button and sensor list/legend overlap. |
+| 1.9.1 | #10, #11 | Stuck zone-image layer fix, band outlines on all layers, map speed-ups, Fit all sensors on narrow maps. Docs-only version entry; package.json not bumped. |
+| 1.9.0 | #9 | Twelve sensors, aggregate interference and protection margin, desired-link C/I, power limits and fixes, Tx × Rx matrix, frequency/bandwidth and polarization isolation, noise-floor helper, total Interference and transmitter Placement layers; schema 6. Whole-branch review complete; live 3 November. |
 | fix | #6 | No false "Elevation tiles unavailable" notice when panning past Singapore: tiles outside the DEM are not requested, and a 404 is missing data, not an outage. |
 | 1.8.0 | #5 | Distance labels on desired links; Map select (OneMap / Plain terrain); view preferences remembered per device (`usePref`); F toggles full screen; Link settings number fields readable and frequency scale labels at their log positions; sensor list stops above the legend; vendor chunks (MapLibre, charts, React); deploy workflow on current action majors (Node 24) and `ubuntu-24.04`. |
 | 1.7.1 | #4 | Full screen button; resizable Link budget drawer (drag handle, keys, Expand); pan margin widened from 0.05° to 0.3°. |
@@ -28,18 +31,17 @@ Last updated 2 November 2026. Everything needed to continue this work on another
 
 ## Branches
 
-- `feature/interference-avoidance`: verified web 1.9.0 work. Plan Tasks 1–16 complete; retain the branch/worktree for user review.
-- `main`: released baseline; does not contain the web 1.9.0 interference work.
-- Merged and kept for reference: `feature/v2-ui` (#1), `worktree-coverage-aesthetic` (#2), `integrate/consolidation` (#3), `feature/workspace-layout` (#4), `feature/suggestions` (#5), `fix/elevation-offline` (#6), `feature/multi-link-receivers` (via #3).
+- `main`: released baseline; contains web 1.10.0.
+- Merged and kept for reference: `feature/v2-ui` (#1), `worktree-coverage-aesthetic` (#2), `integrate/consolidation` (#3), `feature/workspace-layout` (#4), `feature/suggestions` (#5), `fix/elevation-offline` (#6), `feature/multi-link-receivers` (via #3), `feature/interference-avoidance` (#9), `feature/ui-tweaks-bands-outline` (#10), `feature/map-performance` (#11), `claude/dreamy-bell-a3obkr` (#12), `feature/ui-fixes` (#13), `fix/e2e-stale-scripts`.
 - `feature/link-workspace-terrain` (`609b284`): **do not merge.** Despite being a late commit, most of its files are older copies of v2-ui or multi-link files, and it lacks the drawer and PR #2. Its one new change (hide rings in terrain mode) and its docs were ported by hand into #3.
-- These branches can be deleted on GitHub once you no longer need them.
+- Merged branches can be deleted on GitHub once you no longer need them (the user chose to delete `feature/link-workspace-terrain` and the merged ones, decision D5; not yet done).
 - `.claude/` (including local worktrees) is git-ignored; re-create worktrees with `git worktree add` if needed.
 
 ## Read in this order
 
 1. This file, then `docs/BACKLOG.md` (open ideas, with done items marked).
-   For building heights (web 1.10.0 on branch `claude/dreamy-bell-a3obkr`, not merged), read `docs/superpowers/specs/2026-11-08-building-heights-design.md`; its section 7 records what was built.
-   For the current branch, read `docs/superpowers/plans/2026-11-02-interference-avoidance.md` and `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` next.
+   For building heights (web 1.10.0, merged in PR #12), read `docs/superpowers/specs/2026-11-08-building-heights-design.md`; its section 7 records what was built.
+   For interference avoidance, read `docs/superpowers/plans/2026-11-02-interference-avoidance.md` and `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` next.
 2. `REPOSITORY_BRIEF.md`: the original repo review (pre-1.4.0 baseline and the calculation rules to preserve). Its URLs predate the rename.
 3. `docs/superpowers/specs/2026-10-26-link-workspace-v2-design.md`: the approved v2 design (terrain, coverage, drawer).
 4. `docs/superpowers/plans/2026-10-27-multi-link-receivers.md` and `docs/MULTI_LINK_REVIEW.md`: the multi-transmitter plan and its verification record.
@@ -58,7 +60,7 @@ Last updated 2 November 2026. Everything needed to continue this work on another
 - `src/lib/interferenceLayer.ts`: receiver/source selection, field combination and categorical rendering for Interference and Placement layers.
 - `src/lib/sensors.ts`: pair evaluation, `resolveDesiredTxs`, `receiverSummary`, `worstLink`, `meterScale`.
 - `src/lib/activeLink.ts`: the active pair the Calculator, sweeps and drawer show, with the optional `LinkPin`.
-- `src/lib/state.ts`: load, validation and migration (schema 2 → 6). New fields default when absent; saved key in `localStorage` is unchanged.
+- `src/lib/state.ts`: load, validation and migration (schema 2 → 7). New fields default when absent; saved key in `localStorage` is unchanged.
 - `src/lib/signalColour.ts`: gradient colours and ranges.
 - `src/components/map/MapWorkspace.tsx`: workspace state (prefs, full screen, drawer size, coverage style, basemap) and wiring.
 - `src/components/map/SensorMap.tsx`: MapLibre map, zones, rings, link lines, distance labels, basemap visibility, `PAD` pan margin.
@@ -81,7 +83,7 @@ Last updated 2 November 2026. Everything needed to continue this work on another
 - **Map:** a terrain map of **Singapore**, not satellite, using MapLibre + OneMap Grey (Plain terrain is an option). Layout **B**: full-bleed map with floating cards, desktop-first.
 - **Zones:** range zones use the **linked receiver's** settings.
 - **Terrain:** terrain should **block links** (frequency-dependent), with a **radial coverage map** like `Reference Images/`.
-- **Terrain only for now;** building heights later, via API or map-data upload.
+- **Buildings (1.10.0):** class-default heights where none is known (drawn fainter), per-sensor mount (roof by default), Buildings off by default (decisions D6–D8, 8 Nov). Data from Overture Maps and the NUS HDB model.
 - **Elevation source:** **ALOS AW3D30 v4** tiles `N001E103` and `N001E104`. Publishing the derived tiles is fine (`public/dem/` is committed).
 - **Calculator merge:** the Link workspace will eventually absorb **all Calculator functionality**. Don't optimise the Calculator tab further.
 - **Floating cards** must be smaller. The **link objective** and the **frequency-scaled transmit animation** must be retained.
@@ -112,20 +114,18 @@ Last updated 2 November 2026. Everything needed to continue this work on another
 ## Known minor issues (deferred)
 
 - Selecting a receiver can draw zones with another linked receiver's settings (the card names it).
-- Elevation tiles that fail for network reasons are not retried until reload (404s outside the DEM are now ignored).
 - The zone fill can be up to half a grid cell off its outline.
-- The zone ground grid is resampled on unrelated renders.
 - A typed separation over unloaded tiles drifts sub-metre after load; very large values can leave Singapore.
-- "Fit all sensors" does nothing below about 740 px width.
-- A very tall Link budget drawer covers the lower part of the sensor list (the list scrolls).
-- Pre-existing: a missing favicon (404), and empty nav buttons at 850 px and below.
+- Below 1001 px the cards stack under the map. With seven or more sensors clustered tightly, marker and distance labels can still overlap.
+- Fixed in 1.11.0 (branch): elevation tiles now retry after network errors; the zone ground grid is memoised; the drawer no longer covers the sensor list; favicon added; nav buttons keep labels at every width.
 
 ## Open items
 
 - **Old URL redirect:** create a public repo `iLikeToLie/friis-rf-calculator` with a redirect page to `/Project-Sirius/` (keep path and hash) and enable Pages. **First** run `git remote set-url origin https://github.com/iLikeToLie/Project-Sirius.git` in every clone, because creating that repo ends GitHub's forwarding of the old repo URL. This step was blocked by a permission prompt and is not done.
-- **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) and item 5 (match the drawer Rx meter to the reference) are open. See `docs/BACKLOG.md`.
+- **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) is open; item 5 (drawer Rx meter) is done in 1.11.0 on the branch. Item 8 (directional antennas) is the recommended next feature. See `docs/BACKLOG.md`.
 - **OneMap API terms:** confirm tile use from a public site (registration may be required).
-- **Final review:** Task 16 completed all eleven Review Focus cases and independent code review. Three Important findings were reproduced and fixed; two Minor findings are deferred (protected-limit equality colour and unnecessary field recomputation). In the twelve-sensor terrain fixture, p95 input-to-frame delay was 7.1 ms and worker requests peaked at 374.7 ms. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for measurement limits and screenshots.
+- **Buildings:** join data.gov.sg HDB Property Information (`max_floor_lvl`) for post-2019 blocks (the host is blocked in cloud sessions; run `scripts/buildings/build_buildings.py` locally); multi-edge diffraction; a light-theme check of the footprint layer.
+- **Final review (1.9.0):** Task 16 completed all eleven Review Focus cases and independent code review. Three Important findings were reproduced and fixed; the two Minor findings (protected-limit equality colour and unnecessary field recomputation) are fixed in 1.11.0 on the branch. In the twelve-sensor terrain fixture, p95 input-to-frame delay was 7.1 ms and worker requests peaked at 374.7 ms. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for measurement limits and screenshots.
 
 ## Not in git (copy manually or re-create)
 

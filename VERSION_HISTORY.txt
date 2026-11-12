@@ -413,7 +413,7 @@ Unchanged from 1.7.0.
 Web Version 1.9.0 (based on workbook Version 3)
 Target deployment: https://iliketolie.github.io/Project-Sirius/
 Date: 2026-11-02
-Status: feature/interference-avoidance; whole-branch review complete; not deployed.
+Status: merged to main as PR #9 and deployed to GitHub Pages on 3 November 2026.
 
 Function:
 Multi-transmitter interference screening and placement planning in the Singapore
@@ -460,13 +460,34 @@ paths can have less isolation. Directional antenna patterns remain future work.
 Terrain limitations from 1.6.0 still apply. Task 16 records 302 passing tests,
 a warning-free build, independent review fixes and all eleven Review Focus
 checks. Two minor findings remain deferred in the review record. This entry
-does not claim deployment or approval to merge.
+was written before the merge; it was merged and deployed through PR #9.
+
+-------------------------------------------------------------------------------
+Web Version 1.9.1 (based on workbook Version 3)
+Target deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-11-03
+Status: merged to main as PRs #10 and #11; live. Recorded retroactively on
+9 November 2026 (decision D2); package.json was not bumped for 1.9.1.
+
+Function:
+Map workspace fixes and speed-ups after the 1.9.0 release.
+
+Key changes:
+- PR #10: released a stuck zone-image queue that could leave an old coverage
+  layer on screen; added band outlines to every layer; tidied the legend.
+- PR #11: cached elevation tiles; traced band edges without per-cell
+  allocation; encoded zone images off the main thread; animated packets on
+  their own frames; memoised links and rings; made Fit all sensors work on
+  narrow maps and with panels hidden.
+
+Calculation scope and limitations:
+No calculation changes. The Version 3 Friis engine is unchanged.
 
 -------------------------------------------------------------------------------
 Web Version 1.10.0 (based on workbook Version 3)
 Target deployment: https://iliketolie.github.io/Project-Sirius/
 Date: 2026-11-08
-Status: branch claude/dreamy-bell-a3obkr; not merged or deployed.
+Status: merged to main as PR #12 on 8 November 2026. Follow-up UI fixes in PR #13 and a stale-script fix on 9 November (see Web Version 1.10.1 notes below).
 
 Function:
 Building heights block paths in the Singapore Link workspace (terrain
@@ -501,3 +522,71 @@ understates loss over many rooftops; there is no building penetration,
 reflection or street-canyon modelling. The AW3D30 surface carries a few metres
 of building mass, so heights are counted that much twice. A coverage pass takes
 about 92 ms with buildings against 21 ms without (720 radials, Node, 8 Nov).
+
+-------------------------------------------------------------------------------
+Web Version 1.10.1 notes (no version bump; package.json stays at 1.10.0)
+Date: 2026-11-09
+Status: merged to main as PR #13 and a follow-up fix.
+
+Key changes:
+- Link-budget bar no longer cropped; the Full screen button no longer wraps.
+- The sensor list shrinks and scrolls instead of overlapping the coverage
+  legend, including when the drawer is open.
+- Version chip and legend styling corrected; stale browser scripts under
+  scripts/e2e updated.
+- 319 unit tests pass across 31 files.
+
+-------------------------------------------------------------------------------
+Web Version 1.11.0 (based on workbook Version 3)
+Target deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-11-12
+Status: on branch claude/hub-housekeeping-app-polish-vxhtc8; not merged.
+
+Function:
+Polish release (project hub decision D1 "Polish first", with the deferred
+minor findings bundled as decision D4 chose). No calculation results change,
+apart from the Interference layer's colour at exact protected-limit equality.
+
+Key changes:
+- Navigation: every tab keeps a readable label and an accessible name at all
+  widths (below 900 px it is a scrollable tab strip; it used to collapse into
+  an empty box). Short labels between 1001 and 1180 px. Compact phone header
+  (icon actions), so the map starts about 320 px higher on a phone. Favicon.
+- Map toolbar never overflows: below 1360 px, Terrain elevation, Buildings,
+  Map and Hide panels move into a More menu (Model too below 640 px).
+- Sensor list: full names on one line with the status underneath; it shrinks
+  and scrolls beside an open drawer and keeps the selected sensor in view.
+- Coverage legend tabs no longer clip ("Interference", "Placement"); the
+  Channel fieldset matches the card; the selected-sensor card stops above the
+  Link budget bar and the map attribution.
+- Marker labels pick the side that avoids neighbouring markers and labels.
+- Link budget drawer: chevron toggle, metric tiles that fill each row, an
+  Rx power meter section (backlog item 5): -95 to -55 dBm by default, widened
+  in 5 dB steps only when a level falls outside; blue sensitivity, green
+  required level and red interference ticks; avoidance adds the protected
+  limit. The expanded drawer hides the map toolbar instead of sitting under it.
+- Smooth motion: 120-220 ms opacity/transform transitions for cards, popover,
+  pages and drawer; drawer resizing writes to the DOM once per frame and
+  commits on release. Reduced motion is honoured.
+- Deferred 1.9.0 minors fixed: the Interference layer treats power exactly at
+  the protected limit as safe (as the cards and matrix do); the field request
+  key ignores names, selection and thresholds, so those edits only reclassify.
+- Known minors fixed: the zone ground grid is memoised on its real inputs;
+  elevation tiles that fail for network or server reasons retry at 1.5, 5 and
+  15 s (a 404 is never retried); the zone overlay canvas is read on the CPU,
+  removing the main cost of each repaint.
+- Measured in the twelve-sensor fixture (headless Chromium, software GL):
+  renaming a sensor sends 0 worker requests (was 5); a 40-step marker drag
+  sends 6 (was 41) with script time about 0.4 s (was about 11 s); selecting
+  sensors no longer produces long tasks.
+- Guide text updated to twelve sensors, the current version, coverage layers
+  and buildings.
+- 331 unit tests pass across 32 files. Browser scripts workspace-layout,
+  link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer,
+  placement-layer and buildings pass (workspace-layout, interference-layer and
+  placement-layer updated for the new drawer toggle and the key change).
+
+Calculation scope and limitations:
+The Version 3 Friis engine is unchanged. Below 1001 px the cards still stack
+under the map. With seven or more sensors clustered tightly, marker and
+distance labels can still overlap.

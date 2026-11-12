@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { createGroundSampler, ELEVATION_TILE_URL, ELEVATION_ZOOM, tilePixel, type ElevationTile, type GroundAt, type TileLookup } from '../../lib/elevation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createGroundSampler, elevationRetryDelayMs, ELEVATION_TILE_URL, ELEVATION_ZOOM, tilePixel, type ElevationTile, type GroundAt, type TileLookup } from '../../lib/elevation';
 import type { LatLon } from '../../lib/geo';
 
 export type ElevationStatus = 'idle' | 'loading' | 'ready' | 'offline';
@@ -45,6 +45,33 @@ export function useElevationTiles() {
     return typeof entry === 'object' ? entry : undefined;
   }, []);
 
+  // Tiles that failed for network reasons are retried with backoff; `inFlight` counts them while they wait.
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const networkFailures = useRef(new Set<string>());
+  useEffect(() => { const pending = timers.current; return () => { pending.forEach(clearTimeout); pending.clear(); }; }, []);
+
+  const settle = useCallback(() => {
+    inFlight.current -= 1;
+    if (inFlight.current === 0) setStatus(networkFailures.current.size ? 'offline' : 'ready');
+  }, []);
+
+  const fetchWithRetry = useCallback((z: number, x: number, y: number, key: string, failures: number) => {
+    fetchTile(z, x, y)
+      .then((tile) => { cache.current.set(key, tile); networkFailures.current.delete(key); setVersion((v) => v + 1); settle(); })
+      .catch((error) => {
+        const delay = error instanceof MissingTile ? null : elevationRetryDelayMs(failures + 1);
+        if (delay === null) {
+          cache.current.set(key, 'failed');
+          if (!(error instanceof MissingTile)) networkFailures.current.add(key);
+          settle();
+          return;
+        }
+        // Stay pending (and in flight) while waiting, so nothing re-requests the tile meanwhile.
+        const timer = setTimeout(() => { timers.current.delete(timer); fetchWithRetry(z, x, y, key, failures + 1); }, delay);
+        timers.current.add(timer);
+      });
+  }, [settle]);
+
   const load = useCallback((tiles: [number, number, number][]) => {
     for (const [z, x, y] of tiles) {
       const key = `${z}/${x}/${y}`;
@@ -52,16 +79,10 @@ export function useElevationTiles() {
       if (!insideDem(z, x, y)) { cache.current.set(key, 'failed'); continue; }
       cache.current.set(key, 'pending');
       inFlight.current += 1;
-      setStatus((current) => (current === 'offline' ? current : 'loading'));
-      fetchTile(z, x, y)
-        .then((tile) => { cache.current.set(key, tile); setVersion((v) => v + 1); })
-        .catch((error) => { cache.current.set(key, 'failed'); if (!(error instanceof MissingTile)) setStatus('offline'); })
-        .finally(() => {
-          inFlight.current -= 1;
-          if (inFlight.current === 0) setStatus((current) => (current === 'offline' ? current : 'ready'));
-        });
+      setStatus('loading');
+      fetchWithRetry(z, x, y, key, 0);
     }
-  }, []);
+  }, [fetchWithRetry]);
 
   /** Tiles under each point plus the neighbours bilinear sampling may reach across an edge. */
   const ensure = useCallback((points: LatLon[], z = ELEVATION_ZOOM) => {

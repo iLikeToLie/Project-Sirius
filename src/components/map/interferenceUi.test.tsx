@@ -66,6 +66,40 @@ describe('interference workspace display', () => {
     expect(html).toContain('protected-marker');
   });
 
+  it('draws the Rx power meter on a -95..-55 dBm scale with sensitivity and interference references', () => {
+    const inputs = { ...state.inputs, sensitivityDbm: -85, interferenceThresholdDbm: -65, fadeMarginTargetDb: 10 };
+    const link = { ...pairs[0], elevationKnown: true, result: { ...pairs[0].result, receivedPowerDbm: -74.24 } };
+    const html = renderToStaticMarkup(<RxMeterStack links={[link]} inputs={inputs} objective="avoidance" assessment={{ ...assessment, aggregate: false, limitDbm: -68 }} />);
+    expect(html).toContain('-74.24 dBm');
+    expect(html).toContain('<span>-95 dBm</span><span>-55 dBm</span>');
+    expect(html).toContain('Sensitivity <b>-85.00 dBm</b>');
+    expect(html).toContain('Interference <b>-65.00 dBm</b>');
+    expect(html).toContain('protected-marker');
+    const desired = renderToStaticMarkup(<RxMeterStack links={[link]} inputs={inputs} objective="desired" assessment={assessment} />);
+    expect(desired).toContain('Required level <b>-75.00 dBm</b>');
+    expect(desired).toContain('required-marker');
+    expect(desired).not.toContain('protected-marker');
+    expect(desired).toContain('threshold-marker');
+    expect(desired).toContain('Interference <b>-65.00 dBm</b>');
+  });
+
+  it('widens the Rx meter only when a level falls outside the default scale', () => {
+    const link = { ...pairs[0], elevationKnown: true, result: { ...pairs[0].result, receivedPowerDbm: -110 } };
+    const html = renderToStaticMarkup(<RxMeterStack links={[link]} inputs={{ ...state.inputs, sensitivityDbm: -85, interferenceThresholdDbm: -65, fadeMarginTargetDb: 10 }} objective="desired" assessment={assessment} />);
+    expect(html).toContain('<span>-115 dBm</span><span>-55 dBm</span>');
+  });
+
+  it('shows the drawer toggle as a chevron button with aria-expanded and an Rx power meter section', () => {
+    const custom = freshDefaultState();
+    custom.map.useTerrainElevation = false;
+    const results = evaluatePairs(custom.map, custom.inputs, () => 0);
+    const html = renderToStaticMarkup(<LinkBudgetDrawer state={custom} pairs={results} assessments={assessAll(custom.map, results)} groundAt={() => 0} open onToggle={noop} onEdit={noop} pin={null} onPin={noop} size={null} onResize={noop} />);
+    expect(html).toMatch(/<button[^>]*class="ghost drawer-toggle"[^>]*aria-expanded="true"/);
+    expect(html).toContain('drawer-chevron');
+    expect(html).not.toMatch(/Link budget [+−]/);
+    expect(html).toContain('Rx power meter');
+  });
+
   it('shows receiver aggregate status in the sensor list', () => {
     const html = renderToStaticMarkup(<SensorListCard sensors={state.map.sensors} pairs={pairs} assessments={assessments} selectedId={null} onSelect={noop} onAdd={noop} onRemove={noop} />);
     expect(html).toContain('1 interferer (aggregate)');

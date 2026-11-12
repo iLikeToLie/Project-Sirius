@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_STATE } from '../data/defaults';
 import { sampleGrid } from './contours';
 import { flatGroundRadiusM, thresholdSlantRangeM } from './thresholds';
-import { computeZones, ZONE, type ZoneRequest } from './zones';
+import { computeZones, sameZoneResult, ZONE, type ZoneRequest, type ZoneResult } from './zones';
 
 const inputs = DEFAULT_STATE.inputs;
 const slant = {
@@ -52,5 +52,24 @@ describe('range zones', () => {
     const z = computeZones(request(undefined, { sensitivityM: NaN, requiredM: NaN, interferenceM: NaN }));
     expect(z.outlines).toEqual({ sensitivity: [], required: [], interference: [] });
     expect(z.classes.every((c) => c === ZONE.none)).toBe(true);
+  });
+});
+
+describe('sameZoneResult', () => {
+  const zone = (): ZoneResult => ({ jobId: 1, bounds: { minX: 0, maxX: 2, minY: 0, maxY: 1 }, cols: 2, rows: 1, cellSizeM: 1,
+    classes: Uint8Array.from([0, 1, 2, 255, 0, 1]), interference: new Uint8Array(6), powerDbm: Float32Array.from([-60, NaN, -70, -80, -90, -50]),
+    outlines: { sensitivity: [[0, 0, 1, 1]], required: [], interference: [] } });
+  it('ignores the job id, and compares NaN power nodes as equal', () => {
+    expect(sameZoneResult(zone(), { ...zone(), jobId: 9 })).toBe(true);
+  });
+  it('notices a changed class, power, outline or missing result', () => {
+    const changed = zone(); changed.classes[1] = 0;
+    expect(sameZoneResult(zone(), changed)).toBe(false);
+    const power = zone(); power.powerDbm![0] = -61;
+    expect(sameZoneResult(zone(), power)).toBe(false);
+    const outline = zone(); outline.outlines.sensitivity = [[0, 0, 1, 2]];
+    expect(sameZoneResult(zone(), outline)).toBe(false);
+    expect(sameZoneResult(zone(), null)).toBe(false);
+    expect(sameZoneResult(null, null)).toBe(true);
   });
 });

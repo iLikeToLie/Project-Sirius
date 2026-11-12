@@ -33,7 +33,7 @@ try {
     };
     const put = CanvasRenderingContext2D.prototype.putImageData;
     CanvasRenderingContext2D.prototype.putImageData = function (image, ...args) {
-      window.zonePixels = [...image.data];
+      window.zonePixels = [...image.data]; window.paints = (window.paints ?? 0) + 1;
       return put.call(this, image, ...args);
     };
   });
@@ -51,10 +51,12 @@ try {
   served.lon = tx.lon + 0.001;
   const victim = { ...served, id: 'victim', name: 'R2', objective: 'avoidance', aglM: 11, lon: tx.lon - 0.001, interferenceThresholdDbm: -65, protectionMarginDb: 3 };
   base.map.sensors = [tx, served, victim]; base.map.selectedId = tx.id;
-  const upload = async state => {
-    const count = await page.evaluate(() => window.jobs.length);
+  // `recompute` is false for threshold and sensitivity edits: the field key ignores them, so the existing field is reclassified and repainted instead.
+  const upload = async (state, recompute = true) => {
+    const count = await page.evaluate(() => window.jobs.length), paints = await page.evaluate(() => window.paints ?? 0);
     await page.locator('input[type=file]').setInputFiles({ name: 'placement.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(state)) });
-    if (count && state.map.selectedId === tx.id) await page.waitForFunction(n => window.jobs.length > n, count);
+    if (count && recompute && state.map.selectedId === tx.id) await page.waitForFunction(n => window.jobs.length > n, count);
+    if (count && !recompute) await page.waitForFunction(n => (window.paints ?? 0) > n, paints);
   };
   const waitField = async () => {
     await page.waitForFunction(() => window.jobs.length && window.jobs.at(-1).done);
@@ -83,7 +85,7 @@ try {
   const safeServed = job.powers[1].filter((p, i) => Number.isFinite(p) && job.powers[0][i] <= victim.interferenceThresholdDbm - 3).sort((a, b) => a - b);
   served.fadeMarginTargetDb = 10;
   served.sensitivityDbm = safeServed[Math.floor(safeServed.length / 2)] - 10;
-  await upload(base); await waitField();
+  await upload(base, false); await waitField();
   const counts = await page.evaluate(({ threshold, required }) => {
     const job = window.jobs.at(-1), pixels = window.zonePixels, { cols, rows } = job.req.raster;
     const counts = { unsafe: 0, marginal: 0, safe: 0, recommended: 0, unknown: 0 };

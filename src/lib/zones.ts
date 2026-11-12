@@ -58,3 +58,21 @@ export function computeZones({ jobId, ground, tx, rxAglM, slant }: ZoneRequest):
     outlines: { sensitivity: outline(slant.sensitivityM), required: outline(slant.requiredM), interference: outline(slant.interferenceM) },
   };
 }
+
+const sameArray = (a: ArrayLike<number> | undefined, b: ArrayLike<number> | undefined) => {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && !(Number.isNaN(a[i]) && Number.isNaN(b[i]))) return false;
+  return true;
+};
+const sameSegments = (a: Segment[], b: Segment[]) => a === b || (a.length === b.length && a.every((s, i) => sameArray(s, b[i])));
+
+/** True when two results paint the same map (the job id is bookkeeping and ignored). */
+export function sameZoneResult(a: ZoneResult | null, b: ZoneResult | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.cols === b.cols && a.rows === b.rows && a.cellSizeM === b.cellSizeM
+    && a.bounds.minX === b.bounds.minX && a.bounds.maxX === b.bounds.maxX && a.bounds.minY === b.bounds.minY && a.bounds.maxY === b.bounds.maxY
+    && sameArray(a.classes, b.classes) && sameArray(a.interference, b.interference) && sameArray(a.powerDbm, b.powerDbm)
+    && (['sensitivity', 'required', 'interference'] as const).every(k => sameSegments(a.outlines[k], b.outlines[k]));
+}
