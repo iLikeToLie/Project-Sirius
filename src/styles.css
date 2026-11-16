@@ -979,3 +979,9 @@ tbody tr:hover { background: var(--surface-elevated); }
 .sensor-row { min-height: 38px; padding: 4px 10px; }
 .sensor-list-card .sensor-rows { position: relative; }
 .sensor-list-card .sensor-rows[data-overflow] { scrollbar-width: thin; mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); }
+
+/* Directional antennas */
+.antenna-sector { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
+.antenna-sector .field small { font-size: 10px; }
+.sensor-marker .antenna-wedge { position: absolute; left: 50%; top: 50%; width: 72px; height: 72px; margin: -36px 0 0 -36px; z-index: -1; pointer-events: none; overflow: visible; transform-origin: 50% 50%; }
+.sensor-marker .antenna-wedge path { fill: currentColor; fill-opacity: 0.22; stroke: currentColor; stroke-opacity: 0.6; stroke-width: 1; }

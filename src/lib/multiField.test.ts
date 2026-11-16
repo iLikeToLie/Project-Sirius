@@ -137,3 +137,28 @@ describe('multiFieldKey', () => {
     expect(keyFor(map, { ...inputs, obstructionLossDb: inputs.obstructionLossDb + 2 })).not.toBe(before);
   });
 });
+
+describe('antenna patterns in multi-source fields', () => {
+  const sector = { kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25 };
+  const src = (req: MultiFieldRequest, patterns: NonNullable<MultiFieldRequest['sources'][number]['patterns']>) => ({ ...req, sources: [{ ...req.sources[0], patterns }] });
+  it('lowers a free-space field behind a sector source by the front-to-back ratio', () => {
+    const base = request(), s = base.sources[0], tx = toLocalM(s, base.origin);
+    const omni = computeMultiField(base).powers[0], dir = computeMultiField(src(base, { source: sector })).powers[0];
+    let behind = 0, ahead = 0;
+    for (let k = 0; k < omni.length; k++) {
+      const x = base.raster.x0 + k % (base.raster.cols + 1) * base.raster.dx, y = base.raster.y0 + Math.floor(k / (base.raster.cols + 1)) * base.raster.dy;
+      if (x === tx.xM && y === tx.yM) continue;
+      const bearing = Math.atan2(x - tx.xM, y - tx.yM) * 180 / Math.PI, off = Math.abs(bearing);
+      if (off > 120) { behind++; expect(omni[k] - dir[k]).toBeCloseTo(25, 3); }
+      if (off < 1) { ahead++; expect(dir[k]).toBeCloseTo(omni[k], 3); }
+    }
+    expect(behind + ahead).toBeGreaterThan(0);
+  });
+  it('changes the key when an azimuth changes, and not for Omni', () => {
+    const base = request();
+    const key = (p: NonNullable<MultiFieldRequest['sources'][number]['patterns']>) => multiFieldKey({ layer: 'x', sources: src(base, p).sources, mode: 'free-space', rxAglM: 5, rxOnRoof: true, radials: 360, view: null, dragging: false, elevationVersion: 0, buildingsVersion: false, terrain: false });
+    expect(key({ source: sector })).not.toBe(key({ source: { ...sector, azimuthDeg: 90 } }));
+    expect(key({ source: sector })).not.toBe(key({ source: sector, cell: { ...sector, azimuthDeg: 10 } }));
+    expect(key({ source: { ...sector, kind: 'omni', azimuthDeg: 5 } })).toBe(key({}));
+  });
+});

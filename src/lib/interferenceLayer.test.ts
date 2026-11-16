@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
+import { evaluatePairs } from './sensors';
 import { sampleGrid } from './contours';
-import { interferenceSources, interferenceZones, placementZones, referenceReceiver } from './interferenceLayer';
+import { placementPlan, interferenceSources, interferenceZones, placementZones, referenceReceiver } from './interferenceLayer';
 
 describe('total interference layer', () => {
   it('prefers the selected receiver, then zone receiver, then first receiver', () => {
@@ -80,5 +81,24 @@ describe('total interference layer', () => {
     // With no victims or served receivers every known cell is Recommended: one uniform band, no edges.
     expect(zones.outlines.required).toEqual([]);
     expect(zones.outlines.interference).toEqual([]);
+  });
+});
+
+describe('antenna patterns in field sources', () => {
+  it('carries patterns and excludes pattern loss from the inputs', () => {
+    const { map, inputs } = freshDefaultState();
+    map.useTerrainElevation = false;
+    const tx = map.sensors[0], rx = map.sensors[1];
+    tx.antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 40, frontToBackDb: 30 };
+    rx.antenna = { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 50, frontToBackDb: 20 };
+    rx.objective = 'avoidance';
+    const sources = interferenceSources(map, inputs, rx, () => 0);
+    expect(sources[0].patterns).toEqual({ source: tx.antenna, cell: rx.antenna });
+    const omniTx = { ...tx, antenna: { ...tx.antenna, kind: 'omni' as const } };
+    const omniMap = { ...map, sensors: [omniTx, rx] };
+    expect(interferenceSources(omniMap, inputs, rx, () => 0)[0].inputs).toEqual(sources[0].inputs);
+    const plan = placementPlan(map, inputs, tx, () => 0, evaluatePairs(map, inputs, () => 0));
+    expect(plan.sources.length).toBeGreaterThan(0);
+    expect(plan.sources[0].patterns).toEqual({ source: rx.antenna, cell: tx.antenna });
   });
 });

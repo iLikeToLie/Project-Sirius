@@ -33,8 +33,8 @@ export function Metric({ label, value, unit, note }: { label: string; value: str
 }
 
 /** A numeric field that validates and commits on Enter or blur, so partial typing never moves anything. */
-export function CommitField({ label, value, unit, onCommit, help, disabled }: {
-  label: string; value: number; unit: string; onCommit: (value: number) => string | undefined; help?: string; disabled?: boolean;
+export function CommitField({ label, value, unit, onCommit, help, disabled, ariaLabel }: {
+  label: string; value: number; unit: string; onCommit: (value: number) => string | undefined; help?: string; disabled?: boolean; ariaLabel?: string;
 }) {
   const [text, setText] = useState(String(value));
   const [error, setError] = useState('');
@@ -52,7 +52,7 @@ export function CommitField({ label, value, unit, onCommit, help, disabled }: {
       <span>{label}</span>
       <div className="input-with-unit">
         <input
-          type="text" inputMode="decimal" value={text} disabled={disabled} aria-invalid={error ? true : undefined}
+          type="text" inputMode="decimal" aria-label={ariaLabel} value={text} disabled={disabled} aria-invalid={error ? true : undefined}
           onFocus={() => setEditing(true)} onChange={(event) => setText(event.target.value)} onBlur={commit}
           onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit(); } if (event.key === 'Escape') { setEditing(false); setError(''); } }}
         />

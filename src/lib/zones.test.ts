@@ -73,3 +73,14 @@ describe('sameZoneResult', () => {
     expect(sameZoneResult(null, null)).toBe(true);
   });
 });
+
+describe('Tx pattern in free-space zones', () => {
+  it('shrinks the zones behind a sector transmitter and leaves boresight alone', () => {
+    const plain = computeZones(request());
+    const z = computeZones({ ...request(), txPattern: { kind: 'sector', azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25 } });
+    expect(z.classes[node(0, 3000)]).toBe(plain.classes[node(0, 3000)]);
+    expect(plain.classes[node(0, -3000)]).toBe(ZONE.acceptable);
+    expect(z.classes[node(0, -3000)]).not.toBe(ZONE.acceptable);
+    expect(sameZoneResult(plain, z)).toBe(false);
+  });
+});

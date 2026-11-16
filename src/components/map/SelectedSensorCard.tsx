@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { formatNumber } from '../../lib/rf';
 import { mitigations, pairVerdict, transmitterPowerRange, type ReceiverAssessment } from '../../lib/interference';
-import { effectiveObjective, groundOf, type PairResult, receiverSummary, toggleDesired } from '../../lib/sensors';
+import { effectiveObjective, groundOf, type PairResult, receiverSummary, resolveDesiredTxs, toggleDesired } from '../../lib/sensors';
+import { bearingDeg, defaultAntenna, normAzimuth } from '../../lib/antenna';
 import { BUILDING_KIND_LABEL, buildingsOf } from '../../lib/buildings';
 import type { GroundAt } from '../../lib/elevation';
 import type { MapScenario, Sensor, SensorRole } from '../../types';
@@ -54,6 +55,17 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
   const nearestTx = sensor.role === 'rx' ? link && sensor.desiredTxIds === 'auto' ? name(link.txId) : null : null;
   const num = (key: keyof Sensor, v: number, check?: (v: number) => string | undefined) => check?.(v) ?? onChange({ [key]: v });
   const nonNegative = (label: string) => (v: number) => (v < 0 ? `${label} cannot be negative.` : undefined);
+  const antenna = sensor.antenna ?? defaultAntenna();
+  const setAntenna = (patch: Partial<Sensor['antenna']>) => onChange({ antenna: { ...antenna, ...patch } });
+  const desiredIds = sensor.role === 'rx' ? resolveDesiredTxs(map, sensor, groundAt).map((s) => s.id) : [];
+  const aimTargets = map.sensors.filter((s) => s.id !== sensor.id).sort((a, b) => {
+    const rank = (s: Sensor) => desiredIds.includes(s.id) ? 0 : s.role === (sensor.role === 'rx' ? 'tx' : 'rx') ? 1 : 2;
+    return rank(a) - rank(b);
+  });
+  const aimAt = (id: string) => {
+    const target = map.sensors.find((s) => s.id === id);
+    if (target) setAntenna({ azimuthDeg: normAzimuth(Math.round(bearingDeg(sensor, target) * 10) / 10) });
+  };
   const powerRange = sensor.role === 'tx' ? transmitterPowerRange(map, sensor.id, pairs) : null;
   const roundedMax = powerRange ? Math.floor(powerRange.maxDbm * 10) / 10 : NaN;
   const infeasible = powerRange !== null && (powerRange.maxDbm === -Infinity || (powerRange.minDbm !== null && powerRange.minDbm > powerRange.maxDbm));
@@ -79,6 +91,9 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
         <label className="field"><span>Polarization</span><select aria-label="Sensor polarization" value={sensor.polarization} onChange={e => onChange({ polarization: e.target.value as Sensor['polarization'] })}>
           <option value="V">V (vertical)</option><option value="H">H (horizontal)</option><option value="RHCP">RHCP (right circular)</option><option value="LHCP">LHCP (left circular)</option>
         </select></label>
+        <label className="field"><span>Antenna</span><select aria-label="Sensor antenna" value={antenna.kind} onChange={e => setAntenna({ kind: e.target.value as Sensor['antenna']['kind'] })}>
+          <option value="omni">Omni</option><option value="sector">Sector</option>
+        </select></label>
         <CommitField label="Latitude" unit="°" value={sensor.lat} onCommit={(v) => num('lat', v, (x) => (x < SG_BOUNDS.minLat || x > SG_BOUNDS.maxLat ? 'Keep within the Singapore map area.' : undefined))} />
         <CommitField label="Longitude" unit="°" value={sensor.lon} onCommit={(v) => num('lon', v, (x) => (x < SG_BOUNDS.minLon || x > SG_BOUNDS.maxLon ? 'Keep within the Singapore map area.' : undefined))} />
         <CommitField label="Height above ground" unit="m" value={sensor.aglM} onCommit={(v) => num('aglM', v, nonNegative('Height above ground'))} />
@@ -92,6 +107,16 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
           <CommitField label="Interference threshold" unit="dBm" value={sensor.interferenceThresholdDbm} onCommit={(v) => num('interferenceThresholdDbm', v)} />
         </>}
       </div>
+
+      {antenna.kind === 'sector' && <div className="form-grid three antenna-sector" aria-label="Sector antenna">
+        <CommitField ariaLabel="Antenna azimuth" label="Azimuth" unit="°" value={antenna.azimuthDeg} help="From north, clockwise" onCommit={v => { setAntenna({ azimuthDeg: normAzimuth(v) }); return undefined; }} />
+        <CommitField ariaLabel="Antenna beamwidth" label="Beamwidth" unit="°" value={antenna.beamwidthDeg} help="3 dB, 1 to 180" onCommit={v => v < 1 || v > 180 ? 'Beamwidth must be 1 to 180°.' : (setAntenna({ beamwidthDeg: v }), undefined)} />
+        <CommitField ariaLabel="Antenna front-to-back" label="Front-to-back" unit="dB" value={antenna.frontToBackDb} help="0 to 60" onCommit={v => v < 0 || v > 60 ? 'Front-to-back must be 0 to 60 dB.' : (setAntenna({ frontToBackDb: v }), undefined)} />
+        <label className="field"><span>Aim at</span><select aria-label="Aim antenna at" value="" onChange={e => { if (e.target.value) aimAt(e.target.value); }}>
+          <option value="">Choose a sensor…</option>
+          {aimTargets.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select></label>
+      </div>}
 
       <SensorChannel sensor={sensor} model={map.rejectionModel} defaultFrequencyGhz={defaultFrequencyGhz} onChange={onChange} />
       {sensor.role === 'rx' && <details className="noise-floor-derivation">

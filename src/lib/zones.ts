@@ -1,3 +1,5 @@
+import type { AntennaPattern } from '../types';
+import { patternLossDb } from './antenna';
 import { type Bounds, isolineSegments, type ScalarGrid, type Segment } from './contours';
 
 export interface ZoneRequest {
@@ -7,6 +9,8 @@ export interface ZoneRequest {
   tx: { xM: number; yM: number; elevationM: number };
   rxAglM: number;
   slant: { sensitivityM: number; requiredM: number; interferenceM: number };
+  /** Transmitter pattern; each node's separation is stretched by its loss toward that node (receiver assumed aimed at Tx). */
+  txPattern?: AntennaPattern;
 }
 
 export const ZONE = { none: 0, weak: 1, acceptable: 2, unknown: 255 } as const;
@@ -30,7 +34,7 @@ export interface ZoneResult {
  * each grid node is a candidate receiver position, classified by its 3D separation from Tx
  * against the threshold slant ranges. Terrain does not block the signal here.
  */
-export function computeZones({ jobId, ground, tx, rxAglM, slant }: ZoneRequest): ZoneResult {
+export function computeZones({ jobId, ground, tx, rxAglM, slant, txPattern }: ZoneRequest): ZoneResult {
   const { x0, y0, dx, dy, cols, rows, values } = ground;
   const separation = new Float64Array(values.length);
   const classes = new Uint8Array(values.length);
@@ -40,7 +44,9 @@ export function computeZones({ jobId, ground, tx, rxAglM, slant }: ZoneRequest):
     if (!Number.isFinite(g)) { separation[index] = NaN; classes[index] = ZONE.unknown; continue; }
     const x = x0 + (index % (cols + 1)) * dx;
     const y = y0 + Math.floor(index / (cols + 1)) * dy;
-    const d = Math.hypot(x - tx.xM, y - tx.yM, g + rxAglM - tx.elevationM);
+    let d = Math.hypot(x - tx.xM, y - tx.yM, g + rxAglM - tx.elevationM);
+    // Pattern loss L dB is equivalent to a range stretched by 10^(L/20).
+    if (txPattern && txPattern.kind !== 'omni') d *= 10 ** (patternLossDb(txPattern, Math.atan2(x - tx.xM, y - tx.yM) * 180 / Math.PI) / 20);
     separation[index] = d;
     classes[index] = d <= slant.requiredM ? ZONE.acceptable : d <= slant.sensitivityM ? ZONE.weak : ZONE.none;
     interference[index] = d <= slant.interferenceM ? 1 : 0;

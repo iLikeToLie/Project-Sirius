@@ -39,6 +39,17 @@ export interface SensorMapHandle { fitSensors(): void; zoomBy(delta: number): vo
 
 const RADIO_TOWER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9M7.8 4.7a6.14 6.14 0 0 0-.8 7.5M16.2 4.8c2 2 2.26 5.11.8 7.47M19.1 1.9a9.96 9.96 0 0 1 0 14.1M9.5 18h5m-6.5 4 4-11 4 11"/><circle cx="12" cy="9" r="2"/></svg>';
 
+const WEDGE_R = 34;
+/** SVG wedge pointing up (north) spanning the 3 dB beamwidth; rotated by CSS to the azimuth. */
+export function wedgePath(beamwidthDeg: number, r = WEDGE_R): string {
+  const half = Math.min(180, Math.max(1, beamwidthDeg)) / 2 * Math.PI / 180;
+  const c = r + 2;
+  const x = (a: number) => (c + r * Math.sin(a)).toFixed(2);
+  const y = (a: number) => (c - r * Math.cos(a)).toFixed(2);
+  if (half >= Math.PI - 1e-6) return `M${c} ${c - r}A${r} ${r} 0 1 1 ${c} ${c + r}A${r} ${r} 0 1 1 ${c} ${c - r}Z`;
+  return `M${c} ${c}L${x(-half)} ${y(-half)}A${r} ${r} 0 ${half * 2 > Math.PI ? 1 : 0} 1 ${x(half)} ${y(half)}Z`;
+}
+
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const rgb = (hex: string) => { const n = parseInt(hex.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 /** All segments of one outline as a single feature: far fewer features for MapLibre to tile than one per segment. */
@@ -114,6 +125,16 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
   context.putImageData(image, 0, 0);
   // toBlob encodes off the main thread, unlike toDataURL.
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : canvas.toDataURL())));
+}
+
+/** A ring belongs to the transmitter nearest its centre; its label says "boresight" when that transmitter is a Sector. */
+export function ringIsSector(points: LatLon[], sensors: Sensor[]): boolean {
+  if (!points.length) return false;
+  const lat = points.reduce((a, p) => a + p.lat, 0) / points.length;
+  const lon = points.reduce((a, p) => a + p.lon, 0) / points.length;
+  let best: Sensor | null = null, bestD = Infinity;
+  for (const s of sensors) if (s.role === 'tx') { const d = (s.lat - lat) ** 2 + (s.lon - lon) ** 2; if (d < bestD) { best = s; bestD = d; } }
+  return best?.antenna?.kind === 'sector';
 }
 
 export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, buildings = false, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
@@ -283,8 +304,38 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       entry.element.setAttribute('aria-label', `${sensor.role === 'tx' ? 'Transmitter' : 'Receiver'} ${sensor.name}. Arrow keys move 1 m, Shift with arrows 10 m.`);
       entry.element.setAttribute('aria-pressed', String(sensor.id === selectedId));
       entry.element.querySelector('.sensor-marker-label')!.textContent = sensor.name;
+      const antenna = sensor.antenna;
+      let wedge = entry.element.querySelector<SVGSVGElement>('.antenna-wedge');
+      if (antenna?.kind === 'sector') {
+        if (!wedge) {
+          wedge = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          wedge.setAttribute('class', 'antenna-wedge');
+          wedge.setAttribute('aria-hidden', 'true');
+          const size = (WEDGE_R + 2) * 2;
+          wedge.setAttribute('width', String(size)); wedge.setAttribute('height', String(size)); wedge.setAttribute('viewBox', `0 0 ${size} ${size}`);
+          wedge.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'path'));
+          entry.element.prepend(wedge);
+        }
+        wedge.firstElementChild!.setAttribute('d', wedgePath(antenna.beamwidthDeg));
+        wedge.dataset.azimuth = String(antenna.azimuthDeg);
+        wedge.style.transform = `rotate(${antenna.azimuthDeg - map.getBearing()}deg)`;
+      } else wedge?.remove();
     }
   }, [sensors, selectedId, tones, loaded]);
+
+  // A rotated map turns the wedges with it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    const turn = () => {
+      for (const entry of markers.current.values()) {
+        const wedge = entry.element.querySelector<SVGSVGElement>('.antenna-wedge');
+        if (wedge) wedge.style.transform = `rotate(${Number(wedge.dataset.azimuth) - map.getBearing()}deg)`;
+      }
+    };
+    map.on('rotate', turn);
+    return () => { map.off('rotate', turn); };
+  }, [loaded]);
 
   // Marker labels: each label sits on the side of its marker with the least collision against neighbours (markers do not move).
   useEffect(() => {
@@ -356,11 +407,11 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     if (!loaded || !map) return;
     (map.getSource('range-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.map(r => outlineFeature([r.points], { id: r.id })) });
     const labels = rings.map(r => {
-      const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label;
+      const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label + (ringIsSector(r.points, sensorsRef.current) ? ' (boresight)' : '');
       return new maplibregl.Marker({ element: el }).setLngLat([r.points[0].lon, r.points[0].lat]).addTo(map);
     });
     return () => labels.forEach(m => m.remove());
-  }, [rings, loaded]);
+  }, [rings, sensors, loaded]);
 
   // Distance labels at the midpoint of each labelled link; keyed on text and position so unrelated renders keep them.
   const linkLabels = links.filter((l) => l.label).map((l) => ({ text: l.label!, lon: (l.from.lon + l.to.lon) / 2, lat: (l.from.lat + l.to.lat) / 2, faint: !l.emphasis }));

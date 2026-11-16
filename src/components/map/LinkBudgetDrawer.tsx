@@ -11,7 +11,15 @@ import { CommitField, Metric, NumberField, StatusBadge, statusTone } from '../ui
 import { PathProfileChart } from './PathProfileChart';
 import { RxMeterStack } from './RxMeterStack';
 import { InterferenceMatrix } from './InterferenceMatrix';
+import type { PairPatternLoss } from '../../lib/antenna';
 import { oneOf, usePref } from '../usePref';
+
+/** `Tx 23° off axis · Rx 4° off axis`, with "omni" for an Omni end (just "omni" when both are). */
+export function patternNote(p: PairPatternLoss): string {
+  const end = (name: string, off: number) => `${name} ${Number.isFinite(off) ? `${formatNumber(off, 0)}° off axis` : 'omni'}`;
+  if (!Number.isFinite(p.txOffDeg) && !Number.isFinite(p.rxOffDeg)) return 'omni';
+  return `${end('Tx', p.txOffDeg)} · ${end('Rx', p.rxOffDeg)}`;
+}
 
 const TEXT_LABELS = { scenarioName: 'Scenario or link name', txId: 'Tx location / identifier', rxId: 'Rx location / identifier' } as const;
 
@@ -49,12 +57,12 @@ export const LinkBudgetDrawer = memo(function LinkBudgetDrawer({ state, pairs, a
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);
-    const { inputs, rejectionDb, polarizationDb } = pairLinkInputs(map, state.inputs, pair.tx, pair.rx, distanceM);
+    const { inputs, rejectionDb, polarizationDb, pattern } = pairLinkInputs(map, state.inputs, pair.tx, pair.rx, distanceM);
     const propagation = pairPropagation(map, pair.tx, pair.rx, inputs.frequencyGhz, groundAt);
     const objective = pairs.find(p => p.txId === pair.tx.id && p.rxId === pair.rx.id)?.intended === false ? 'avoidance' : effectiveObjective(map, pair.rx);
     const result = calculateLink({ ...inputs, otherLossDb: inputs.otherLossDb + propagation.lossDb }, objective);
     const known = [pair.tx, pair.rx].every((s) => groundOf(s, groundAt, map.useTerrainElevation) !== null) && Number.isFinite(propagation.lossDb);
-    return { inputs, propagation, objective, result, known, rejectionDb, polarizationDb };
+    return { inputs, propagation, objective, result, known, rejectionDb, polarizationDb, pattern };
   }, [pair, map, state.inputs, groundAt, pairs]);
 
   const rxPairs = useMemo(() => pair ? pairs.filter(p => p.rxId === pair.rx.id) : [], [pair, pairs]);
@@ -198,6 +206,7 @@ export const LinkBudgetDrawer = memo(function LinkBudgetDrawer({ state, pairs, a
               <Metric label="Diffraction loss" value={map.propagationModel === 'terrain' ? formatNumber(propagation.lossDb) : 'off'} unit={map.propagationModel === 'terrain' ? 'dB' : ''} note={map.propagationModel === 'terrain' ? `Clearance: ${propagation.clearance}${buildingsOf(groundAt) ? ' · terrain and buildings' : ''}` : 'Free-space model'} />
               {model.rejectionDb > 0 && <Metric label="Frequency rejection" value={formatNumber(model.rejectionDb)} unit="dB" />}
               <Metric label="Per-sensor polarization mismatch" value={formatNumber(model.polarizationDb)} unit="dB" note={`${pair.tx.polarization} → ${pair.rx.polarization}`} />
+              <Metric label="Antenna pattern loss" value={formatNumber(model.pattern.totalDb)} unit="dB" note={patternNote(model.pattern)} />
               <Metric label="Total system losses" value={formatNumber(result.totalLossDb)} unit="dB" />
               <Metric label="Wavelength" value={formatNumber(result.wavelengthM, 4)} unit="m" />
             </div>

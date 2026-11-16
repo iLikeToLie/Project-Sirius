@@ -1,4 +1,5 @@
-import type { LinkInputs } from '../types';
+import type { AntennaPattern, LinkInputs } from '../types';
+import { patternLossDb } from './antenna';
 import { isolineSegments, type ScalarGrid } from './contours';
 import { toLocalM, type LatLon } from './geo';
 import { earthBulgeM, EFFECTIVE_EARTH_RADIUS_M, fresnelRadiusM, knifeEdgeLossDb } from './propagation';
@@ -6,6 +7,8 @@ import { calculateLink, SPEED_OF_LIGHT_MPS } from './rf';
 
 export interface CoverageRequest {
   jobId: number; tx: LatLon & { elevationM: number }; rxAglM: number; inputs: LinkInputs;
+  /** Antenna patterns of the source and of the receiving cell; absent or Omni adds no loss. */
+  patterns?: { source?: AntennaPattern; cell?: AntennaPattern };
   maxRangeM: number; radials: number; stepM: number; ground: { origin: LatLon; grid: ScalarGrid };
   /** Building heights above ground on the same nodes as the ground grid; absent when buildings are off. */
   buildings?: { grid: ScalarGrid; rxOnRoof: boolean; /** A street-level transmitter's own building height, skipped near it; 0 for none or a roof mount. */ txOwnM: number };
@@ -48,6 +51,8 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
   const tx = toLocalM(req.tx, req.ground.origin);
   for (let r = 0; r < req.radials; r++) {
     const angle = r * 2 * Math.PI / req.radials, sx = Math.sin(angle), sy = Math.cos(angle);
+    // Pattern loss is constant along a radial: the cell's antenna looks back along the same line.
+    const patternDb = (req.patterns?.source ? patternLossDb(req.patterns.source, r * 360 / req.radials) : 0) + (req.patterns?.cell ? patternLossDb(req.patterns.cell, r * 360 / req.radials + 180) : 0);
     let horizon = -Infinity, edgeD = 0, edgeGround = 0;
     // A street-level transmitter's own building does not block its rays: skip the run at its height.
     let ownBuilding = (req.buildings?.txOwnM ?? 0) > 0;
@@ -70,7 +75,7 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
         const fresnel = fresnelRadiusM(edgeD, d - edgeD, wavelength);
         if (deficit > -0.6 * fresnel) loss = knifeEdgeLossDb(deficit * Math.SQRT2 / fresnel);
       }
-      powerDbm[index] = basePower - 20 * Math.log10(Math.hypot(d, rxElevation - req.tx.elevationM)) - loss;
+      powerDbm[index] = basePower - 20 * Math.log10(Math.hypot(d, rxElevation - req.tx.elevationM)) - loss - patternDb;
       const slope = (surface - req.tx.elevationM) / d - d / (2 * EFFECTIVE_EARTH_RADIUS_M);
       if (slope > horizon) { horizon = slope; edgeD = d; edgeGround = surface; }
     }

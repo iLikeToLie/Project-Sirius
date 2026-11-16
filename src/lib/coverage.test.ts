@@ -91,3 +91,25 @@ it('exposes received power per grid node, NaN where unknown', async () => {
   out.unknown.fill(1);
   expect(Array.from(coverageZones(out, req, raster).powerDbm!).every(Number.isNaN)).toBe(true);
 });
+
+describe('antenna patterns in radial coverage', () => {
+  const sector = { kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25 };
+  it('leaves boresight unchanged, drops the back radial by the front-to-back ratio and applies the cell pattern at theta+180', () => {
+    const req = request(), omni = computeCoverage(req);
+    const out = computeCoverage({ ...req, patterns: { source: sector } });
+    const steps = omni.steps, back = 4 * steps + 50;
+    expect(out.powerDbm[50]).toBeCloseTo(omni.powerDbm[50], 6);
+    expect(omni.powerDbm[back] - out.powerDbm[back]).toBeCloseTo(25, 4);
+    // Cell sector aimed south: radial 0 (north) is looked at from the south side, so boresight; radial 4 is 180 off.
+    const cell = computeCoverage({ ...req, patterns: { cell: { ...sector, azimuthDeg: 180 } } });
+    expect(cell.powerDbm[50]).toBeCloseTo(omni.powerDbm[50], 6);
+    expect(omni.powerDbm[back] - cell.powerDbm[back]).toBeCloseTo(25, 4);
+    const both = computeCoverage({ ...req, patterns: { source: sector, cell: { ...sector, azimuthDeg: 180 } } });
+    expect(omni.powerDbm[back] - both.powerDbm[back]).toBeCloseTo(50, 4);
+  });
+  it('is bit-identical with Omni patterns', () => {
+    const req = request(), a = computeCoverage(req);
+    const b = computeCoverage({ ...req, patterns: { source: { ...sector, kind: 'omni' }, cell: { ...sector, kind: 'omni' } } });
+    expect(Array.from(b.powerDbm)).toEqual(Array.from(a.powerDbm));
+  });
+});

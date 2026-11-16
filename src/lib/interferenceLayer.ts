@@ -19,7 +19,7 @@ export function interferenceSources(map: MapScenario, shared: LinkInputs, rx: Se
   return map.sensors.filter(s => s.role === 'tx' && !desired.has(s.id)).map(tx => {
     const ground = groundOf(tx, groundAt, map.useTerrainElevation);
     return { lat: tx.lat, lon: tx.lon, elevationM: ground === null ? NaN : ground + tx.aglM, ownBuildingM: streetBuildingM(tx, groundAt),
-      inputs: pairLinkInputs(map, shared, tx, rx, 1).inputs };
+      inputs: pairLinkInputs(map, shared, tx, rx, 1, { pattern: false }).inputs, patterns: { source: tx.antenna, cell: rx.antenna } };
   });
 }
 
@@ -38,7 +38,7 @@ export function placementPlan(map: MapScenario, shared: LinkInputs, tx: Sensor, 
   const sources = [...victims.map(v => v.rx), ...served].map(rx => {
     const ground = groundOf(rx, groundAt, map.useTerrainElevation);
     return { lat: rx.lat, lon: rx.lon, elevationM: ground === null ? NaN : ground + rx.aglM, ownBuildingM: streetBuildingM(rx, groundAt),
-      inputs: pairLinkInputs(map, shared, tx, rx, 1).inputs };
+      inputs: pairLinkInputs(map, shared, tx, rx, 1, { pattern: false }).inputs, patterns: { source: rx.antenna, cell: tx.antenna } };
   });
   return { victims, served, sources };
 }

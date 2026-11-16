@@ -203,20 +203,21 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     if (!zoneGrid || !zoneTx || !zone || !view) return null;
     const { z, cols, rows, ground } = zoneGrid;
     const txLocal = toLocalM(zoneTx);
-    const { inputs } = pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1);
+    const { inputs } = pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1, { pattern: false });
     return {
       z,
       request: {
         ground,
         tx: { xM: txLocal.xM, yM: txLocal.yM, elevationM: (groundOf(zoneTx, groundAt, map.useTerrainElevation) ?? 0) + zoneTx.aglM },
         rxAglM: zone.rx.aglM,
+        txPattern: zoneTx.antenna,
         slant: {
           sensitivityM: thresholdSlantRangeM(inputs, zone.rx.sensitivityDbm),
           requiredM: thresholdSlantRangeM(inputs, zone.rx.sensitivityDbm + zone.rx.fadeMarginTargetDb),
           interferenceM: thresholdSlantRangeM(inputs, zone.rx.interferenceThresholdDbm),
         },
       },
-      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, zoneTx.gainDbi, zoneTx.cableLossDb, zone.rx.id, zone.rx.aglM, zone.rx.gainDbi, zone.rx.cableLossDb,
+      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, zoneTx.gainDbi, zoneTx.cableLossDb, zoneTx.antenna.kind, zoneTx.antenna.azimuthDeg, zoneTx.antenna.beamwidthDeg, zoneTx.antenna.frontToBackDb, zone.rx.id, zone.rx.aglM, zone.rx.gainDbi, zone.rx.cableLossDb,
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
         state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version, withBuildingsOn, withBuildingsOn && buildings.version, zoneTx.mount, zone.rx.mount].join('|'),
     };
@@ -241,7 +242,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     const req = zoneRequest.request, g = req.ground;
     const maxView = Math.max(...[[g.x0, g.y0], [g.x0 + g.cols * g.dx, g.y0 + g.rows * g.dy]].map(([x,y]) => Math.hypot(x - req.tx.xM, y - req.tx.yM)));
     const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM * 2));
-    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1).inputs, maxRangeM, radials: dragging ? 180 : 720, stepM: coverageStepM(maxRangeM, !!rayBuildings), ground: { origin: SG_REFERENCE, grid: rayGround },
+    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1, { pattern: false }).inputs, patterns: { source: zoneTx.antenna }, maxRangeM, radials: dragging ? 180 : 720, stepM: coverageStepM(maxRangeM, !!rayBuildings), ground: { origin: SG_REFERENCE, grid: rayGround },
       buildings: rayBuildings && { grid: rayBuildings, rxOnRoof: zone.rx.mount === 'roof', txOwnM: streetBuildingM(zoneTx, groundAt) } };
   }, [terrain, zoneRequest, zoneTx, zone, rayGround, rayBuildings, dragging, groundAt, map.useTerrainElevation, state.inputs]);
   useEffect(() => ensureBuildingsFor(coverageRequest?.buildings?.grid), [coverageRequest?.buildings?.grid]);
