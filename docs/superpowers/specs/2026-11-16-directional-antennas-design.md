@@ -102,6 +102,32 @@ Pattern loss per radial is one evaluation per radial (360 per source), not per s
 
 Schema stays **8** (unreleased); the new fields default when absent.
 
-## 10. Built
+## 10. Antennas tab and antenna library (16 Nov, in chat)
+
+Antenna parameters move out of the map into a new **Antennas** tab (next to the Link workspace in the nav). This supersedes the per-sensor fields of sections 4 and 6.
+
+**Data model (schema 8, still unreleased):**
+
+```ts
+interface AntennaModel { id: string; name: string; kind: 'omni' | 'sector'; gainDbi: number;
+  beamwidthDeg: number; verticalBeamwidthDeg: number; frontToBackDb: number }
+interface SensorAntenna { modelId: string; azimuthDeg: number; downtiltDeg: number; aimAtId: string | null }
+MapScenario.antennaModels: AntennaModel[]     // user models, at most 24
+Sensor.antenna: SensorAntenna
+```
+
+- The built-in model id `omni` (not stored, not editable) means "omni using the sensor's own Gain field". Every migrated or new sensor uses it, so existing scenarios are unchanged.
+- **The model owns the gain.** For any other model, the effective gain of a sensor is the model's `gainDbi`, and the sensor's Gain field is shown read-only with "from <model>". The sensor's own `gainDbi` is kept, so switching back to `omni` restores it.
+- Pointing stays per sensor: azimuth, mechanical downtilt and Aim at. Deleting a model moves its sensors to `omni`. Deleting a sensor clears `aimAtId` references to it.
+- `resolveAntenna(map, sensor) → AntennaPattern` (the flat shape of section 9) and `effectiveGainDbi(map, sensor)` are the only ways the maths reads antennas. Everything downstream is unchanged.
+- New sector models start at 65° × 10°, 25 dB front-to-back, gain from `typicalGainDbi` rounded to 0.5 dB.
+
+**Antennas tab:**
+- Library: a list of models, plus New, Duplicate and Delete. The editor holds name, kind, gain (with a typical-gain hint), horizontal and vertical beamwidths and front-to-back. It shows a live polar plot with two traces, horizontal and vertical, on a dB scale down to the front-to-back cap.
+- Sensors: a table with one row per sensor showing name, role, model select, azimuth, downtilt and Aim at (with "Tracking <name>").
+
+**Map card:** one compact row with Model, Azimuth and Aim at, plus a link "Edit models in the Antennas tab". The wedge and drag-to-rotate stay on the map.
+
+## 11. Built
 
 To be filled when the work is merged.
