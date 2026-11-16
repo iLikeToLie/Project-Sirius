@@ -85,6 +85,23 @@ Pattern loss per radial is one evaluation per radial (360 per source), not per s
 - Engine: every existing `rf.test.ts` result unchanged; every existing scenario test unchanged with Omni antennas.
 - Browser: new `scripts/e2e/directional-antennas.mjs`: set a Tx to Sector, rotate it away from an interfered receiver, check the matrix entry drops by roughly FBR and the Interference layer changes; existing browser scripts still pass.
 
-## 9. Built
+## 9. Decisions from review (16 Nov, in chat)
+
+1. **Coverage map receiver:** assumed aimed at the transmitter (as designed). Interference and Placement layers use both real azimuths.
+2. **Gain:** `gainDbi` stays as typed (boresight). The Sector fields show a hint with the typical gain for the beam, `10·log10(41253 / (θh · θv))` dBi; nothing is changed automatically.
+3. **Vertical pattern and tilt: in this release.** `AntennaPattern` gains `verticalBeamwidthDeg` (1–90, default 10) and `downtiltDeg` (−20 to 45, positive is below the horizon, default 0). With `e` = elevation of the far end above the antenna's horizon (degrees):
+   ```
+   Av(e)  = min(12 · ((e + tilt) / θ3dB,v)², 20)
+   loss   = min(Ah(φ) + Av(e), FBR)            (3GPP TR 36.814 combined pattern)
+   ```
+   Omni stays lossless in both planes. The elevation angle is taken at each end of a pair from the two antenna heights (ground + AGL, roof or street as now), and in the sweeps per ray step (terrain) or per cell (free space), so the vertical term is evaluated per step, not per radial. The cost is one `atan2` and a few multiplications per step.
+4. **Extras in this release:**
+   - **Rotate fix suggestion:** a `rotate` mitigation for an interfered receiver: the smallest azimuth change of the offending Sector transmitter that clears the victim while keeping every receiver it serves at or above its required level (a 1° search over ±180°). Omni transmitters get no suggestion.
+   - **Aim tracking:** `AntennaPattern.aimAtId: string | null`. When set, the azimuth follows the bearing to that sensor whenever either one moves. Typing an azimuth, dragging the wedge or deleting the target clears it. The card shows "Tracking <name>".
+   - **Drag to rotate:** a round handle at the tip of the wedge, shown on the selected Sector sensor. Dragging it sets the azimuth (to 1°, Shift for 5° steps) and does not move the marker. The handle is keyboard reachable: [ and ] rotate by 5°.
+
+Schema stays **8** (unreleased); the new fields default when absent.
+
+## 10. Built
 
 To be filled when the work is merged.
