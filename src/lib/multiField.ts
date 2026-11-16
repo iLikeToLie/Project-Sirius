@@ -1,5 +1,5 @@
 import type { AntennaPattern, LinkInputs } from '../types';
-import { patternLossDb } from './antenna';
+import { combineLossDb, horizontalTermDb, verticalTermDb } from './antenna';
 import type { ScalarGrid } from './contours';
 import { computeCoverage, coverageStepM, reprojectPowers } from './coverage';
 import { toLocalM, type LatLon } from './geo';
@@ -30,7 +30,7 @@ export interface MultiFieldResult { jobId: number; powers: Float32Array[] }
  * for terrain diffraction. Names, ids, thresholds and sensitivities only affect classification,
  * so a change to them must not look like a new request.
  */
-const patternSig = (a?: AntennaPattern) => !a || a.kind === 'omni' ? 0 : [a.azimuthDeg, a.beamwidthDeg, a.frontToBackDb];
+const patternSig = (a?: AntennaPattern) => !a || a.kind === 'omni' ? 0 : [a.azimuthDeg, a.beamwidthDeg, a.frontToBackDb, a.verticalBeamwidthDeg, a.downtiltDeg];
 const sourceSignature = (s: MultiFieldRequest['sources'][number]) =>
   [s.lat, s.lon, s.elevationM, s.ownBuildingM ?? 0, calculateLink({ ...s.inputs, distanceM: 1 }).receivedPowerDbm, s.inputs.frequencyGhz, patternSig(s.patterns?.source), patternSig(s.patterns?.cell)];
 
@@ -60,17 +60,20 @@ export function computeMultiField(req: MultiFieldRequest): MultiFieldResult {
     }
     const basePower = calculateLink({ ...source.inputs, distanceM: 1 }).receivedPowerDbm;
     const { source: srcPat, cell: cellPat } = source.patterns ?? {};
-    const directional = srcPat?.kind === 'sector' || cellPat?.kind === 'sector';
+    const src = srcPat?.kind === 'sector' ? srcPat : undefined, cell = cellPat?.kind === 'sector' ? cellPat : undefined;
     for (let k = 0; k < field.length; k++) {
       const x = raster.x0 + k % (raster.cols + 1) * raster.dx;
       const y = raster.y0 + Math.floor(k / (raster.cols + 1)) * raster.dy;
       const ground = raster.values[k];
-      const distance = Math.hypot(x - tx.xM, y - tx.yM, ground + req.rxAglM - source.elevationM);
+      const horizontal = Math.hypot(x - tx.xM, y - tx.yM), dz = ground + req.rxAglM - source.elevationM;
+      const distance = Math.hypot(horizontal, dz);
       if (Number.isFinite(ground) && distance > 0) {
         let patternDb = 0;
-        if (directional) {
+        if (src || cell) {
           const bearing = Math.atan2(x - tx.xM, y - tx.yM) * 180 / Math.PI;
-          patternDb = (srcPat ? patternLossDb(srcPat, bearing) : 0) + (cellPat ? patternLossDb(cellPat, bearing + 180) : 0);
+          const elevDeg = Math.atan2(dz, horizontal) * 180 / Math.PI;
+          if (src) patternDb += combineLossDb(src, horizontalTermDb(src, bearing), verticalTermDb(src, elevDeg));
+          if (cell) patternDb += combineLossDb(cell, horizontalTermDb(cell, bearing + 180), verticalTermDb(cell, -elevDeg));
         }
         field[k] = basePower - 20 * Math.log10(distance) - patternDb;
       }

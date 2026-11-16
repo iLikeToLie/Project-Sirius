@@ -91,7 +91,7 @@ function readSensor(value: unknown): Sensor | undefined {
   if (value.mount !== undefined && value.mount !== 'roof' && value.mount !== 'street') return undefined;
   sensor.mount = value.mount as Sensor['mount'] ?? 'roof';
   if (value.antenna !== undefined && !isAntennaPattern(value.antenna)) return undefined;
-  sensor.antenna = value.antenna === undefined ? defaultAntenna() : { ...value.antenna, azimuthDeg: normAzimuth(value.antenna.azimuthDeg) };
+  sensor.antenna = value.antenna === undefined ? defaultAntenna() : { ...defaultAntenna(), ...value.antenna, azimuthDeg: normAzimuth(value.antenna.azimuthDeg) };
   sensor.rejectionMask = isRejectionMask(value.rejectionMask) ? value.rejectionMask.map(s => ({ ...s })) : defaultRejectionMask();
   return valid ? sensor : undefined;
 }
@@ -113,7 +113,9 @@ function readMap(value: unknown): MapScenario | undefined {
   const ids = new Set(list.map((s) => s.id));
   const txIds = new Set(list.filter((s) => s.role === 'tx').map((s) => s.id));
   return {
-    sensors: list.map((s) => {
+    sensors: list.map((sensor) => {
+      const aim = sensor.antenna.aimAtId;
+      const s = aim !== null && (aim === sensor.id || !ids.has(aim)) ? { ...sensor, antenna: { ...sensor.antenna, aimAtId: null } } : sensor;
       if (s.desiredTxIds === 'auto') return s;
       const desiredTxIds = [...new Set(s.desiredTxIds.filter((id) => txIds.has(id)))];
       return { ...s, desiredTxIds: desiredTxIds.length ? desiredTxIds : 'auto' };

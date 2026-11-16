@@ -86,6 +86,14 @@ export function groundOf(s: Sensor, groundAt: GroundAt, useTerrain: boolean): nu
   return ground === null || !buildingAt || s.mount === 'street' ? ground : ground + buildingAt(s);
 }
 
+/** Antenna elevation: ground (plus roof) and AGL; unknown ground counts as 0, like `separationM`. */
+export const antennaElevationOf = (s: Sensor, groundAt: GroundAt, useTerrain: boolean): number =>
+  (groundOf(s, groundAt, useTerrain) ?? 0) + s.aglM;
+
+/** Both antenna elevations of a pair, in the form `pairLinkInputs` takes. */
+export const pairElevationsM = (tx: Sensor, rx: Sensor, groundAt: GroundAt, useTerrain: boolean) =>
+  ({ tx: antennaElevationOf(tx, groundAt, useTerrain), rx: antennaElevationOf(rx, groundAt, useTerrain) });
+
 /** 3D separation in metres. Unknown ground counts as 0 for the arithmetic; callers flag it. */
 export function separationM(a: Sensor, b: Sensor, groundAt: GroundAt, useTerrain: boolean): number {
   const pa = toLocalM(a);
@@ -137,7 +145,7 @@ export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM
   };
 }
 
-export function pairLinkInputs(map: MapScenario, shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number, opts: { pattern?: boolean } = {}): { inputs: LinkInputs; rejectionDb: number; polarizationDb: number; pattern: PairPatternLoss } {
+export function pairLinkInputs(map: MapScenario, shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number, opts: { pattern?: boolean; /** Antenna elevations above the datum (ground + roof + AGL); absent means elevation 0 at both ends. */ elevationsM?: { tx: number; rx: number } } = {}): { inputs: LinkInputs; rejectionDb: number; polarizationDb: number; pattern: PairPatternLoss } {
   const inputs = pairInputs(shared, tx, rx, distanceM);
   inputs.frequencyGhz = centreMhz(tx, shared) / 1000;
   const rejectionDb = frequencyRejectionDb(
@@ -145,7 +153,7 @@ export function pairLinkInputs(map: MapScenario, shared: LinkInputs, tx: Sensor,
     { fMhz: centreMhz(rx, shared), bwMhz: rx.bandwidthMhz, acrDb: rx.acrDb, mask: rx.rejectionMask }, map.rejectionModel,
   );
   const polarizationDb = polarizationMismatchDb(tx.polarization, rx.polarization, map.crossPolarDiscriminationDb);
-  const pattern = opts.pattern === false ? { ...ZERO_PATTERN_LOSS } : pairPatternLoss(tx, rx);
+  const pattern = opts.pattern === false ? { ...ZERO_PATTERN_LOSS } : pairPatternLoss(tx, rx, opts.elevationsM?.tx, opts.elevationsM?.rx);
   inputs.otherLossDb += rejectionDb + polarizationDb + pattern.totalDb;
   return { inputs, rejectionDb, polarizationDb, pattern };
 }
@@ -183,7 +191,7 @@ export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundA
     for (const tx of scenario.sensors.filter((s) => s.role === 'tx')) {
       const distanceM = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
       const intended = desired.some((d) => d.id === tx.id);
-      const { inputs, rejectionDb, polarizationDb, pattern } = pairLinkInputs(scenario, shared, tx, rx, distanceM);
+      const { inputs, rejectionDb, polarizationDb, pattern } = pairLinkInputs(scenario, shared, tx, rx, distanceM, { elevationsM: pairElevationsM(tx, rx, groundAt, scenario.useTerrainElevation) });
       const propagation = pairPropagation(scenario, tx, rx, inputs.frequencyGhz, groundAt);
       inputs.otherLossDb += propagation.lossDb;
       pairs.push({

@@ -217,7 +217,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
           interferenceM: thresholdSlantRangeM(inputs, zone.rx.interferenceThresholdDbm),
         },
       },
-      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, zoneTx.gainDbi, zoneTx.cableLossDb, zoneTx.antenna.kind, zoneTx.antenna.azimuthDeg, zoneTx.antenna.beamwidthDeg, zoneTx.antenna.frontToBackDb, zone.rx.id, zone.rx.aglM, zone.rx.gainDbi, zone.rx.cableLossDb,
+      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, zoneTx.gainDbi, zoneTx.cableLossDb, zoneTx.antenna.kind, zoneTx.antenna.azimuthDeg, zoneTx.antenna.beamwidthDeg, zoneTx.antenna.frontToBackDb, zoneTx.antenna.verticalBeamwidthDeg, zoneTx.antenna.downtiltDeg, zone.rx.id, zone.rx.aglM, zone.rx.gainDbi, zone.rx.cableLossDb,
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
         state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version, withBuildingsOn, withBuildingsOn && buildings.version, zoneTx.mount, zone.rx.mount].join('|'),
     };

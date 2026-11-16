@@ -93,7 +93,7 @@ it('exposes received power per grid node, NaN where unknown', async () => {
 });
 
 describe('antenna patterns in radial coverage', () => {
-  const sector = { kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25 };
+  const sector = { kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
   it('leaves boresight unchanged, drops the back radial by the front-to-back ratio and applies the cell pattern at theta+180', () => {
     const req = request(), omni = computeCoverage(req);
     const out = computeCoverage({ ...req, patterns: { source: sector } });
@@ -111,5 +111,24 @@ describe('antenna patterns in radial coverage', () => {
     const req = request(), a = computeCoverage(req);
     const b = computeCoverage({ ...req, patterns: { source: { ...sector, kind: 'omni' }, cell: { ...sector, kind: 'omni' } } });
     expect(Array.from(b.powerDbm)).toEqual(Array.from(a.powerDbm));
+  });
+  it('applies the vertical term per step near a tall source and is unchanged at equal heights', () => {
+    const base = request();
+    const tall = { ...base, tx: { ...base.tx, elevationM: 100 }, rxAglM: 2 };
+    const omni = computeCoverage(tall);
+    const out = computeCoverage({ ...tall, patterns: { source: sector } });
+    // On the north radial: steps 0 (20 m) and 99 (2 km).
+    const loss = (i: number) => omni.powerDbm[i] - out.powerDbm[i];
+    const el = (d: number) => Math.atan2(2 - 100, d) * 180 / Math.PI;
+    expect(loss(0)).toBeCloseTo(Math.min(12 * (el(20) / 10) ** 2, 20), 3);
+    expect(loss(0)).toBeCloseTo(20, 3);
+    expect(loss(99)).toBeCloseTo(12 * (el(2000) / 10) ** 2, 3);
+    expect(loss(99)).toBeLessThan(loss(0));
+    // A 3 deg downtilt matches the far cells better than boresight does.
+    const tilted = computeCoverage({ ...tall, patterns: { source: { ...sector, downtiltDeg: 2.8 } } });
+    expect(omni.powerDbm[99] - tilted.powerDbm[99]).toBeLessThan(loss(99));
+    // The cell pattern sees the negative elevation.
+    const cell = computeCoverage({ ...tall, patterns: { cell: { ...sector, azimuthDeg: 180 } } });
+    expect(omni.powerDbm[99] - cell.powerDbm[99]).toBeCloseTo(12 * (-el(2000) / 10) ** 2, 3);
   });
 });

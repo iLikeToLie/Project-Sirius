@@ -29,7 +29,7 @@ describe('antenna UI', () => {
 
   it('shows sector fields and aim-at targets for a sector sensor', () => {
     const state = base();
-    state.map.sensors[1].antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 65, frontToBackDb: 25 };
+    state.map.sensors[1].antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
     const html = card(state, 1);
     for (const text of ['Antenna azimuth', 'Antenna beamwidth', 'Antenna front-to-back', 'aria-label="Aim antenna at"', state.map.sensors[0].name]) expect(html).toContain(text);
     expect(html).not.toContain(`<option value="${state.map.sensors[1].id}">`);
@@ -37,7 +37,7 @@ describe('antenna UI', () => {
 
   it('writes the drawer pattern loss with an off-axis note', () => {
     const state = base();
-    state.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 0, beamwidthDeg: 30, frontToBackDb: 25 };
+    state.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 0, beamwidthDeg: 30, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
     const pairs = evaluatePairs(state.map, state.inputs, () => 0);
     const html = renderToStaticMarkup(<LinkBudgetDrawer state={state} pairs={pairs} assessments={assessAll(state.map, pairs)} groundAt={() => 0} open onToggle={noop} onEdit={noop} pin={null} onPin={noop} size={null} onResize={noop} />);
     expect(html).toContain('Antenna pattern loss');
@@ -46,8 +46,10 @@ describe('antenna UI', () => {
 
   it('formats the pattern note', () => {
     expect(patternNote(ZERO_PATTERN_LOSS)).toBe('omni');
-    expect(patternNote({ txDb: 1, rxDb: 0, txOffDeg: 23.4, rxOffDeg: NaN, totalDb: 1 })).toBe('Tx 23° off axis · Rx omni');
-    expect(patternNote({ txDb: 1, rxDb: 1, txOffDeg: 23, rxOffDeg: 4, totalDb: 2 })).toBe('Tx 23° off axis · Rx 4° off axis');
+    expect(patternNote({ txDb: 1, rxDb: 0, txOffDeg: 23.4, rxOffDeg: NaN, txElevDeg: 0.4, rxElevDeg: NaN, totalDb: 1 })).toBe('Tx 23° off axis · Rx omni');
+    expect(patternNote({ txDb: 1, rxDb: 0, txOffDeg: 23.4, rxOffDeg: NaN, txElevDeg: -3.6, rxElevDeg: NaN, totalDb: 1 })).toBe('Tx 23° off axis, 4° below · Rx omni');
+    expect(patternNote({ txDb: 1, rxDb: 1, txOffDeg: 23, rxOffDeg: 4, txElevDeg: -2, rxElevDeg: 2, totalDb: 2 })).toBe('Tx 23° off axis, 2° below · Rx 4° off axis, 2° above');
+    expect(patternNote({ txDb: 1, rxDb: 1, txOffDeg: 23, rxOffDeg: 4, txElevDeg: 0, rxElevDeg: 0.5, totalDb: 2 })).toBe('Tx 23° off axis · Rx 4° off axis');
   });
 
   it('builds a wedge path and detects sector ring owners', () => {

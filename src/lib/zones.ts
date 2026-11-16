@@ -44,9 +44,10 @@ export function computeZones({ jobId, ground, tx, rxAglM, slant, txPattern }: Zo
     if (!Number.isFinite(g)) { separation[index] = NaN; classes[index] = ZONE.unknown; continue; }
     const x = x0 + (index % (cols + 1)) * dx;
     const y = y0 + Math.floor(index / (cols + 1)) * dy;
-    let d = Math.hypot(x - tx.xM, y - tx.yM, g + rxAglM - tx.elevationM);
+    const horizontal = Math.hypot(x - tx.xM, y - tx.yM), dz = g + rxAglM - tx.elevationM;
+    let d = Math.hypot(horizontal, dz);
     // Pattern loss L dB is equivalent to a range stretched by 10^(L/20).
-    if (txPattern && txPattern.kind !== 'omni') d *= 10 ** (patternLossDb(txPattern, Math.atan2(x - tx.xM, y - tx.yM) * 180 / Math.PI) / 20);
+    if (txPattern && txPattern.kind !== 'omni') d *= 10 ** (patternLossDb(txPattern, Math.atan2(x - tx.xM, y - tx.yM) * 180 / Math.PI, Math.atan2(dz, horizontal) * 180 / Math.PI) / 20);
     separation[index] = d;
     classes[index] = d <= slant.requiredM ? ZONE.acceptable : d <= slant.sensitivityM ? ZONE.weak : ZONE.none;
     interference[index] = d <= slant.interferenceM ? 1 : 0;

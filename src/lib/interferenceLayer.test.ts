@@ -89,8 +89,8 @@ describe('antenna patterns in field sources', () => {
     const { map, inputs } = freshDefaultState();
     map.useTerrainElevation = false;
     const tx = map.sensors[0], rx = map.sensors[1];
-    tx.antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 40, frontToBackDb: 30 };
-    rx.antenna = { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 50, frontToBackDb: 20 };
+    tx.antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
+    rx.antenna = { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 50, frontToBackDb: 20, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
     rx.objective = 'avoidance';
     const sources = interferenceSources(map, inputs, rx, () => 0);
     expect(sources[0].patterns).toEqual({ source: tx.antenna, cell: rx.antenna });

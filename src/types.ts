@@ -80,8 +80,16 @@ export type SensorRole = 'tx' | 'rx';
 export interface RejectionStep { offsetMhz: number; rejectionDb: number }
 
 /** A placed antenna. Both role's fields are kept so toggling TX/RX never loses values. */
-/** Horizontal antenna pattern. */
-export interface AntennaPattern { kind: 'omni' | 'sector'; azimuthDeg: number; beamwidthDeg: number; frontToBackDb: number }
+/** Antenna pattern: horizontal sector plus a vertical beam. */
+export interface AntennaPattern {
+  kind: 'omni' | 'sector'; azimuthDeg: number; beamwidthDeg: number; frontToBackDb: number;
+  /** Vertical 3 dB beamwidth, 1–90. */
+  verticalBeamwidthDeg: number;
+  /** Downtilt, −20..45; positive points below the horizon. */
+  downtiltDeg: number;
+  /** When set, the azimuth follows the bearing to that sensor. */
+  aimAtId: string | null;
+}
 
 export interface Sensor {
   id: string;

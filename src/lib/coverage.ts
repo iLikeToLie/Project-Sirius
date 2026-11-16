@@ -1,5 +1,5 @@
 import type { AntennaPattern, LinkInputs } from '../types';
-import { patternLossDb } from './antenna';
+import { combineLossDb, horizontalTermDb, verticalTermDb } from './antenna';
 import { isolineSegments, type ScalarGrid } from './contours';
 import { toLocalM, type LatLon } from './geo';
 import { earthBulgeM, EFFECTIVE_EARTH_RADIUS_M, fresnelRadiusM, knifeEdgeLossDb } from './propagation';
@@ -51,8 +51,12 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
   const tx = toLocalM(req.tx, req.ground.origin);
   for (let r = 0; r < req.radials; r++) {
     const angle = r * 2 * Math.PI / req.radials, sx = Math.sin(angle), sy = Math.cos(angle);
-    // Pattern loss is constant along a radial: the cell's antenna looks back along the same line.
-    const patternDb = (req.patterns?.source ? patternLossDb(req.patterns.source, r * 360 / req.radials) : 0) + (req.patterns?.cell ? patternLossDb(req.patterns.cell, r * 360 / req.radials + 180) : 0);
+    // The horizontal term is constant along a radial (the cell's antenna looks back along the same line);
+    // the vertical term depends on the elevation angle and is evaluated per step. Omni ends cost nothing.
+    const bearing = r * 360 / req.radials;
+    const srcPat = req.patterns?.source?.kind === 'sector' ? req.patterns.source : undefined;
+    const cellPat = req.patterns?.cell?.kind === 'sector' ? req.patterns.cell : undefined;
+    const srcAh = srcPat ? horizontalTermDb(srcPat, bearing) : 0, cellAh = cellPat ? horizontalTermDb(cellPat, bearing + 180) : 0;
     let horizon = -Infinity, edgeD = 0, edgeGround = 0;
     // A street-level transmitter's own building does not block its rays: skip the run at its height.
     let ownBuilding = (req.buildings?.txOwnM ?? 0) > 0;
@@ -74,6 +78,12 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
         const deficit = edgeGround + earthBulgeM(edgeD, d - edgeD) - ray;
         const fresnel = fresnelRadiusM(edgeD, d - edgeD, wavelength);
         if (deficit > -0.6 * fresnel) loss = knifeEdgeLossDb(deficit * Math.SQRT2 / fresnel);
+      }
+      let patternDb = 0;
+      if (srcPat || cellPat) {
+        const elevDeg = Math.atan2(rxElevation - req.tx.elevationM, d) * 180 / Math.PI;
+        if (srcPat) patternDb += combineLossDb(srcPat, srcAh, verticalTermDb(srcPat, elevDeg));
+        if (cellPat) patternDb += combineLossDb(cellPat, cellAh, verticalTermDb(cellPat, -elevDeg));
       }
       powerDbm[index] = basePower - 20 * Math.log10(Math.hypot(d, rxElevation - req.tx.elevationM)) - loss - patternDb;
       const slope = (surface - req.tx.elevationM) / d - d / (2 * EFFECTIVE_EARTH_RADIUS_M);

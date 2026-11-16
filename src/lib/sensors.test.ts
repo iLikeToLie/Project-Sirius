@@ -302,19 +302,47 @@ describe('antenna pattern in pair evaluation', () => {
   const powerAt = (tx: Sensor) => evaluatePairs(scenario([tx, east[1]]), defaults, flat)[0];
   it('lowers received power by the front-to-back ratio when a sector Tx points away', () => {
     const omni = powerAt(east[0]);
-    const away = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25 } });
-    const aimed = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 60, frontToBackDb: 25 } });
+    const away = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null } });
+    const aimed = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null } });
     expect(omni.result.receivedPowerDbm - away.result.receivedPowerDbm).toBeCloseTo(25, 6);
     expect(aimed.result.receivedPowerDbm).toBeCloseTo(omni.result.receivedPowerDbm, 6);
     expect(away.pattern.txDb).toBe(25);
     expect(omni.pattern.totalDb).toBe(0);
   });
   it('leaves otherLossDb unchanged with pattern: false and reports a zero result', () => {
-    const [tx, rx] = [{ ...east[0], antenna: { kind: 'sector' as const, azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25 } }, east[1]];
+    const [tx, rx] = [{ ...east[0], antenna: { kind: 'sector' as const, azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null } }, east[1]];
     const map = scenario([tx, rx]);
     const off = pairLinkInputs(map, defaults, tx, rx, 500, { pattern: false });
     const on = pairLinkInputs(map, defaults, tx, rx, 500);
-    expect(off.pattern).toEqual({ txDb: 0, rxDb: 0, txOffDeg: NaN, rxOffDeg: NaN, totalDb: 0 });
+    expect(off.pattern).toEqual({ txDb: 0, rxDb: 0, txOffDeg: NaN, rxOffDeg: NaN, txElevDeg: NaN, rxElevDeg: NaN, totalDb: 0 });
     expect(on.inputs.otherLossDb - off.inputs.otherLossDb).toBeCloseTo(25, 6);
+  });
+});
+
+describe('vertical pattern in pair evaluation', () => {
+  const near = place(place([], 'tx', 0), 'rx', 0, 100);
+  const sectorAt = (downtiltDeg: number) => ({ kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg, aimAtId: null });
+  it('uses antenna elevations (ground + AGL) for the elevation angle', () => {
+    const tx = { ...near[0], aglM: 60, antenna: sectorAt(0) }, rx = { ...near[1], aglM: 2 };
+    const pair = evaluatePairs(scenario([tx, rx]), defaults, flat)[0];
+    expect(pair.pattern.txElevDeg).toBeCloseTo(Math.atan2(2 - 60, 100) * 180 / Math.PI, 6);
+    expect(pair.pattern.txDb).toBe(20);
+    const tilted = evaluatePairs(scenario([{ ...tx, antenna: sectorAt(30) }, rx]), defaults, flat)[0];
+    expect(tilted.pattern.txDb).toBeLessThan(pair.pattern.txDb);
+    // Ground height difference counts too: the same AGL on a hill above the Rx looks downward.
+    const hill: GroundAt = (p) => (p.lat > SG_REFERENCE.lat + 1e-6 ? 0 : 58);
+    const onHill = evaluatePairs(scenario([{ ...tx, aglM: 2 }, rx], true), defaults, hill)[0];
+    expect(onHill.pattern.txElevDeg).toBeLessThan(0);
+  });
+  it('has no vertical effect at equal heights with no tilt', () => {
+    const tx = { ...near[0], antenna: sectorAt(0) };
+    const pair = evaluatePairs(scenario([tx, near[1]]), defaults, flat)[0];
+    expect(pair.pattern.txDb).toBe(0);
+  });
+  it('pairLinkInputs takes elevations explicitly', () => {
+    const tx = { ...near[0], antenna: sectorAt(0) };
+    const map = scenario([tx, near[1]]);
+    expect(pairLinkInputs(map, defaults, tx, near[1], 100).pattern.txDb).toBe(0);
+    expect(pairLinkInputs(map, defaults, tx, near[1], 100, { elevationsM: { tx: 100, rx: 0 } }).pattern.txDb).toBeGreaterThan(10);
   });
 });
