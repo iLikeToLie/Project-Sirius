@@ -83,8 +83,9 @@ Items recorded from review of the live site (web 1.6.0). Not yet implemented.
   - [x] 7j. Per-sensor polarization with cross-polar discrimination.
   - [x] 7k. Map layers: total interference, and safe placement for a transmitter.
 
-## 8. Directional antennas — future
+## 8. Directional antennas — done on branch (web 1.12.0)
 
+- **State (16 Nov):** built on branch `claude/practical-turing-nywbaj`, pending review; not yet merged. Design and decisions: `docs/superpowers/specs/2026-11-16-directional-antennas-design.md` (sections 9 and 10 supersede earlier sections; section 11 lists what was built).
 - **Want:** azimuth, beamwidth and front-to-back ratio per sensor, so antennas can be pointed away from victim receivers.
 - **Notes:** pattern loss would apply per Tx–Rx pair and per coverage radial in `computeCoverage`. The web app deliberately left out the workbook Version 4 antenna patterns, so this needs its own design pass before it is planned. Kept out of item 7 by decision on 2 Nov.
 

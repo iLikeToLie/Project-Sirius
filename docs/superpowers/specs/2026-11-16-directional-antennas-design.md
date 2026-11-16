@@ -130,4 +130,16 @@ Sensor.antenna: SensorAntenna
 
 ## 11. Built
 
-To be filled when the work is merged.
+On branch `claude/practical-turing-nywbaj` (web 1.12.0), not yet merged. Commits, oldest first:
+
+- `2b77ffc` Design, plan and core model: schema 8, pair pattern loss.
+- `10594ed` Pattern loss in coverage, zones and layers; antenna controls, map wedge, drawer metric, browser script.
+- `90b98c2` Vertical beamwidth and downtilt (combined 3GPP pattern) in pairs, coverage, zones and fields.
+- `6aac7f4` Design: review decisions (section 9).
+- `d93a1a2` Design: Antennas tab and antenna library (section 10).
+- `916cff0` Antenna library data model: models own gain, per-sensor pointing, aim tracking.
+- `613e2b6` Rotate-antenna fix suggestion.
+- `154a0df` WIP: Antennas tab and drag-to-rotate (superseded by the next commit).
+- `ea76be5` Antennas tab (model library, polar plot, sensor pointing), card link and drag-to-rotate handle.
+
+Verified: 400 unit tests pass across 35 files. `scripts/e2e/directional-antennas.mjs` has not been run.
