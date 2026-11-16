@@ -2,7 +2,7 @@ import pkg from '../package.json';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, Antenna, BookOpen, Calculator, ChartLine, Download, FileDown, Github,
-  MapPinned, RadioTower, RotateCcw, Save, Signal, Upload,
+  MapPinned, Radar, RadioTower, RotateCcw, Save, Signal, Upload,
 } from 'lucide-react';
 import {
   CategoryScale, Chart as ChartJS, Filler, Legend, LinearScale, LineElement, PointElement, Title, Tooltip,
@@ -14,6 +14,7 @@ import { normalizeState, validateImport } from './lib/state';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
 import { activeElevationKnown, activeInputs, activePair, applyInputEdit, type LinkPin } from './lib/activeLink';
 import { resolveDesiredTxs } from './lib/sensors';
+import { AntennasTab } from './components/AntennasTab';
 import { useBuildingTiles } from './components/map/useBuildingTiles';
 import { buildingsActive, sensorPaths, withBuildings } from './lib/buildings';
 import { useElevationTiles } from './components/map/useElevationTiles';
@@ -27,7 +28,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const STORAGE_KEY = 'friis-rf-planner-v3-state';
 const REPO_URL = 'https://github.com/iLikeToLie/Project-Sirius';
 const WORKBOOK_URL = `${REPO_URL}/raw/main/Friis_RF_Link_and_Interference_Calculator_v3.xlsx`;
-type View = 'calculator' | 'workspace' | 'distance' | 'gain' | 'placement' | 'guide';
+type View = 'calculator' | 'workspace' | 'antennas' | 'distance' | 'gain' | 'placement' | 'guide';
 
 function loadState(): AppState {
   try {
@@ -120,7 +121,7 @@ function App() {
   };
 
   const nav = [
-    ['calculator', Calculator, 'Calculator', 'Calculator'], ['workspace', RadioTower, 'Link workspace', 'Link'], ['distance', ChartLine, 'Distance sweep', 'Distance'], ['gain', Antenna, 'Gain sweep', 'Gain'],
+    ['calculator', Calculator, 'Calculator', 'Calculator'], ['workspace', RadioTower, 'Link workspace', 'Link'], ['antennas', Radar, 'Antennas', 'Antennas'], ['distance', ChartLine, 'Distance sweep', 'Distance'], ['gain', Antenna, 'Gain sweep', 'Gain'],
     ['placement', MapPinned, 'Placements', 'Placements'], ['guide', BookOpen, 'Guide', 'Guide'],
   ] as const;
 
@@ -148,7 +149,8 @@ function App() {
 
         <div className="content">
           {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} elevationKnown={elevationKnown} />}
-          {view === 'workspace' && <Suspense fallback={<p className="muted">Loading map…</p>}><MapWorkspace state={state} setState={setState} elevation={elevation} buildings={buildings} pin={pin} setPin={setPin} /></Suspense>}
+          {view === 'workspace' && <Suspense fallback={<p className="muted">Loading map…</p>}><MapWorkspace state={state} setState={setState} elevation={elevation} buildings={buildings} pin={pin} setPin={setPin} onOpenAntennas={() => setView('antennas')} /></Suspense>}
+          {view === 'antennas' && <AntennasTab map={state.map} setMap={(update) => setState((current) => ({ ...current, map: update(current.map) }))} onOpenWorkspace={() => setView('workspace')} />}
           {view === 'distance' && <DistanceView state={viewState} setState={setState} />}
           {view === 'gain' && <GainView state={viewState} setState={setState} />}
           {view === 'placement' && <PlacementView state={viewState} setState={setState} />}

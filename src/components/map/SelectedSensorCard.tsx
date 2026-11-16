@@ -16,7 +16,8 @@ export const SG_BOUNDS = { minLon: 103.596, minLat: 1.1443, maxLon: 104.4309, ma
 
 const formatDistance = (m: number) => !Number.isFinite(m) ? '—' : m >= 1000 ? `${formatNumber(m / 1000, 2)} km` : `${formatNumber(m, 1)} m`;
 
-export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, zoneInfo, onChange, onRoleChange, onZonesFor, defaultFrequencyGhz }: {
+export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, zoneInfo, onChange, onRoleChange, onZonesFor, onOpenAntennas, defaultFrequencyGhz }: {
+  onOpenAntennas?: () => void;
   defaultFrequencyGhz: number;
   sensor: Sensor;
   map: MapScenario;
@@ -93,10 +94,10 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
         <label className="field"><span>Polarization</span><select aria-label="Sensor polarization" value={sensor.polarization} onChange={e => onChange({ polarization: e.target.value as Sensor['polarization'] })}>
           <option value="V">V (vertical)</option><option value="H">H (horizontal)</option><option value="RHCP">RHCP (right circular)</option><option value="LHCP">LHCP (left circular)</option>
         </select></label>
-        <label className="field"><span>Antenna</span><select aria-label="Sensor antenna" value={model ? model.id : OMNI_MODEL_ID} onChange={e => setAntenna({ modelId: e.target.value })}>
+        <div className="field"><span>Antenna</span><select aria-label="Sensor antenna" value={model ? model.id : OMNI_MODEL_ID} onChange={e => setAntenna({ modelId: e.target.value })}>
           <option value={OMNI_MODEL_ID}>Omni</option>
           {map.antennaModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select></label>
+        </select>{onOpenAntennas && <button type="button" className="link-button" onClick={onOpenAntennas}>Edit models in the Antennas tab</button>}</div>
         <CommitField label="Latitude" unit="°" value={sensor.lat} onCommit={(v) => num('lat', v, (x) => (x < SG_BOUNDS.minLat || x > SG_BOUNDS.maxLat ? 'Keep within the Singapore map area.' : undefined))} />
         <CommitField label="Longitude" unit="°" value={sensor.lon} onCommit={(v) => num('lon', v, (x) => (x < SG_BOUNDS.minLon || x > SG_BOUNDS.maxLon ? 'Keep within the Singapore map area.' : undefined))} />
         <CommitField label="Height above ground" unit="m" value={sensor.aglM} onCommit={(v) => num('aglM', v, nonNegative('Height above ground'))} />

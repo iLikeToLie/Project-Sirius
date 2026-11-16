@@ -125,6 +125,22 @@ export function applyAimTracking(sensors: Sensor[]): Sensor[] {
   return changed ? next : sensors;
 }
 
+/** The map with aim tracking applied; the same object when nothing moves. */
+export function trackMap(map: MapScenario): MapScenario {
+  const tracked = applyAimTracking(map.sensors);
+  return tracked === map.sensors ? map : { ...map, sensors: tracked };
+}
+
+/** Maps every sensor through `fn` and re-applies aim tracking (use for any sensor edit made outside the Link workspace). */
+export const updateMapSensors = (map: MapScenario, fn: (sensor: Sensor) => Sensor): MapScenario => trackMap({ ...map, sensors: map.sensors.map(fn) });
+
+/** Azimuth for a pointer `dx` right and `dy` down (screen px) of the sensor, on a map rotated by `mapBearing`; whole degrees, 5° with Shift. */
+export function azimuthFromPointer(dx: number, dy: number, mapBearing: number, shift = false): number {
+  const raw = Math.atan2(dx, -dy) * 180 / Math.PI + mapBearing;
+  const step = shift ? 5 : 1;
+  return normAzimuth(Math.round(raw / step) * step);
+}
+
 /** Removes a model; its sensors go back to the built-in omni. */
 export function deleteModel(map: MapScenario, id: string): MapScenario {
   return { ...map, antennaModels: map.antennaModels.filter((m) => m.id !== id),

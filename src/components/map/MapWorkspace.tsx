@@ -8,7 +8,7 @@ import { signalRange } from '../../lib/signalColour';
 import { sampleGrid, type ScalarGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { applyAimTracking, effectiveGainDbi, resolveAntenna } from '../../lib/antenna';
+import { applyAimTracking, effectiveGainDbi, resolveAntenna, trackMap } from '../../lib/antenna';
 import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairLinkInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { assessAll, pairVerdict, usesAggregate, worstAssessedLink } from '../../lib/interference';
 import { interferenceSources, interferenceZones, placementPlan, placementZones, referenceReceiver, streetBuildingM } from '../../lib/interferenceLayer';
@@ -45,7 +45,7 @@ function zoomForCell(cellM: number, lat: number) {
   return Math.min(14, Math.max(10, Math.ceil(Math.log2(metresPerPixelZ0 / cellM))));
 }
 
-export function MapWorkspace({ state, setState, elevation, buildings, pin, setPin }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation; buildings: BuildingTiles; pin: LinkPin | null; setPin: (pin: LinkPin | null) => void }) {
+export function MapWorkspace({ state, setState, elevation, buildings, pin, setPin, onOpenAntennas }: { onOpenAntennas?: () => void; state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; elevation: Elevation; buildings: BuildingTiles; pin: LinkPin | null; setPin: (pin: LinkPin | null) => void }) {
   const handle = useRef<SensorMapHandle | null>(null);
   const [view, setView] = useState<MapView | null>(null);
   const [draft, setDraft] = useState<Record<string, LatLon>>({});
@@ -135,11 +135,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
 
   useEffect(() => { if (map.useTerrainElevation) elevation.ensure(sensors); }, [sensors, map.useTerrainElevation, elevation.ensure]);
 
-  const setMap = (update: (current: MapScenario) => MapScenario) => setState((current) => {
-    const next = update(current.map);
-    const tracked = applyAimTracking(next.sensors);
-    return { ...current, map: tracked === next.sensors ? next : { ...next, sensors: tracked } };
-  });
+  const setMap = (update: (current: MapScenario) => MapScenario) => setState((current) => ({ ...current, map: trackMap(update(current.map)) }));
   const updateSensor = (id: string, patch: Partial<Sensor>) => setMap((m) => ({ ...m, sensors: m.sensors.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const select = (id: string) => setMap((m) => ({ ...m, selectedId: id }));
   const setShared = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => setState((current) => ({ ...current, inputs: { ...current.inputs, [key]: value } }));
@@ -401,6 +397,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
         onSelect={select}
         onDrag={(id, at) => setDraft((d) => ({ ...d, [id]: at }))}
         onDragEnd={(id, at) => { updateSensor(id, at); setDraft((d) => { const { [id]: _done, ...rest } = d; return rest; }); }}
+        onRotate={(id, azimuthDeg) => setMap((m) => ({ ...m, sensors: m.sensors.map((s) => s.id === id ? { ...s, antenna: { ...s.antenna, azimuthDeg, aimAtId: null } } : s) }))}
         onNudge={(id, dx, dy) => { const s = map.sensors.find((x) => x.id === id); if (s) updateSensor(id, offsetLatLon(s, dx, dy)); }}
         onView={setView}
       />
@@ -451,6 +448,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
           zoneInfo={zoneTx && zone ? { txName: zoneTx.name, rxName: zone.rx.name, reason: zone.reason, aglM: zone.rx.aglM, linkedRxIds } : null}
           onChange={(patch) => { updateSensor(selected.id, patch); return undefined; }}
           onRoleChange={(role) => setMap((m) => ({ ...m, sensors: changeRole(m.sensors, selected.id, role) }))}
+          onOpenAntennas={onOpenAntennas}
           onZonesFor={(rxId) => setMap((m) => ({ ...m, zonesForRxId: rxId }))}
         />
       )}
