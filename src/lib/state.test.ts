@@ -42,7 +42,7 @@ describe('scenario state', () => {
   });
   it('returns defaults when nothing is saved', () => {
     expect(normalizeState()).toEqual(DEFAULT_STATE);
-    expect(DEFAULT_STATE.schemaVersion).toBe(7);
+    expect(DEFAULT_STATE.schemaVersion).toBe(8);
     expect(DEFAULT_STATE.map.sensors.map((s) => s.role)).toEqual(['tx', 'rx']);
     expect(DEFAULT_STATE.map.useTerrainElevation).toBe(true);
   });
@@ -75,7 +75,7 @@ describe('scenario state', () => {
   it('migrates a 1.4.0 workspace without changing its result', () => {
     const workspace: LinkWorkspace = { tx: { xM: 300, yM: 400, aglM: 12 }, rx: { xM: 0, yM: 0, aglM: 10 }, terrain: { ...DEFAULT_TERRAIN, enabled: true } };
     const state = normalizeState(v2(workspace) as unknown as Partial<AppState>);
-    expect(state.schemaVersion).toBe(7);
+    expect(state.schemaVersion).toBe(8);
     expect(state.map.sensors).toHaveLength(2);
     expect(state.map.useTerrainElevation).toBe(false);
     expect(activeInputs(state, unknownGround).distanceM).toBeCloseTo(separation3dM(workspace), 6);
@@ -134,7 +134,7 @@ describe('schema 6 interference settings', () => {
       delete sensor.requiredCiDb;
     }
     const next = validateImport(old)!;
-    expect(next.schemaVersion).toBe(7);
+    expect(next.schemaVersion).toBe(8);
     expect(next.map.protectionMarginDb).toBe(3);
     expect(next.map.aggregateInterference).toBe('objective');
     for (const sensor of next.map.sensors) {
@@ -144,9 +144,9 @@ describe('schema 6 interference settings', () => {
     expect(activeInputs(next, () => 0)).toEqual(activeInputs(freshDefaultState(), () => 0));
   });
 
-  it('round-trips custom schema 6 settings including zero and receiver overrides', () => {
+  it('round-trips custom schema 8 settings including zero and receiver overrides', () => {
     const raw = JSON.parse(JSON.stringify(freshDefaultState()));
-    raw.schemaVersion = 7;
+    raw.schemaVersion = 8;
     raw.map.protectionMarginDb = 0;
     raw.map.sensors[1].protectionMarginDb = 4;
     raw.map.sensors[1].requiredCiDb = 0;
@@ -190,4 +190,29 @@ it('migrates v3 onto the terrain model with the default objective', () => {
   expect(next.map.propagationModel).toBe('terrain'); expect(next.map.defaultObjective).toBe('desired');
   // Over flat ground the terrain model adds no diffraction, so the loss budget is unchanged.
   expect(activeInputs(next, () => 0).otherLossDb).toBe(old.inputs.otherLossDb);
+});
+
+describe('antenna pattern (schema 8)', () => {
+  const raw = () => JSON.parse(JSON.stringify(freshDefaultState()));
+  it('migrates a sensor without an antenna to the omni default at schema 8', () => {
+    const old = raw();
+    old.schemaVersion = 7;
+    for (const s of old.map.sensors) delete s.antenna;
+    const next = normalizeState(old);
+    expect(next.schemaVersion).toBe(8);
+    for (const s of next.map.sensors) expect(s.antenna).toEqual({ kind: 'omni', azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25 });
+  });
+  it('rejects a sensor with an invalid antenna', () => {
+    const bad = raw();
+    bad.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 10, beamwidthDeg: 0, frontToBackDb: 25 };
+    expect(validateImport(bad)).toBeNull();
+    expect(normalizeState(bad).map).toEqual(freshDefaultState().map);
+  });
+  it('round-trips a sector antenna and normalises its azimuth', () => {
+    const state = raw();
+    state.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 120, beamwidthDeg: 40, frontToBackDb: 30 };
+    expect(validateImport(state)).toEqual(state);
+    state.map.sensors[0].antenna.azimuthDeg = -30;
+    expect(validateImport(state)?.map.sensors[0].antenna.azimuthDeg).toBe(330);
+  });
 });

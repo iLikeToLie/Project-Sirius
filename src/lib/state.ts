@@ -1,6 +1,7 @@
 import { DEFAULT_TERRAIN, freshDefaultState, mapForPlacements, workspaceForDistance } from '../data/defaults';
 import type { AntennaPlacement, AppState, LinkInputs, LinkWorkspace, MapScenario, Sensor, TerrainSettings } from '../types';
 import { antennaElevationM, isValidPlacement } from './linkGeometry';
+import { defaultAntenna, isAntennaPattern, normAzimuth } from './antenna';
 import { MAX_SENSORS } from './sensors';
 import { defaultRejectionMask, isRejectionMask } from './isolation';
 
@@ -89,6 +90,8 @@ function readSensor(value: unknown): Sensor | undefined {
   sensor.polarization = value.polarization as Sensor['polarization'] ?? 'V';
   if (value.mount !== undefined && value.mount !== 'roof' && value.mount !== 'street') return undefined;
   sensor.mount = value.mount as Sensor['mount'] ?? 'roof';
+  if (value.antenna !== undefined && !isAntennaPattern(value.antenna)) return undefined;
+  sensor.antenna = value.antenna === undefined ? defaultAntenna() : { ...value.antenna, azimuthDeg: normAzimuth(value.antenna.azimuthDeg) };
   sensor.rejectionMask = isRejectionMask(value.rejectionMask) ? value.rejectionMask.map(s => ({ ...s })) : defaultRejectionMask();
   return valid ? sensor : undefined;
 }
@@ -135,7 +138,7 @@ export function normalizeState(saved?: unknown): AppState {
   const inputs = { ...defaults.inputs, ...s.inputs };
   const map = 'map' in s ? readMap(s.map) ?? defaults.map : migrateWorkspace(readWorkspace(s.workspace, inputs.distanceM), inputs);
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     linkObjective: s.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
     inputs,
     distanceSweep: { ...defaults.distanceSweep, ...s.distanceSweep },

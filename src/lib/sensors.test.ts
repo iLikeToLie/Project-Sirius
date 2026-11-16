@@ -3,9 +3,10 @@ import { DEFAULT_STATE } from '../data/defaults';
 import type { MapScenario, Sensor, SensorRole } from '../types';
 import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
+import { ZERO_PATTERN_LOSS } from './antenna';
 import { calculateLink } from './rf';
 import {
-  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, meterScale, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, worstLink, type PairResult,
+  addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, meterScale, pairLinkInputs, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, worstLink, type PairResult,
 } from './sensors';
 
 const flat: GroundAt = () => 0;
@@ -17,7 +18,7 @@ const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
 const [T1, T2, T3, R1, R2] = place(place(place(place(place([], 'tx', 0), 'tx', 1000), 'tx', 2000), 'rx', 200), 'rx', 400);
 const sensorsWithLinks: Sensor[] = [T1, T2, { ...R1, desiredTxIds: [T1.id, T2.id] }, { ...R2, desiredTxIds: [T1.id] }];
 const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[] => powers.map(([txId, power]) => ({
-  txId, txName: txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, clearance: 'unknown',
+  txId, txName: txId, rxId, intended: true, distanceM: 500, elevationKnown: true, propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, pattern: ZERO_PATTERN_LOSS, clearance: 'unknown',
   result: { ...calculateLink(defaults, 'desired'), receivedPowerDbm: power },
 }));
 
@@ -293,5 +294,27 @@ describe('desired list that names no transmitter', () => {
     const rx = { ...R1, desiredTxIds: ['not-a-transmitter'] };
     expect(resolveDesiredTxs(scenario([T1, T2, rx]), rx, flat).map((t) => t.id)).toEqual([T1.id]);
     expect(resolveDesiredTxs(scenario([T1, T2, { ...R1, desiredTxIds: [] }]), { ...R1, desiredTxIds: [] }, flat).map((t) => t.id)).toEqual([T1.id]);
+  });
+});
+
+describe('antenna pattern in pair evaluation', () => {
+  const east = place(place([], 'tx', 0), 'rx', 500);
+  const powerAt = (tx: Sensor) => evaluatePairs(scenario([tx, east[1]]), defaults, flat)[0];
+  it('lowers received power by the front-to-back ratio when a sector Tx points away', () => {
+    const omni = powerAt(east[0]);
+    const away = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25 } });
+    const aimed = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 60, frontToBackDb: 25 } });
+    expect(omni.result.receivedPowerDbm - away.result.receivedPowerDbm).toBeCloseTo(25, 6);
+    expect(aimed.result.receivedPowerDbm).toBeCloseTo(omni.result.receivedPowerDbm, 6);
+    expect(away.pattern.txDb).toBe(25);
+    expect(omni.pattern.totalDb).toBe(0);
+  });
+  it('leaves otherLossDb unchanged with pattern: false and reports a zero result', () => {
+    const [tx, rx] = [{ ...east[0], antenna: { kind: 'sector' as const, azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25 } }, east[1]];
+    const map = scenario([tx, rx]);
+    const off = pairLinkInputs(map, defaults, tx, rx, 500, { pattern: false });
+    const on = pairLinkInputs(map, defaults, tx, rx, 500);
+    expect(off.pattern).toEqual({ txDb: 0, rxDb: 0, txOffDeg: NaN, rxOffDeg: NaN, totalDb: 0 });
+    expect(on.inputs.otherLossDb - off.inputs.otherLossDb).toBeCloseTo(25, 6);
   });
 });

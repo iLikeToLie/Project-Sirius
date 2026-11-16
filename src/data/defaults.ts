@@ -1,3 +1,4 @@
+import { defaultAntenna } from '../lib/antenna';
 import { offsetLatLon, SG_REFERENCE } from '../lib/geo';
 import { defaultRejectionMask } from '../lib/isolation';
 import type { AppState, LinkInputs, LinkWorkspace, MapScenario, PlacementScenario, TerrainSettings } from '../types';
@@ -48,10 +49,11 @@ export function mapForPlacements(inputs: LinkInputs, tx: { xM: number; yM: numbe
     polarization: 'V' as const,
     mount: 'roof' as const,
   };
+  const antenna = () => defaultAntenna();
   return {
     sensors: [
-      { ...common, rejectionMask: defaultRejectionMask(), id: 'sensor-1', name: inputs.txId || 'T1', role: 'tx', ...offsetLatLon(SG_REFERENCE, tx.xM, tx.yM), aglM: tx.aglM, gainDbi: inputs.txGainDbi, cableLossDb: inputs.txLossDb },
-      { ...common, rejectionMask: defaultRejectionMask(), id: 'sensor-2', name: inputs.rxId || 'R1', role: 'rx', ...offsetLatLon(SG_REFERENCE, rx.xM, rx.yM), aglM: rx.aglM, gainDbi: inputs.rxGainDbi, cableLossDb: inputs.rxLossDb },
+      { ...common, antenna: antenna(), rejectionMask: defaultRejectionMask(), id: 'sensor-1', name: inputs.txId || 'T1', role: 'tx', ...offsetLatLon(SG_REFERENCE, tx.xM, tx.yM), aglM: tx.aglM, gainDbi: inputs.txGainDbi, cableLossDb: inputs.txLossDb },
+      { ...common, antenna: antenna(), rejectionMask: defaultRejectionMask(), id: 'sensor-2', name: inputs.rxId || 'R1', role: 'rx', ...offsetLatLon(SG_REFERENCE, rx.xM, rx.yM), aglM: rx.aglM, gainDbi: inputs.rxGainDbi, cableLossDb: inputs.rxLossDb },
     ],
     selectedId: null,
     zonesForRxId: 'auto',
@@ -88,7 +90,7 @@ const DEFAULT_INPUTS: LinkInputs = {
 const defaultPlacements = workspaceForDistance(500);
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 7,
+  schemaVersion: 8,
   linkObjective: 'desired',
   inputs: DEFAULT_INPUTS,
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },

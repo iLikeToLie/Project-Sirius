@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
 import type { MapScenario, ScreeningStatus } from '../types';
+import { ZERO_PATTERN_LOSS } from './antenna';
 import { calculateLink } from './rf';
 import { evaluatePairs, receiverSummary, type PairResult } from './sensors';
 import { assessAll, assessReceiver, effectiveMarginDb, mitigations, pairVerdict, sumDbm, transmitterPowerRange, usesAggregate, worstAssessedLink } from './interference';
@@ -9,7 +10,7 @@ const state = freshDefaultState();
 const rx = { ...state.map.sensors[1], objective: 'avoidance' as const };
 const pair = (txId: string, power: number, intended = false, status: ScreeningStatus = 'Acceptable link'): PairResult => ({
   txId, txName: txId, rxId: rx.id, intended, elevationKnown: true, distanceM: 100,
-  propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, clearance: 'unknown',
+  propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, pattern: ZERO_PATTERN_LOSS, clearance: 'unknown',
   result: { ...calculateLink(state.inputs, intended ? 'desired' : 'avoidance'), receivedPowerDbm: power, status },
 });
 

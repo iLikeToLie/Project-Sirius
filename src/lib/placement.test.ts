@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
+import { ZERO_PATTERN_LOSS } from './antenna';
 import { calculateLink } from './rf';
 import { PLACEMENT, placementAllowance, placementClass } from './interference';
 import { placementPlan, placementZones } from './interferenceLayer';
@@ -40,7 +41,7 @@ describe('fixed placement allowances', () => {
   const { map, inputs } = freshDefaultState();
   const tx = map.sensors[0], rx = { ...map.sensors[1], objective: 'desired' as const, interferenceThresholdDbm: -60, protectionMarginDb: 3, requiredCiDb: 10 };
   const p = (id: string, power: number, intended = false): PairResult => ({ txId: id, txName: id, rxId: rx.id, intended,
-    elevationKnown: true, distanceM: 100, propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, clearance: 'unknown',
+    elevationKnown: true, distanceM: 100, propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, pattern: ZERO_PATTERN_LOSS, clearance: 'unknown',
     result: { ...calculateLink(inputs), receivedPowerDbm: power } });
   it('excludes the moving transmitter and subtracts only the other aggregate sources', () => {
     const m = { ...map, aggregateInterference: 'always' as const };

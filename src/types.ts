@@ -80,6 +80,9 @@ export type SensorRole = 'tx' | 'rx';
 export interface RejectionStep { offsetMhz: number; rejectionDb: number }
 
 /** A placed antenna. Both role's fields are kept so toggling TX/RX never loses values. */
+/** Horizontal antenna pattern. */
+export interface AntennaPattern { kind: 'omni' | 'sector'; azimuthDeg: number; beamwidthDeg: number; frontToBackDb: number }
+
 export interface Sensor {
   id: string;
   name: string;
@@ -104,6 +107,8 @@ export interface Sensor {
   polarization: 'V' | 'H' | 'RHCP' | 'LHCP';
   /** Where the antenna stands when it is on a building: its height counts from the roof, or from the street. */
   mount: 'roof' | 'street';
+  /** Kept when toggling kind (like the role fields), so sector values are not lost. */
+  antenna: AntennaPattern;
 }
 
 export interface MapScenario {
@@ -122,7 +127,7 @@ export interface MapScenario {
 }
 
 export interface AppState {
-  schemaVersion: 7;
+  schemaVersion: 8;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;
