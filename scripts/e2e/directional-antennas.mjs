@@ -20,7 +20,10 @@ const demBody = PNG.sync.write(tile);
 const TX = { lat: 1.3521, lon: 103.8198 };
 const DLON_1KM = 0.00898;
 const TX_NAME = 'Sector TX', RX_A = 'Rx A', RX_B = 'Rx B';
-const SECTOR = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 65, frontToBackDb: 25 };
+// Library model with the template Tx's own gain, so the only difference from omni is the pattern.
+const MODEL = { id: 'ant-1', name: 'Sector 65', kind: 'sector', beamwidthDeg: 65, verticalBeamwidthDeg: 10, frontToBackDb: 25 };
+const POINT_EAST = { modelId: 'ant-1', azimuthDeg: 90, downtiltDeg: 0, aimAtId: null };
+const OMNI = { modelId: 'omni', azimuthDeg: 0, downtiltDeg: 0, aimAtId: null };
 const EXPECTED_DROP_DB = 25, TOLERANCE_DB = 1;
 
 const errors = [];
@@ -37,13 +40,14 @@ try {
   await page.getByRole('button', { name: 'Link workspace', exact: true }).click();
   const base = await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
 
-  // Seed: schema 8, one sector Tx, Rx A desired from it (east), Rx B avoiding it (west).
+  // Seed: schema 8 with an antenna library, one sector Tx, Rx A desired from it (east), Rx B avoiding it (west).
   base.schemaVersion = 8;
   base.map.propagationModel = 'free-space'; base.map.useTerrainElevation = false;
   const rxTemplate = base.map.sensors.find(s => s.role === 'rx');
-  const tx = { ...base.map.sensors.find(s => s.role === 'tx'), name: TX_NAME, lat: TX.lat, lon: TX.lon, antenna: { ...SECTOR } };
-  const rxA = { ...rxTemplate, id: 'rx-a', name: RX_A, lat: TX.lat, lon: TX.lon + DLON_1KM, desiredTxIds: [tx.id], objective: 'default', antenna: { kind: 'omni', azimuthDeg: 0, beamwidthDeg: 360, frontToBackDb: 25 } };
-  const rxB = { ...rxTemplate, id: 'rx-b', name: RX_B, lat: TX.lat, lon: TX.lon - DLON_1KM, desiredTxIds: [tx.id], objective: 'avoidance', antenna: { kind: 'omni', azimuthDeg: 0, beamwidthDeg: 360, frontToBackDb: 25 } };
+  const tx = { ...base.map.sensors.find(s => s.role === 'tx'), name: TX_NAME, lat: TX.lat, lon: TX.lon, antenna: { ...POINT_EAST } };
+  base.map.antennaModels = [{ ...MODEL, gainDbi: tx.gainDbi }];
+  const rxA = { ...rxTemplate, id: 'rx-a', name: RX_A, lat: TX.lat, lon: TX.lon + DLON_1KM, desiredTxIds: [tx.id], objective: 'default', antenna: { ...OMNI } };
+  const rxB = { ...rxTemplate, id: 'rx-b', name: RX_B, lat: TX.lat, lon: TX.lon - DLON_1KM, desiredTxIds: [tx.id], objective: 'avoidance', antenna: { ...OMNI } };
   base.map.sensors = [tx, rxA, rxB];
   base.map.selectedId = tx.id;
 
