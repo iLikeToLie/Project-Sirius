@@ -1021,6 +1021,7 @@ tbody tr:hover { background: var(--surface-elevated); }
 .antenna-polar .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 4px; }
 .antenna-polar .key-h { background: var(--yellow); }
 .antenna-polar .key-v { background: var(--blue); }
+.antenna-table tbody th { background: none; text-transform: none; color: var(--ink); }
 .antenna-table th, .antenna-table td { white-space: nowrap; vertical-align: top; }
 .antenna-table td select { height: 34px; min-width: 120px; color: var(--ink); background: var(--surface-elevated); border: 1px solid var(--hairline); border-radius: 6px; padding: 0 8px; }
 .antenna-table td select:disabled { opacity: .5; }
