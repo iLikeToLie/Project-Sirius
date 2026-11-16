@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_STATE } from '../data/defaults';
-import type { MapScenario, Sensor, SensorRole } from '../types';
+import type { AntennaModel, MapScenario, Sensor, SensorRole } from '../types';
 import type { GroundAt } from './elevation';
 import { offsetLatLon, SG_REFERENCE } from './geo';
-import { ZERO_PATTERN_LOSS } from './antenna';
+import { ZERO_PATTERN_LOSS, applyAimTracking } from './antenna';
 import { calculateLink } from './rf';
 import {
   addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, MAX_SENSORS, meterScale, pairLinkInputs, receiverSummary, removeSensor, resolveDesiredTxs, setRole, toggleDesired, worstLink, type PairResult,
@@ -12,7 +12,7 @@ import {
 const flat: GroundAt = () => 0;
 const defaults = DEFAULT_STATE.inputs;
 const place = (sensors: Sensor[], role: SensorRole, dx: number, dy = 0) => addSensor(sensors, createSensor(sensors, role, offsetLatLon(SG_REFERENCE, dx, dy), defaults));
-const scenario = (sensors: Sensor[], useTerrainElevation = false): MapScenario => ({ sensors, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation, protectionMarginDb: 3, aggregateInterference: 'objective', rejectionModel: 'simple', crossPolarDiscriminationDb: 15, buildings: false });
+const scenario = (sensors: Sensor[], useTerrainElevation = false, antennaModels: AntennaModel[] = []): MapScenario => ({ sensors, antennaModels, selectedId: null, zonesForRxId: 'auto', defaultObjective: 'desired', propagationModel: 'free-space', useTerrainElevation, protectionMarginDb: 3, aggregateInterference: 'objective', rejectionModel: 'simple', crossPolarDiscriminationDb: 15, buildings: false });
 const LINK = ['Acceptable link', 'Weak link', 'No link'];
 const INTERFERENCE = ['Possible interference', 'Below interference threshold'];
 const [T1, T2, T3, R1, R2] = place(place(place(place(place([], 'tx', 0), 'tx', 1000), 'tx', 2000), 'rx', 200), 'rx', 400);
@@ -299,19 +299,22 @@ describe('desired list that names no transmitter', () => {
 
 describe('antenna pattern in pair evaluation', () => {
   const east = place(place([], 'tx', 0), 'rx', 500);
-  const powerAt = (tx: Sensor) => evaluatePairs(scenario([tx, east[1]]), defaults, flat)[0];
+  // A sector model with the sensor's own gain gives the same numbers as the old per-sensor sector.
+  const model: AntennaModel = { id: 'm1', name: 'S', kind: 'sector', gainDbi: east[0].gainDbi, beamwidthDeg: 60, verticalBeamwidthDeg: 10, frontToBackDb: 25 };
+  const sectorAt = (azimuthDeg: number) => ({ modelId: 'm1', azimuthDeg, downtiltDeg: 0, aimAtId: null });
+  const powerAt = (tx: Sensor) => evaluatePairs(scenario([tx, east[1]], false, [model]), defaults, flat)[0];
   it('lowers received power by the front-to-back ratio when a sector Tx points away', () => {
     const omni = powerAt(east[0]);
-    const away = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null } });
-    const aimed = powerAt({ ...east[0], antenna: { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null } });
+    const away = powerAt({ ...east[0], antenna: sectorAt(270) });
+    const aimed = powerAt({ ...east[0], antenna: sectorAt(90) });
     expect(omni.result.receivedPowerDbm - away.result.receivedPowerDbm).toBeCloseTo(25, 6);
     expect(aimed.result.receivedPowerDbm).toBeCloseTo(omni.result.receivedPowerDbm, 6);
     expect(away.pattern.txDb).toBe(25);
     expect(omni.pattern.totalDb).toBe(0);
   });
   it('leaves otherLossDb unchanged with pattern: false and reports a zero result', () => {
-    const [tx, rx] = [{ ...east[0], antenna: { kind: 'sector' as const, azimuthDeg: 270, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null } }, east[1]];
-    const map = scenario([tx, rx]);
+    const [tx, rx] = [{ ...east[0], antenna: sectorAt(270) }, east[1]];
+    const map = scenario([tx, rx], false, [model]);
     const off = pairLinkInputs(map, defaults, tx, rx, 500, { pattern: false });
     const on = pairLinkInputs(map, defaults, tx, rx, 500);
     expect(off.pattern).toEqual({ txDb: 0, rxDb: 0, txOffDeg: NaN, rxOffDeg: NaN, txElevDeg: NaN, rxElevDeg: NaN, totalDb: 0 });
@@ -321,28 +324,56 @@ describe('antenna pattern in pair evaluation', () => {
 
 describe('vertical pattern in pair evaluation', () => {
   const near = place(place([], 'tx', 0), 'rx', 0, 100);
-  const sectorAt = (downtiltDeg: number) => ({ kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 60, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg, aimAtId: null });
+  const model: AntennaModel = { id: 'm1', name: 'S', kind: 'sector', gainDbi: near[0].gainDbi, beamwidthDeg: 60, verticalBeamwidthDeg: 10, frontToBackDb: 25 };
+  const sectorAt = (downtiltDeg: number) => ({ modelId: 'm1', azimuthDeg: 0, downtiltDeg, aimAtId: null });
   it('uses antenna elevations (ground + AGL) for the elevation angle', () => {
     const tx = { ...near[0], aglM: 60, antenna: sectorAt(0) }, rx = { ...near[1], aglM: 2 };
-    const pair = evaluatePairs(scenario([tx, rx]), defaults, flat)[0];
+    const pair = evaluatePairs(scenario([tx, rx], false, [model]), defaults, flat)[0];
     expect(pair.pattern.txElevDeg).toBeCloseTo(Math.atan2(2 - 60, 100) * 180 / Math.PI, 6);
     expect(pair.pattern.txDb).toBe(20);
-    const tilted = evaluatePairs(scenario([{ ...tx, antenna: sectorAt(30) }, rx]), defaults, flat)[0];
+    const tilted = evaluatePairs(scenario([{ ...tx, antenna: sectorAt(30) }, rx], false, [model]), defaults, flat)[0];
     expect(tilted.pattern.txDb).toBeLessThan(pair.pattern.txDb);
     // Ground height difference counts too: the same AGL on a hill above the Rx looks downward.
     const hill: GroundAt = (p) => (p.lat > SG_REFERENCE.lat + 1e-6 ? 0 : 58);
-    const onHill = evaluatePairs(scenario([{ ...tx, aglM: 2 }, rx], true), defaults, hill)[0];
+    const onHill = evaluatePairs(scenario([{ ...tx, aglM: 2 }, rx], true, [model]), defaults, hill)[0];
     expect(onHill.pattern.txElevDeg).toBeLessThan(0);
   });
   it('has no vertical effect at equal heights with no tilt', () => {
     const tx = { ...near[0], antenna: sectorAt(0) };
-    const pair = evaluatePairs(scenario([tx, near[1]]), defaults, flat)[0];
+    const pair = evaluatePairs(scenario([tx, near[1]], false, [model]), defaults, flat)[0];
     expect(pair.pattern.txDb).toBe(0);
   });
   it('pairLinkInputs takes elevations explicitly', () => {
     const tx = { ...near[0], antenna: sectorAt(0) };
-    const map = scenario([tx, near[1]]);
+    const map = scenario([tx, near[1]], false, [model]);
     expect(pairLinkInputs(map, defaults, tx, near[1], 100).pattern.txDb).toBe(0);
     expect(pairLinkInputs(map, defaults, tx, near[1], 100, { elevationsM: { tx: 100, rx: 0 } }).pattern.txDb).toBeGreaterThan(10);
+  });
+});
+
+describe('antenna library in link maths', () => {
+  const [tx, rx] = place(place([], 'tx', 0), 'rx', 500);
+  const model: AntennaModel = { id: 'm1', name: 'Dish', kind: 'sector', gainDbi: tx.gainDbi + 6, beamwidthDeg: 60, verticalBeamwidthDeg: 10, frontToBackDb: 25 };
+  it('takes the gain from the model, not the sensor, and leaves omni on the sensor gain', () => {
+    const on = { ...tx, antenna: { modelId: 'm1', azimuthDeg: 90, downtiltDeg: 0, aimAtId: null } };
+    const map = scenario([on, rx], false, [model]);
+    expect(pairLinkInputs(map, defaults, on, rx, 500).inputs.txGainDbi).toBe(model.gainDbi);
+    expect(pairLinkInputs(map, defaults, on, rx, 500).inputs.rxGainDbi).toBe(rx.gainDbi);
+    const omni = scenario([tx, rx], false, [model]);
+    expect(pairLinkInputs(omni, defaults, tx, rx, 500).inputs.txGainDbi).toBe(tx.gainDbi);
+    const a = evaluatePairs(map, defaults, flat)[0].result.receivedPowerDbm;
+    const b = evaluatePairs(omni, defaults, flat)[0].result.receivedPowerDbm;
+    expect(a - b).toBeCloseTo(6, 6);
+  });
+  it('clears aim references when a sensor is removed', () => {
+    const aimed = { ...rx, antenna: { ...rx.antenna, azimuthDeg: 270, aimAtId: tx.id } };
+    const left = removeSensor([tx, aimed], tx.id);
+    expect(left[0].antenna).toEqual({ modelId: 'omni', azimuthDeg: 270, downtiltDeg: 0, aimAtId: null });
+    const other = { ...rx, id: 'x', antenna: { ...rx.antenna, aimAtId: tx.id } };
+    expect(removeSensor([tx, rx, other], 'zz').find((s) => s.id === 'x')).toBe(other);
+  });
+  it('creates sensors on the built-in omni', () => {
+    expect(tx.antenna).toEqual({ modelId: 'omni', azimuthDeg: 0, downtiltDeg: 0, aimAtId: null });
+    expect(applyAimTracking([tx, rx])).toEqual([tx, rx]);
   });
 });

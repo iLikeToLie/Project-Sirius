@@ -8,6 +8,7 @@ import { signalRange } from '../../lib/signalColour';
 import { sampleGrid, type ScalarGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
+import { applyAimTracking, effectiveGainDbi, resolveAntenna } from '../../lib/antenna';
 import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairLinkInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { assessAll, pairVerdict, usesAggregate, worstAssessedLink } from '../../lib/interference';
 import { interferenceSources, interferenceZones, placementPlan, placementZones, referenceReceiver, streetBuildingM } from '../../lib/interferenceLayer';
@@ -106,7 +107,8 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
   const groundAt: GroundAt = useMemo(() => withBuildings(elevation.groundAt, withBuildingsOn ? buildings.buildingAt : undefined), [elevation.groundAt, buildings.buildingAt, withBuildingsOn]);
   const dragging = Object.keys(draft).length > 0;
 
-  const sensors = useMemo(() => map.sensors.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s)), [map.sensors, draft]);
+  // Aim tracking also runs on the dragged positions, so a tracking wedge follows the marker.
+  const sensors = useMemo(() => applyAimTracking(map.sensors.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s))), [map.sensors, draft]);
   useEffect(() => { if (withBuildingsOn) buildings.ensurePaths(sensorPaths(sensors)); }, [sensors, withBuildingsOn, buildings.ensurePaths]);
   /** Loads the building tiles a ray grid reads (in effects: loading sets state). */
   const ensureBuildingsFor = (g: ScalarGrid | undefined) => {
@@ -133,7 +135,11 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
 
   useEffect(() => { if (map.useTerrainElevation) elevation.ensure(sensors); }, [sensors, map.useTerrainElevation, elevation.ensure]);
 
-  const setMap = (update: (current: MapScenario) => MapScenario) => setState((current) => ({ ...current, map: update(current.map) }));
+  const setMap = (update: (current: MapScenario) => MapScenario) => setState((current) => {
+    const next = update(current.map);
+    const tracked = applyAimTracking(next.sensors);
+    return { ...current, map: tracked === next.sensors ? next : { ...next, sensors: tracked } };
+  });
   const updateSensor = (id: string, patch: Partial<Sensor>) => setMap((m) => ({ ...m, sensors: m.sensors.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const select = (id: string) => setMap((m) => ({ ...m, selectedId: id }));
   const setShared = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]) => setState((current) => ({ ...current, inputs: { ...current.inputs, [key]: value } }));
@@ -204,24 +210,25 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     const { z, cols, rows, ground } = zoneGrid;
     const txLocal = toLocalM(zoneTx);
     const { inputs } = pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1, { pattern: false });
+    const txPattern = resolveAntenna(map, zoneTx);
     return {
       z,
       request: {
         ground,
         tx: { xM: txLocal.xM, yM: txLocal.yM, elevationM: (groundOf(zoneTx, groundAt, map.useTerrainElevation) ?? 0) + zoneTx.aglM },
         rxAglM: zone.rx.aglM,
-        txPattern: zoneTx.antenna,
+        txPattern,
         slant: {
           sensitivityM: thresholdSlantRangeM(inputs, zone.rx.sensitivityDbm),
           requiredM: thresholdSlantRangeM(inputs, zone.rx.sensitivityDbm + zone.rx.fadeMarginTargetDb),
           interferenceM: thresholdSlantRangeM(inputs, zone.rx.interferenceThresholdDbm),
         },
       },
-      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, zoneTx.gainDbi, zoneTx.cableLossDb, zoneTx.antenna.kind, zoneTx.antenna.azimuthDeg, zoneTx.antenna.beamwidthDeg, zoneTx.antenna.frontToBackDb, zoneTx.antenna.verticalBeamwidthDeg, zoneTx.antenna.downtiltDeg, zone.rx.id, zone.rx.aglM, zone.rx.gainDbi, zone.rx.cableLossDb,
+      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, effectiveGainDbi(map, zoneTx), zoneTx.cableLossDb, txPattern.kind, txPattern.azimuthDeg, txPattern.beamwidthDeg, txPattern.frontToBackDb, txPattern.verticalBeamwidthDeg, txPattern.downtiltDeg, zone.rx.id, zone.rx.aglM, effectiveGainDbi(map, zone.rx), zone.rx.cableLossDb,
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
         state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version, withBuildingsOn, withBuildingsOn && buildings.version, zoneTx.mount, zone.rx.mount].join('|'),
     };
-  }, [zoneGrid, zoneTx, zone, view, map.useTerrainElevation, map.rejectionModel, elevation.version, state.inputs, groundAt, withBuildingsOn, buildings.version]);
+  }, [zoneGrid, zoneTx, zone, view, map.antennaModels, map.useTerrainElevation, map.rejectionModel, elevation.version, state.inputs, groundAt, withBuildingsOn, buildings.version]);
 
   useEffect(() => {
     if (zoneRequest && view && map.useTerrainElevation) elevation.ensureBox(view.southWest, view.northEast, zoneRequest.z);
@@ -242,9 +249,9 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     const req = zoneRequest.request, g = req.ground;
     const maxView = Math.max(...[[g.x0, g.y0], [g.x0 + g.cols * g.dx, g.y0 + g.rows * g.dy]].map(([x,y]) => Math.hypot(x - req.tx.xM, y - req.tx.yM)));
     const maxRangeM = Math.max(30, Math.min(90000, maxView, req.slant.sensitivityM * 2));
-    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1, { pattern: false }).inputs, patterns: { source: zoneTx.antenna }, maxRangeM, radials: dragging ? 180 : 720, stepM: coverageStepM(maxRangeM, !!rayBuildings), ground: { origin: SG_REFERENCE, grid: rayGround },
+    return { tx: { lat: zoneTx.lat, lon: zoneTx.lon, elevationM: groundOf(zoneTx, groundAt, map.useTerrainElevation) === null ? NaN : req.tx.elevationM }, rxAglM: zone.rx.aglM, inputs: pairLinkInputs(map, state.inputs, zoneTx, zone.rx, 1, { pattern: false }).inputs, patterns: { source: resolveAntenna(map, zoneTx) }, maxRangeM, radials: dragging ? 180 : 720, stepM: coverageStepM(maxRangeM, !!rayBuildings), ground: { origin: SG_REFERENCE, grid: rayGround },
       buildings: rayBuildings && { grid: rayBuildings, rxOnRoof: zone.rx.mount === 'roof', txOwnM: streetBuildingM(zoneTx, groundAt) } };
-  }, [terrain, zoneRequest, zoneTx, zone, rayGround, rayBuildings, dragging, groundAt, map.useTerrainElevation, state.inputs]);
+  }, [terrain, zoneRequest, zoneTx, zone, map.antennaModels, rayGround, rayBuildings, dragging, groundAt, map.useTerrainElevation, state.inputs]);
   useEffect(() => ensureBuildingsFor(coverageRequest?.buildings?.grid), [coverageRequest?.buildings?.grid]);
   useEffect(() => {
     const grid = coverageRequest?.ground.grid;
@@ -390,7 +397,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
       style={typeof drawerSize === 'number' ? { '--drawer-h': `${drawerSize}px` } as React.CSSProperties : undefined}
     >
       <SensorMap
-        sensors={sensors} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} basemap={basemap} buildings={withBuildingsOn} onBasemapFallback={() => { setBasemap('onemap'); setBasemapNotice(true); }} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
+        sensors={sensors} antennaModels={map.antennaModels} selectedId={map.selectedId} tones={tones} links={links} zones={zones} rings={rings} basemap={basemap} buildings={withBuildingsOn} onBasemapFallback={() => { setBasemap('onemap'); setBasemapNotice(true); }} frequencyGhz={state.inputs.frequencyGhz} handleRef={handle}
         onSelect={select}
         onDrag={(id, at) => setDraft((d) => ({ ...d, [id]: at }))}
         onDragEnd={(id, at) => { updateSensor(id, at); setDraft((d) => { const { [id]: _done, ...rest } = d; return rest; }); }}

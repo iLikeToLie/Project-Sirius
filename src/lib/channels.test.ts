@@ -18,7 +18,7 @@ describe('channel state and pair integration', () => {
     const restored = validateImport(legacy)!;
     expect(restored).toEqual(state);
     const [tx, rx] = restored.map.sensors;
-    const inputs = pairInputs(state.inputs, tx, rx, separationM(tx, rx, flat, false));
+    const inputs = pairInputs(state.map, state.inputs, tx, rx, separationM(tx, rx, flat, false));
     const before = calculateLink(inputs, 'desired');
     const [after] = evaluatePairs(restored.map, restored.inputs, flat);
     expect(after.result).toEqual(before);

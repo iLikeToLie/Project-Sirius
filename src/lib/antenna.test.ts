@@ -1,18 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_STATE } from '../data/defaults';
-import type { AntennaPattern, Sensor } from '../types';
-import { bearingDeg, defaultAntenna, elevationDeg, typicalGainDbi, DEFAULT_ANTENNA, isAntennaPattern, normAzimuth, offAxisDeg, pairPatternLoss, patternLossDb } from './antenna';
+import type { AntennaModel, AntennaPattern, MapScenario, Sensor } from '../types';
+import { applyAimTracking, bearingDeg, defaultSensorAntenna, deleteModel, effectiveGainDbi, elevationDeg, findModel, isAntennaModel, isSensorAntenna, MAX_ANTENNA_MODELS, newSectorModel, normAzimuth, offAxisDeg, OMNI_MODEL_ID, pairPatternLoss, patternLossDb, resolveAntenna, typicalGainDbi } from './antenna';
 import { offsetLatLon } from './geo';
 
 const origin = { lat: 1.35, lon: 103.8 };
-const sector = (azimuthDeg: number, beamwidthDeg = 60, frontToBackDb = 25): AntennaPattern => ({ kind: 'sector', azimuthDeg, beamwidthDeg, frontToBackDb, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null });
-const sensor = (at: { lat: number; lon: number }, antenna: AntennaPattern): Sensor => ({ ...DEFAULT_STATE.map.sensors[0], ...at, antenna });
+const sector = (azimuthDeg: number, beamwidthDeg = 60, frontToBackDb = 25): AntennaPattern => ({ kind: 'sector', azimuthDeg, beamwidthDeg, frontToBackDb, verticalBeamwidthDeg: 10, downtiltDeg: 0 });
+const omniPattern = (): AntennaPattern => ({ ...sector(0), kind: 'omni' });
+/** Library shared by the helpers below: every non-omni pattern becomes its own model. */
+const models: AntennaModel[] = [];
+const lib = () => ({ antennaModels: models });
+const sensor = (at: { lat: number; lon: number }, pattern: AntennaPattern): Sensor => {
+  let modelId = OMNI_MODEL_ID;
+  if (pattern.kind === 'sector') {
+    const model: AntennaModel = { id: `t-${models.length}`, name: 'T', kind: 'sector', gainDbi: 0, beamwidthDeg: pattern.beamwidthDeg, verticalBeamwidthDeg: pattern.verticalBeamwidthDeg, frontToBackDb: pattern.frontToBackDb };
+    models.push(model);
+    modelId = model.id;
+  }
+  return { ...DEFAULT_STATE.map.sensors[0], ...at, antenna: { modelId, azimuthDeg: pattern.azimuthDeg, downtiltDeg: pattern.downtiltDeg, aimAtId: null } };
+};
 
 describe('antenna pattern', () => {
-  it('has default values and returns fresh copies', () => {
-    expect(DEFAULT_ANTENNA).toEqual({ kind: 'omni', azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null });
-    expect(defaultAntenna()).toEqual(DEFAULT_ANTENNA);
-    expect(defaultAntenna()).not.toBe(DEFAULT_ANTENNA);
+  it('defaults to a fresh built-in omni sensor antenna', () => {
+    expect(defaultSensorAntenna()).toEqual({ modelId: 'omni', azimuthDeg: 0, downtiltDeg: 0, aimAtId: null });
+    expect(defaultSensorAntenna()).not.toBe(defaultSensorAntenna());
   });
   it('normalises azimuths', () => {
     expect(normAzimuth(-10)).toBe(350);
@@ -48,9 +59,9 @@ describe('antenna pattern', () => {
     const east = offsetLatLon(origin, 500, 0);
     const tx = sensor(origin, sector(90));
     const rx = sensor(east, sector(270));
-    const aimed = pairPatternLoss(tx, rx);
+    const aimed = pairPatternLoss(lib(), tx, rx);
     expect(aimed).toEqual({ txDb: 0, rxDb: 0, txOffDeg: expect.closeTo(0, 3), rxOffDeg: expect.closeTo(0, 3), txElevDeg: 0, rxElevDeg: 0, totalDb: 0 });
-    const away = pairPatternLoss(sensor(origin, sector(270, 60, 25)), sensor(east, sector(0, 60, 20)));
+    const away = pairPatternLoss(lib(), sensor(origin, sector(270, 60, 25)), sensor(east, sector(0, 60, 20)));
     expect(away.txDb).toBe(25);
     expect(away.rxDb).toBe(20);
     expect(away.txOffDeg).toBeCloseTo(180, 3);
@@ -58,20 +69,95 @@ describe('antenna pattern', () => {
     expect(away.totalDb).toBeCloseTo(45, 6);
   });
   it('gives NaN off-axis angles for omni ends', () => {
-    const p = pairPatternLoss(sensor(origin, defaultAntenna()), sensor(offsetLatLon(origin, 0, 300), sector(180)));
+    const p = pairPatternLoss(lib(), sensor(origin, omniPattern()), sensor(offsetLatLon(origin, 0, 300), sector(180)));
     expect(p.txDb).toBe(0);
     expect(p.txOffDeg).toBeNaN();
     expect(p.rxOffDeg).toBeCloseTo(0, 3);
   });
-  it('validates patterns', () => {
-    expect(isAntennaPattern(sector(725))).toBe(true);
-    expect(isAntennaPattern(DEFAULT_ANTENNA)).toBe(true);
-    for (const bad of [null, 'x', { ...DEFAULT_ANTENNA, kind: 'dish' }, { ...DEFAULT_ANTENNA, azimuthDeg: NaN }, { ...DEFAULT_ANTENNA, beamwidthDeg: 0.5 },
-      { ...DEFAULT_ANTENNA, beamwidthDeg: 181 }, { ...DEFAULT_ANTENNA, frontToBackDb: -1 }, { ...DEFAULT_ANTENNA, frontToBackDb: 61 }, { kind: 'omni' },
-      { ...DEFAULT_ANTENNA, verticalBeamwidthDeg: 0.5 }, { ...DEFAULT_ANTENNA, verticalBeamwidthDeg: 91 }, { ...DEFAULT_ANTENNA, downtiltDeg: -21 }, { ...DEFAULT_ANTENNA, downtiltDeg: 46 },
-      { ...DEFAULT_ANTENNA, downtiltDeg: NaN }, { ...DEFAULT_ANTENNA, aimAtId: 5 }]) {
-      expect(isAntennaPattern(bad)).toBe(false);
+  it('validates models and sensor antennas', () => {
+    const model = newSectorModel([]);
+    expect(isAntennaModel(model)).toBe(true);
+    for (const bad of [null, 'x', { ...model, kind: 'dish' }, { ...model, id: '' }, { ...model, gainDbi: NaN }, { ...model, beamwidthDeg: 0.5 }, { ...model, beamwidthDeg: 181 },
+      { ...model, verticalBeamwidthDeg: 0.5 }, { ...model, verticalBeamwidthDeg: 91 }, { ...model, frontToBackDb: -1 }, { ...model, frontToBackDb: 61 }, { id: 'x' }]) {
+      expect(isAntennaModel(bad)).toBe(false);
     }
+    expect(isSensorAntenna(defaultSensorAntenna())).toBe(true);
+    expect(isSensorAntenna({ ...defaultSensorAntenna(), azimuthDeg: 725 })).toBe(true);
+    for (const bad of [null, {}, { ...defaultSensorAntenna(), modelId: 3 }, { ...defaultSensorAntenna(), azimuthDeg: NaN }, { ...defaultSensorAntenna(), downtiltDeg: -21 },
+      { ...defaultSensorAntenna(), downtiltDeg: 46 }, { ...defaultSensorAntenna(), aimAtId: 5 }, { modelId: 'omni', azimuthDeg: 0, downtiltDeg: 0 }]) {
+      expect(isSensorAntenna(bad)).toBe(false);
+    }
+  });
+});
+
+describe('antenna library', () => {
+  const map = (antennaModels: AntennaModel[], sensors: Sensor[] = []) => ({ ...DEFAULT_STATE.map, antennaModels, sensors }) as MapScenario;
+  const withModel = (s: Sensor, modelId: string, extra: Partial<Sensor['antenna']> = {}): Sensor => ({ ...s, antenna: { ...s.antenna, modelId, ...extra } });
+  it('creates sector models with unique ids and names, typical gain to 0.5 dB', () => {
+    const a = newSectorModel([]);
+    expect(a).toEqual({ id: 'ant-1', name: 'Sector 1', kind: 'sector', gainDbi: 18, beamwidthDeg: 65, verticalBeamwidthDeg: 10, frontToBackDb: 25 });
+    const b = newSectorModel([a]);
+    expect(b.id).toBe('ant-2');
+    expect(b.name).toBe('Sector 2');
+    const c = newSectorModel([{ ...a, id: 'ant-2' }, { ...a, name: 'Sector 2' }], 'Panel');
+    expect(c.id).toBe('ant-3');
+    expect(c.name).toBe('Panel');
+    expect(newSectorModel([{ ...a, id: 'ant-1' }, { ...a, id: 'ant-2', name: 'Sector 5' }]).id).toBe('ant-3');
+    expect(MAX_ANTENNA_MODELS).toBe(24);
+  });
+  it('resolves omni, unknown models and models to the flat pattern', () => {
+    const m: AntennaModel = { id: 'ant-1', name: 'S', kind: 'sector', gainDbi: 17, beamwidthDeg: 40, verticalBeamwidthDeg: 8, frontToBackDb: 30 };
+    const s = { ...DEFAULT_STATE.map.sensors[0], antenna: { modelId: 'ant-1', azimuthDeg: 120, downtiltDeg: 4, aimAtId: null } };
+    const lib1 = map([m]);
+    expect(findModel(lib1, 'ant-1')).toBe(m);
+    expect(findModel(lib1, 'zz')).toBeUndefined();
+    expect(resolveAntenna(lib1, s)).toEqual({ kind: 'sector', azimuthDeg: 120, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 8, downtiltDeg: 4 });
+    expect(resolveAntenna(lib1, withModel(s, 'omni')).kind).toBe('omni');
+    expect(resolveAntenna(lib1, withModel(s, 'missing')).kind).toBe('omni');
+    expect(resolveAntenna(map([{ ...m, kind: 'omni' }]), s).kind).toBe('omni');
+  });
+  it('gives gain to the model, and to the sensor for omni', () => {
+    const m: AntennaModel = { ...newSectorModel([]), gainDbi: 17.5 };
+    const s = { ...DEFAULT_STATE.map.sensors[0], gainDbi: 9 };
+    const lib1 = map([m]);
+    expect(effectiveGainDbi(lib1, s)).toBe(9);
+    expect(effectiveGainDbi(lib1, withModel(s, m.id))).toBe(17.5);
+    expect(effectiveGainDbi(lib1, withModel(s, 'missing'))).toBe(9);
+    expect(withModel(s, m.id).gainDbi).toBe(9);
+  });
+  it('deletes a model and sends its sensors back to omni', () => {
+    const [a, b] = DEFAULT_STATE.map.sensors;
+    const m1 = newSectorModel([]), m2 = newSectorModel([m1]);
+    const next = deleteModel(map([m1, m2], [withModel(a, m1.id, { azimuthDeg: 50 }), withModel(b, m2.id)]), m1.id);
+    expect(next.antennaModels).toEqual([m2]);
+    expect(next.sensors[0].antenna).toEqual({ modelId: 'omni', azimuthDeg: 50, downtiltDeg: 0, aimAtId: null });
+    expect(next.sensors[1].antenna.modelId).toBe(m2.id);
+  });
+});
+
+describe('aim tracking', () => {
+  const [a0, b0] = DEFAULT_STATE.map.sensors;
+  const a: Sensor = { ...a0, ...origin }, b: Sensor = { ...b0, ...offsetLatLon(origin, 500, 0) };
+  const track = (s: Sensor, aimAtId: string | null, azimuthDeg = 0): Sensor => ({ ...s, antenna: { ...s.antenna, aimAtId, azimuthDeg } });
+  it('points at the target, rounded to 0.1 degree', () => {
+    const [x, y] = applyAimTracking([track(a, b.id), b]);
+    expect(x.antenna.azimuthDeg).toBe(90);
+    expect(y).toBe(b);
+    const odd = applyAimTracking([track(a, b.id), { ...b, ...offsetLatLon(origin, 300, 700) }])[0].antenna.azimuthDeg;
+    expect(odd).toBeCloseTo(23.2, 5);
+  });
+  it('follows when the target moves and returns the same objects when nothing changes', () => {
+    const list = [track(a, b.id), b];
+    const first = applyAimTracking(list);
+    expect(applyAimTracking(first)).toBe(first);
+    const moved = applyAimTracking([first[0], { ...b, ...offsetLatLon(origin, 0, 500) }]);
+    expect(moved[0].antenna.azimuthDeg).toBe(0);
+    const untracked = [a, b];
+    expect(applyAimTracking(untracked)).toBe(untracked);
+  });
+  it('ignores a missing target or a self target', () => {
+    const list = [track(a, 'ghost', 33), track(b, b.id, 44)];
+    expect(applyAimTracking(list)).toBe(list);
   });
 });
 
@@ -105,26 +191,27 @@ describe('vertical pattern', () => {
   });
   it('sees a tall Tx tilted down differently from a street Rx at the foot of the mast', () => {
     const near = offsetLatLon(origin, 0, 50);
-    const tx = sensor(origin, tilted(0)), rx = sensor(near, defaultAntenna());
+    const tilt = (t: Sensor, downtiltDeg: number): Sensor => ({ ...t, antenna: { ...t.antenna, downtiltDeg } });
+    const tx = sensor(origin, tilted(0)), rx = sensor(near, omniPattern());
     // 60 m mast, receiver at 2 m, 50 m away: 49 deg below the horizon.
-    const flat = pairPatternLoss({ ...tx, antenna: { ...tilted(0), azimuthDeg: 0 } }, rx, 60, 2);
+    const flat = pairPatternLoss(lib(), tx, rx, 60, 2);
     expect(flat.txElevDeg).toBeCloseTo(-49.2, 1);
     expect(flat.txDb).toBe(20);
     expect(flat.rxElevDeg).toBeNaN();
-    const down = pairPatternLoss({ ...tx, antenna: { ...tilted(0), azimuthDeg: 0, downtiltDeg: 10 } }, rx, 60, 2);
+    const down = pairPatternLoss(lib(), tilt(tx, 10), rx, 60, 2);
     expect(down.txDb).toBe(20);
     // Far away the same mast is nearly on the horizon, and a 3 deg downtilt aims at it.
-    const far = sensor(offsetLatLon(origin, 0, 1000), defaultAntenna());
-    const aimed = pairPatternLoss({ ...tx, antenna: { ...tilted(3.3), azimuthDeg: 0 } }, far, 60, 2);
+    const far = sensor(offsetLatLon(origin, 0, 1000), omniPattern());
+    const aimed = pairPatternLoss(lib(), tilt(tx, 3.3), far, 60, 2);
     expect(aimed.txElevDeg).toBeCloseTo(-3.32, 1);
     expect(aimed.txDb).toBeLessThan(0.01);
-    expect(pairPatternLoss({ ...tx, antenna: tilted(0) }, far, 60, 2).txDb).toBeGreaterThan(1);
+    expect(pairPatternLoss(lib(), tx, far, 60, 2).txDb).toBeGreaterThan(1);
     // Without heights the elevation is 0.
-    expect(pairPatternLoss(tx, far).txElevDeg).toBe(0);
+    expect(pairPatternLoss(lib(), tx, far).txElevDeg).toBe(0);
   });
   it('applies the Rx pattern with the opposite elevation sign', () => {
     const rx = sensor(offsetLatLon(origin, 0, 100), { ...sector(180), downtiltDeg: 0 });
-    const p = pairPatternLoss(sensor(origin, defaultAntenna()), rx, 2, 22);
+    const p = pairPatternLoss(lib(), sensor(origin, omniPattern()), rx, 2, 22);
     expect(p.rxElevDeg).toBeCloseTo(-11.3, 1);
     expect(p.rxDb).toBeCloseTo(12 * (11.31 / 10) ** 2, 1);
   });

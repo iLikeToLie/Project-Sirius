@@ -192,54 +192,72 @@ it('migrates v3 onto the terrain model with the default objective', () => {
   expect(activeInputs(next, () => 0).otherLossDb).toBe(old.inputs.otherLossDb);
 });
 
-describe('antenna pattern (schema 8)', () => {
+describe('antenna library (schema 8)', () => {
   const raw = () => JSON.parse(JSON.stringify(freshDefaultState()));
-  it('migrates a sensor without an antenna to the omni default at schema 8', () => {
+  const model = (id: string, extra = {}) => ({ id, name: id, kind: 'sector', gainDbi: 17, beamwidthDeg: 40, verticalBeamwidthDeg: 8, frontToBackDb: 30, ...extra });
+  it('migrates a map without antennaModels or sensor antennas to empty library and built-in omni', () => {
     const old = raw();
     old.schemaVersion = 7;
+    delete old.map.antennaModels;
     for (const s of old.map.sensors) delete s.antenna;
     const next = normalizeState(old);
     expect(next.schemaVersion).toBe(8);
-    for (const s of next.map.sensors) expect(s.antenna).toEqual({ kind: 'omni', azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null });
+    expect(next.map.antennaModels).toEqual([]);
+    for (const s of next.map.sensors) expect(s.antenna).toEqual({ modelId: 'omni', azimuthDeg: 0, downtiltDeg: 0, aimAtId: null });
   });
-  it('rejects a sensor with an invalid antenna', () => {
-    const bad = raw();
-    bad.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 10, beamwidthDeg: 0, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
-    expect(validateImport(bad)).toBeNull();
-    expect(normalizeState(bad).map).toEqual(freshDefaultState().map);
-  });
-  it('round-trips a sector antenna and normalises its azimuth', () => {
+  it('round-trips models and sensor pointing, normalising the azimuth', () => {
     const state = raw();
-    state.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 120, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
+    const other = state.map.sensors[1].id;
+    state.map.antennaModels = [model('ant-1')];
+    state.map.sensors[0].antenna = { modelId: 'ant-1', azimuthDeg: 120, downtiltDeg: -3, aimAtId: other };
     expect(validateImport(state)).toEqual(state);
     state.map.sensors[0].antenna.azimuthDeg = -30;
     expect(validateImport(state)?.map.sensors[0].antenna.azimuthDeg).toBe(330);
   });
-  it('loads schema-8 saves with a horizontal-only antenna, defaulting the vertical fields', () => {
-    const old = raw();
-    old.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 120, beamwidthDeg: 40, frontToBackDb: 30 };
-    const next = normalizeState(old);
-    expect(next.map.sensors[0].antenna).toEqual({ kind: 'sector', azimuthDeg: 120, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null });
+  it('rejects invalid models, duplicate ids, the reserved id and more than 24', () => {
+    const cases: unknown[][] = [
+      [model('a', { kind: 'dish' })], [model('a', { beamwidthDeg: 0 })], [model('a', { verticalBeamwidthDeg: 91 })], [model('a', { frontToBackDb: 61 })], [model('a', { gainDbi: 'x' })],
+      [model('a'), model('a')], [model('omni')], [model('')], Array.from({ length: 25 }, (_, i) => model(`m${i}`)),
+    ];
+    for (const models of cases) { const state = raw(); state.map.antennaModels = models; expect(validateImport(state)).toBeNull(); }
+    const state = raw(); state.map.antennaModels = 'x'; expect(validateImport(state)).toBeNull();
+    const ok = raw(); ok.map.antennaModels = Array.from({ length: 24 }, (_, i) => model(`m${i}`)); expect(validateImport(ok)).not.toBeNull();
   });
-  it('rejects invalid vertical fields', () => {
-    for (const bad of [{ verticalBeamwidthDeg: 0 }, { verticalBeamwidthDeg: 91 }, { downtiltDeg: -21 }, { downtiltDeg: 46 }, { downtiltDeg: 'x' }, { aimAtId: 3 }]) {
+  it('rejects an invalid sensor antenna', () => {
+    for (const bad of [{ modelId: 3 }, { azimuthDeg: 'x' }, { downtiltDeg: -21 }, { downtiltDeg: 46 }, { downtiltDeg: 'x' }, { aimAtId: 3 }, 'x']) {
       const state = raw();
-      state.map.sensors[0].antenna = { ...state.map.sensors[0].antenna, ...bad };
+      state.map.sensors[0].antenna = typeof bad === 'string' ? bad : { ...state.map.sensors[0].antenna, ...bad };
       expect(validateImport(state)).toBeNull();
     }
+    expect(normalizeState({ ...raw(), map: { ...raw().map, sensors: [{ ...raw().map.sensors[0], antenna: 'x' }] } }).map).toEqual(freshDefaultState().map);
   });
-  it('round-trips vertical beamwidth, downtilt and a valid aimAtId', () => {
+  it('moves an unknown model to omni and clears an aimAtId that names no sensor or the sensor itself', () => {
     const state = raw();
-    const other = state.map.sensors[1].id;
-    state.map.sensors[0].antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 7, downtiltDeg: -3, aimAtId: other };
-    expect(validateImport(state)).toEqual(state);
-  });
-  it('clears an aimAtId that names no sensor or the sensor itself', () => {
-    const state = raw();
-    state.map.sensors[0].antenna = { ...state.map.sensors[0].antenna, aimAtId: 'ghost' };
+    state.map.sensors[0].antenna = { ...state.map.sensors[0].antenna, modelId: 'ghost', aimAtId: 'ghost' };
     state.map.sensors[1].antenna = { ...state.map.sensors[1].antenna, aimAtId: state.map.sensors[1].id };
     const next = validateImport(state)!;
+    expect(next.map.sensors[0].antenna.modelId).toBe('omni');
     expect(next.map.sensors[0].antenna.aimAtId).toBeNull();
     expect(next.map.sensors[1].antenna.aimAtId).toBeNull();
+  });
+  it('converts the interim flat per-sensor format, reusing identical models and keeping results', () => {
+    const state = raw();
+    const [a, b] = state.map.sensors;
+    delete state.map.antennaModels;
+    a.gainDbi = 15; b.gainDbi = 15;
+    a.antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 7, downtiltDeg: -3, aimAtId: b.id };
+    b.antenna = { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 7, downtiltDeg: 2, aimAtId: null };
+    const next = normalizeState(state);
+    expect(next.map.antennaModels).toEqual([{ id: 'ant-1', name: 'Sector 1', kind: 'sector', gainDbi: 15, beamwidthDeg: 40, verticalBeamwidthDeg: 7, frontToBackDb: 30 }]);
+    expect(next.map.sensors[0].antenna).toEqual({ modelId: 'ant-1', azimuthDeg: 90, downtiltDeg: -3, aimAtId: b.id });
+    expect(next.map.sensors[1].antenna).toEqual({ modelId: 'ant-1', azimuthDeg: 270, downtiltDeg: 2, aimAtId: null });
+    // Different gain: a second model. Horizontal-only flat values default the vertical fields. Omni becomes the default.
+    b.gainDbi = 12; b.antenna = { kind: 'sector', azimuthDeg: 10, beamwidthDeg: 40, frontToBackDb: 30 };
+    const two = normalizeState(state);
+    expect(two.map.antennaModels.map((m) => [m.id, m.gainDbi, m.verticalBeamwidthDeg])).toEqual([['ant-1', 15, 7], ['ant-2', 12, 10]]);
+    b.antenna = { kind: 'omni', azimuthDeg: 5, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
+    expect(normalizeState(state).map.sensors[1].antenna).toEqual({ modelId: 'omni', azimuthDeg: 0, downtiltDeg: 0, aimAtId: null });
+    b.antenna = { kind: 'sector', azimuthDeg: 10, beamwidthDeg: 0, frontToBackDb: 30 };
+    expect(validateImport(state)).toBeNull();
   });
 });

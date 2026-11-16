@@ -87,6 +87,17 @@ export interface AntennaPattern {
   verticalBeamwidthDeg: number;
   /** Downtilt, −20..45; positive points below the horizon. */
   downtiltDeg: number;
+}
+
+/** A library antenna: shape and gain. Pointing lives on the sensor. */
+export interface AntennaModel {
+  id: string; name: string; kind: 'omni' | 'sector'; gainDbi: number;
+  beamwidthDeg: number; verticalBeamwidthDeg: number; frontToBackDb: number;
+}
+
+/** A sensor's use of the library: which model, and where it points. `modelId` 'omni' is the built-in omni using the sensor's Gain. */
+export interface SensorAntenna {
+  modelId: string; azimuthDeg: number; downtiltDeg: number;
   /** When set, the azimuth follows the bearing to that sensor. */
   aimAtId: string | null;
 }
@@ -115,12 +126,13 @@ export interface Sensor {
   polarization: 'V' | 'H' | 'RHCP' | 'LHCP';
   /** Where the antenna stands when it is on a building: its height counts from the roof, or from the street. */
   mount: 'roof' | 'street';
-  /** Kept when toggling kind (like the role fields), so sector values are not lost. */
-  antenna: AntennaPattern;
+  antenna: SensorAntenna;
 }
 
 export interface MapScenario {
   sensors: Sensor[];
+  /** Antenna library (user models, at most 24). */
+  antennaModels: AntennaModel[];
   selectedId: string | null;
   zonesForRxId: 'auto' | string;
   useTerrainElevation: boolean;

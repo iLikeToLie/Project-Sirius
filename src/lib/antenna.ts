@@ -1,14 +1,15 @@
-import type { AntennaPattern, Sensor } from '../types';
+import type { AntennaModel, AntennaPattern, MapScenario, Sensor, SensorAntenna } from '../types';
 import { type LatLon, toLocalM } from './geo';
-
-/** Omni, with the sector values a switch to Sector starts from. */
-export const DEFAULT_ANTENNA: AntennaPattern = { kind: 'omni', azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
 
 /** Cap on the vertical term of the combined 3GPP pattern, in dB. */
 export const VERTICAL_CAP_DB = 20;
 
-/** A fresh copy, safe to mutate or store on a sensor. */
-export const defaultAntenna = (): AntennaPattern => ({ ...DEFAULT_ANTENNA });
+/** Built-in model id: omni using the sensor's own Gain field. Never stored in the library. */
+export const OMNI_MODEL_ID = 'omni';
+export const MAX_ANTENNA_MODELS = 24;
+
+/** A fresh sensor antenna: built-in omni, pointing north, no tilt, not tracking. */
+export const defaultSensorAntenna = (): SensorAntenna => ({ modelId: OMNI_MODEL_ID, azimuthDeg: 0, downtiltDeg: 0, aimAtId: null });
 
 /** Any finite angle into [0, 360). */
 export const normAzimuth = (deg: number): number => {
@@ -72,12 +73,71 @@ export interface PairPatternLoss {
 /** Zero loss, Omni at both ends. */
 export const ZERO_PATTERN_LOSS: PairPatternLoss = { txDb: 0, rxDb: 0, txOffDeg: NaN, rxOffDeg: NaN, txElevDeg: NaN, rxElevDeg: NaN, totalDb: 0 };
 
+type Models = Pick<MapScenario, 'antennaModels'>;
+
+export const findModel = (map: Models, id: string): AntennaModel | undefined => map.antennaModels.find((m) => m.id === id);
+
+/** New sector model: 65° × 10°, 25 dB front-to-back, typical gain to 0.5 dB, first free id `ant-<n>` and name "Sector <k>". */
+export function newSectorModel(existing: AntennaModel[], name?: string): AntennaModel {
+  const ids = new Set(existing.map((m) => m.id));
+  let n = existing.length + 1;
+  while (ids.has(`ant-${n}`)) n += 1;
+  const names = new Set(existing.map((m) => m.name));
+  let k = 1;
+  while (names.has(`Sector ${k}`)) k += 1;
+  return { id: `ant-${n}`, name: name ?? `Sector ${k}`, kind: 'sector', gainDbi: Math.round(typicalGainDbi(65, 10) * 2) / 2,
+    beamwidthDeg: 65, verticalBeamwidthDeg: 10, frontToBackDb: 25 };
+}
+
+const OMNI_PATTERN = { kind: 'omni', beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10 } as const;
+
+/** The flat pattern the maths uses: omni (built-in, unknown model or an omni model) or the model's shape with the sensor's pointing. */
+export function resolveAntenna(map: Models, sensor: Sensor): AntennaPattern {
+  const a = sensor.antenna;
+  const model = a.modelId === OMNI_MODEL_ID ? undefined : findModel(map, a.modelId);
+  if (!model || model.kind === 'omni') return { ...OMNI_PATTERN, azimuthDeg: a.azimuthDeg, downtiltDeg: a.downtiltDeg };
+  return { kind: 'sector', azimuthDeg: a.azimuthDeg, beamwidthDeg: model.beamwidthDeg, frontToBackDb: model.frontToBackDb,
+    verticalBeamwidthDeg: model.verticalBeamwidthDeg, downtiltDeg: a.downtiltDeg };
+}
+
+/** Boresight gain the link maths uses: the sensor's Gain for built-in omni (or an unknown model), else the model's. */
+export function effectiveGainDbi(map: Models, sensor: Sensor): number {
+  const model = sensor.antenna.modelId === OMNI_MODEL_ID ? undefined : findModel(map, sensor.antenna.modelId);
+  return model ? model.gainDbi : sensor.gainDbi;
+}
+
+/**
+ * Points every sensor with an Aim at target at it (bearing to 0.1°). Returns the same array, and the same
+ * sensor objects, when nothing changes.
+ */
+export function applyAimTracking(sensors: Sensor[]): Sensor[] {
+  let changed = false;
+  const byId = new Map(sensors.map((s) => [s.id, s]));
+  const next = sensors.map((s) => {
+    const id = s.antenna.aimAtId;
+    const target = id === null ? undefined : byId.get(id);
+    if (!target || target === s) return s;
+    const azimuthDeg = normAzimuth(Math.round(bearingDeg(s, target) * 10) / 10);
+    if (azimuthDeg === s.antenna.azimuthDeg) return s;
+    changed = true;
+    return { ...s, antenna: { ...s.antenna, azimuthDeg } };
+  });
+  return changed ? next : sensors;
+}
+
+/** Removes a model; its sensors go back to the built-in omni. */
+export function deleteModel(map: MapScenario, id: string): MapScenario {
+  return { ...map, antennaModels: map.antennaModels.filter((m) => m.id !== id),
+    sensors: map.sensors.map((s) => s.antenna.modelId === id ? { ...s, antenna: { ...s.antenna, modelId: OMNI_MODEL_ID } } : s) };
+}
+
 /**
  * Pattern loss of a real Tx→Rx pair: Tx uses the bearing Tx→Rx, Rx uses Rx→Tx. With both antenna
  * elevations (metres above the same datum) each end also sees the far end's elevation angle;
- * without them the elevation is 0.
+ * without them the elevation is 0. Patterns are resolved from the map's library.
  */
-export function pairPatternLoss(tx: Sensor, rx: Sensor, txElevM?: number, rxElevM?: number): PairPatternLoss {
+export function pairPatternLoss(map: Models, tx: Sensor, rx: Sensor, txElevM?: number, rxElevM?: number): PairPatternLoss {
+  const txA = resolveAntenna(map, tx), rxA = resolveAntenna(map, rx);
   const txBearing = bearingDeg(tx, rx);
   const rxBearing = bearingDeg(rx, tx);
   let txEl = 0, rxEl = 0;
@@ -87,29 +147,36 @@ export function pairPatternLoss(tx: Sensor, rx: Sensor, txElevM?: number, rxElev
     txEl = elevationDeg(txElevM, rxElevM, horizontalM);
     rxEl = elevationDeg(rxElevM, txElevM, horizontalM);
   }
-  const txDb = patternLossDb(tx.antenna, txBearing, txEl);
-  const rxDb = patternLossDb(rx.antenna, rxBearing, rxEl);
+  const txDb = patternLossDb(txA, txBearing, txEl);
+  const rxDb = patternLossDb(rxA, rxBearing, rxEl);
   return {
     txDb,
     rxDb,
-    txOffDeg: tx.antenna.kind === 'omni' ? NaN : offAxisDeg(tx.antenna.azimuthDeg, txBearing),
-    rxOffDeg: rx.antenna.kind === 'omni' ? NaN : offAxisDeg(rx.antenna.azimuthDeg, rxBearing),
-    txElevDeg: tx.antenna.kind === 'omni' ? NaN : txEl,
-    rxElevDeg: rx.antenna.kind === 'omni' ? NaN : rxEl,
+    txOffDeg: txA.kind === 'omni' ? NaN : offAxisDeg(txA.azimuthDeg, txBearing),
+    rxOffDeg: rxA.kind === 'omni' ? NaN : offAxisDeg(rxA.azimuthDeg, rxBearing),
+    txElevDeg: txA.kind === 'omni' ? NaN : txEl,
+    rxElevDeg: rxA.kind === 'omni' ? NaN : rxEl,
     totalDb: txDb + rxDb,
   };
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** Kind is omni/sector, azimuth any finite number, beamwidth 1–180, front-to-back 0–60; vertical beamwidth 1–90, downtilt −20..45 and aimAtId (string or null) when present. */
-export function isAntennaPattern(value: unknown): value is AntennaPattern {
+/** id and name non-empty strings, kind omni/sector, gain finite, beamwidth 1–180, vertical beamwidth 1–90, front-to-back 0–60. */
+export function isAntennaModel(value: unknown): value is AntennaModel {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  return (v.kind === 'omni' || v.kind === 'sector') && finite(v.azimuthDeg)
+  return typeof v.id === 'string' && v.id !== '' && typeof v.name === 'string'
+    && (v.kind === 'omni' || v.kind === 'sector') && finite(v.gainDbi)
     && finite(v.beamwidthDeg) && v.beamwidthDeg >= 1 && v.beamwidthDeg <= 180
-    && finite(v.frontToBackDb) && v.frontToBackDb >= 0 && v.frontToBackDb <= 60
-    && (v.verticalBeamwidthDeg === undefined || (finite(v.verticalBeamwidthDeg) && v.verticalBeamwidthDeg >= 1 && v.verticalBeamwidthDeg <= 90))
-    && (v.downtiltDeg === undefined || (finite(v.downtiltDeg) && v.downtiltDeg >= -20 && v.downtiltDeg <= 45))
-    && (v.aimAtId === undefined || v.aimAtId === null || typeof v.aimAtId === 'string');
+    && finite(v.verticalBeamwidthDeg) && v.verticalBeamwidthDeg >= 1 && v.verticalBeamwidthDeg <= 90
+    && finite(v.frontToBackDb) && v.frontToBackDb >= 0 && v.frontToBackDb <= 60;
+}
+
+/** modelId string, azimuth finite, downtilt −20..45, aimAtId string or null. */
+export function isSensorAntenna(value: unknown): value is SensorAntenna {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.modelId === 'string' && finite(v.azimuthDeg) && finite(v.downtiltDeg) && v.downtiltDeg >= -20 && v.downtiltDeg <= 45
+    && (v.aimAtId === null || typeof v.aimAtId === 'string');
 }

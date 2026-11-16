@@ -6,7 +6,8 @@ import { type LatLon, SG_REFERENCE } from '../../lib/geo';
 import { signalColour } from '../../lib/signalColour';
 import { PLACEMENT } from '../../lib/interference';
 import { ZONE, type ZoneResult } from '../../lib/zones';
-import type { Sensor } from '../../types';
+import type { AntennaModel, Sensor } from '../../types';
+import { resolveAntenna } from '../../lib/antenna';
 import { lightStyle, lightSourceIds, installLightBasemap, showBasemap, type Basemap } from './lightBasemap';
 export type { Basemap } from './lightBasemap';
 import { SignalOverlay } from './SignalOverlay';
@@ -128,17 +129,18 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
 }
 
 /** A ring belongs to the transmitter nearest its centre; its label says "boresight" when that transmitter is a Sector. */
-export function ringIsSector(points: LatLon[], sensors: Sensor[]): boolean {
+export function ringIsSector(points: LatLon[], sensors: Sensor[], antennaModels: AntennaModel[]): boolean {
   if (!points.length) return false;
   const lat = points.reduce((a, p) => a + p.lat, 0) / points.length;
   const lon = points.reduce((a, p) => a + p.lon, 0) / points.length;
   let best: Sensor | null = null, bestD = Infinity;
   for (const s of sensors) if (s.role === 'tx') { const d = (s.lat - lat) ** 2 + (s.lon - lon) ** 2; if (d < bestD) { best = s; bestD = d; } }
-  return best?.antenna?.kind === 'sector';
+  return !!best && resolveAntenna({ antennaModels }, best).kind === 'sector';
 }
 
-export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, buildings = false, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
+export function SensorMap({ sensors, antennaModels, selectedId, tones, links, zones, rings, basemap, buildings = false, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
   sensors: Sensor[];
+  antennaModels: AntennaModel[];
   selectedId: string | null;
   tones: Record<string, string>;
   links: MapLink[];
@@ -164,6 +166,8 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
   callbacks.current = { onSelect, onDrag, onDragEnd, onNudge, onView, onBasemapFallback };
   const sensorsRef = useRef(sensors);
   sensorsRef.current = sensors;
+  const modelsRef = useRef(antennaModels);
+  modelsRef.current = antennaModels;
   const [loaded, setLoaded] = useState(false);
   // MapLibre aborts (and logs) an image still loading when updateImage is called again,
   // so zone images are applied one at a time and only the newest waiting one is kept.
@@ -304,9 +308,9 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       entry.element.setAttribute('aria-label', `${sensor.role === 'tx' ? 'Transmitter' : 'Receiver'} ${sensor.name}. Arrow keys move 1 m, Shift with arrows 10 m.`);
       entry.element.setAttribute('aria-pressed', String(sensor.id === selectedId));
       entry.element.querySelector('.sensor-marker-label')!.textContent = sensor.name;
-      const antenna = sensor.antenna;
+      const antenna = resolveAntenna({ antennaModels }, sensor);
       let wedge = entry.element.querySelector<SVGSVGElement>('.antenna-wedge');
-      if (antenna?.kind === 'sector') {
+      if (antenna.kind === 'sector') {
         if (!wedge) {
           wedge = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
           wedge.setAttribute('class', 'antenna-wedge');
@@ -321,7 +325,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
         wedge.style.transform = `rotate(${antenna.azimuthDeg - map.getBearing()}deg)`;
       } else wedge?.remove();
     }
-  }, [sensors, selectedId, tones, loaded]);
+  }, [sensors, antennaModels, selectedId, tones, loaded]);
 
   // A rotated map turns the wedges with it.
   useEffect(() => {
@@ -407,7 +411,7 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     if (!loaded || !map) return;
     (map.getSource('range-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.map(r => outlineFeature([r.points], { id: r.id })) });
     const labels = rings.map(r => {
-      const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label + (ringIsSector(r.points, sensorsRef.current) ? ' (boresight)' : '');
+      const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label + (ringIsSector(r.points, sensorsRef.current, modelsRef.current) ? ' (boresight)' : '');
       return new maplibregl.Marker({ element: el }).setLngLat([r.points[0].lon, r.points[0].lat]).addTo(map);
     });
     return () => labels.forEach(m => m.remove());

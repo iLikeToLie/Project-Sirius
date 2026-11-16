@@ -1,7 +1,7 @@
 import type { LinkInputs, MapScenario, Sensor, SensorRole } from '../types';
 import { buildingsOf, flatGround } from './buildings';
 import type { GroundAt } from './elevation';
-import { defaultAntenna, pairPatternLoss, ZERO_PATTERN_LOSS, type PairPatternLoss } from './antenna';
+import { defaultSensorAntenna, effectiveGainDbi, pairPatternLoss, ZERO_PATTERN_LOSS, type PairPatternLoss } from './antenna';
 import { type LatLon, toLocalM } from './geo';
 import { buildProfile, bullingtonLossDb, type Clearance } from './propagation';
 import { calculateLink, type LinkResult } from './rf';
@@ -47,7 +47,7 @@ export function createSensor(existing: Sensor[], role: SensorRole, at: LatLon, d
     rejectionMask: defaultRejectionMask(),
     polarization: 'V',
     mount: 'roof',
-    antenna: defaultAntenna(),
+    antenna: defaultSensorAntenna(),
   };
 }
 
@@ -71,10 +71,14 @@ export function changeRole(sensors: Sensor[], id: string, role: SensorRole): Sen
   return sensors.map((s) => (s.id === id ? setRole(s, role, sensors) : role === 'rx' ? withoutDesired(s, id) : s));
 }
 
-/** Removes a sensor and its desired links; an emptied list returns to auto. */
+/** Drops an Aim at reference to a removed sensor (the azimuth stays where it was). */
+const withoutAim = (s: Sensor, id: string): Sensor =>
+  s.antenna.aimAtId === id ? { ...s, antenna: { ...s.antenna, aimAtId: null } } : s;
+
+/** Removes a sensor, its desired links and any Aim at reference to it; an emptied list returns to auto. */
 export const removeSensor = (sensors: Sensor[], id: string) => sensors
   .filter((s) => s.id !== id)
-  .map((s) => withoutDesired(s, id));
+  .map((s) => withoutAim(withoutDesired(s, id), id));
 
 /**
  * The base an antenna's height above ground counts from: the ground, plus the roof when buildings
@@ -128,15 +132,15 @@ export function resolveDesiredTxs(scenario: MapScenario, rx: Sensor, groundAt: G
   return best ? [best] : [];
 }
 
-export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number): LinkInputs {
+export function pairInputs(map: Pick<MapScenario, 'antennaModels'>, shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number): LinkInputs {
   return {
     ...shared,
     txId: tx.name,
     rxId: rx.name,
     transmitPowerDbm: tx.powerDbm,
-    txGainDbi: tx.gainDbi,
+    txGainDbi: effectiveGainDbi(map, tx),
     txLossDb: tx.cableLossDb,
-    rxGainDbi: rx.gainDbi,
+    rxGainDbi: effectiveGainDbi(map, rx),
     rxLossDb: rx.cableLossDb,
     sensitivityDbm: rx.sensitivityDbm,
     fadeMarginTargetDb: rx.fadeMarginTargetDb,
@@ -146,14 +150,14 @@ export function pairInputs(shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM
 }
 
 export function pairLinkInputs(map: MapScenario, shared: LinkInputs, tx: Sensor, rx: Sensor, distanceM: number, opts: { pattern?: boolean; /** Antenna elevations above the datum (ground + roof + AGL); absent means elevation 0 at both ends. */ elevationsM?: { tx: number; rx: number } } = {}): { inputs: LinkInputs; rejectionDb: number; polarizationDb: number; pattern: PairPatternLoss } {
-  const inputs = pairInputs(shared, tx, rx, distanceM);
+  const inputs = pairInputs(map, shared, tx, rx, distanceM);
   inputs.frequencyGhz = centreMhz(tx, shared) / 1000;
   const rejectionDb = frequencyRejectionDb(
     { fMhz: centreMhz(tx, shared), bwMhz: tx.bandwidthMhz },
     { fMhz: centreMhz(rx, shared), bwMhz: rx.bandwidthMhz, acrDb: rx.acrDb, mask: rx.rejectionMask }, map.rejectionModel,
   );
   const polarizationDb = polarizationMismatchDb(tx.polarization, rx.polarization, map.crossPolarDiscriminationDb);
-  const pattern = opts.pattern === false ? { ...ZERO_PATTERN_LOSS } : pairPatternLoss(tx, rx, opts.elevationsM?.tx, opts.elevationsM?.rx);
+  const pattern = opts.pattern === false ? { ...ZERO_PATTERN_LOSS } : pairPatternLoss(map, tx, rx, opts.elevationsM?.tx, opts.elevationsM?.rx);
   inputs.otherLossDb += rejectionDb + polarizationDb + pattern.totalDb;
   return { inputs, rejectionDb, polarizationDb, pattern };
 }

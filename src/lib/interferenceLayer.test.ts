@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
 import { evaluatePairs } from './sensors';
+import { resolveAntenna } from './antenna';
 import { sampleGrid } from './contours';
 import { placementPlan, interferenceSources, interferenceZones, placementZones, referenceReceiver } from './interferenceLayer';
 
@@ -89,16 +90,21 @@ describe('antenna patterns in field sources', () => {
     const { map, inputs } = freshDefaultState();
     map.useTerrainElevation = false;
     const tx = map.sensors[0], rx = map.sensors[1];
-    tx.antenna = { kind: 'sector', azimuthDeg: 90, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
-    rx.antenna = { kind: 'sector', azimuthDeg: 270, beamwidthDeg: 50, frontToBackDb: 20, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
+    map.antennaModels = [
+      { id: 'a', name: 'A', kind: 'sector', gainDbi: tx.gainDbi, beamwidthDeg: 40, frontToBackDb: 30, verticalBeamwidthDeg: 10 },
+      { id: 'b', name: 'B', kind: 'sector', gainDbi: rx.gainDbi, beamwidthDeg: 50, frontToBackDb: 20, verticalBeamwidthDeg: 10 },
+    ];
+    tx.antenna = { modelId: 'a', azimuthDeg: 90, downtiltDeg: 0, aimAtId: null };
+    rx.antenna = { modelId: 'b', azimuthDeg: 270, downtiltDeg: 0, aimAtId: null };
+    const txPattern = resolveAntenna(map, tx), rxPattern = resolveAntenna(map, rx);
     rx.objective = 'avoidance';
     const sources = interferenceSources(map, inputs, rx, () => 0);
-    expect(sources[0].patterns).toEqual({ source: tx.antenna, cell: rx.antenna });
-    const omniTx = { ...tx, antenna: { ...tx.antenna, kind: 'omni' as const } };
+    expect(sources[0].patterns).toEqual({ source: txPattern, cell: rxPattern });
+    const omniTx = { ...tx, antenna: { ...tx.antenna, modelId: 'omni' } };
     const omniMap = { ...map, sensors: [omniTx, rx] };
     expect(interferenceSources(omniMap, inputs, rx, () => 0)[0].inputs).toEqual(sources[0].inputs);
     const plan = placementPlan(map, inputs, tx, () => 0, evaluatePairs(map, inputs, () => 0));
     expect(plan.sources.length).toBeGreaterThan(0);
-    expect(plan.sources[0].patterns).toEqual({ source: rx.antenna, cell: tx.antenna });
+    expect(plan.sources[0].patterns).toEqual({ source: rxPattern, cell: txPattern });
   });
 });
