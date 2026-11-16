@@ -1,6 +1,7 @@
 import type { MapScenario, ScreeningStatus, Sensor } from '../types';
 import { effectiveObjective, receiverSummary, worstLink, type PairResult } from './sensors';
 import { formatNumber } from './rf';
+import { bearingDeg, normAzimuth, patternLossDb, resolveAntenna } from './antenna';
 
 type InterferenceStatus = 'Possible interference' | 'Marginal interference' | 'Below interference threshold';
 
@@ -101,11 +102,13 @@ function remainingPowerDbm(limit: number, others: number): number {
 }
 
 export interface Mitigation {
-  kind: 'power' | 'distance' | 'frequency' | 'polarization';
+  kind: 'power' | 'rotate' | 'distance' | 'frequency' | 'polarization';
   txId: string;
   deltaDb: number;
   text: string;
   estimate: boolean;
+  /** rotate only: the transmitter's new azimuth in degrees, [0, 360). */
+  azimuthDeg?: number;
 }
 
 export const PLACEMENT = { unsafe: 0, marginal: 1, safe: 2, recommended: 3, unknown: 255 } as const;
@@ -132,6 +135,55 @@ export function placementAllowance(map: MapScenario, rx: Sensor, txId: string, p
   if (usesAggregate(map, rx)) return remainingPowerDbm(limit, sumDbm(powers));
   // An already violated fixed path cannot be repaired by moving this transmitter.
   return powers.some(p => thresholdOnly ? p >= limit : p > limit) ? -Infinity : limit;
+}
+
+/**
+ * Smallest azimuth change (1 degree steps, clockwise first on ties) of a Sector transmitter that clears the
+ * victim and keeps everything else it serves. The power change is the Tx-end pattern-loss difference only,
+ * at the stored bearing and elevation of each pair (PairResult.pattern.txElevDeg), so it is exact, not an estimate.
+ */
+function rotateSuggestion(map: MapScenario, tx: Sensor, rx: Sensor, pairs: PairResult[], limit: number): { changeDeg: number; azimuthDeg: number; interferenceDbm: number } | null {
+  const antenna = resolveAntenna(map, tx);
+  if (antenna.kind !== 'sector') return null;
+  const mine = pairs.filter(p => p.txId === tx.id);
+  const sensorOf = (id: string) => map.sensors.find(s => s.id === id);
+  const valid = (p: PairResult) => p.elevationKnown && p.result.valid && Number.isFinite(p.result.receivedPowerDbm);
+  const interferenceAt = (r: Sensor, shifted: Map<PairResult, number>) => {
+    const powers = pairs.filter(p => p.rxId === r.id && !p.intended && valid(p)).map(p => shifted.get(p) ?? p.result.receivedPowerDbm);
+    return usesAggregate(map, r) ? sumDbm(powers) : powers.reduce((m, v) => Math.max(m, v), -Infinity);
+  };
+  const EPS = 1e-9;
+  for (let k = 1; k <= 180; k++) {
+    for (const sign of k === 180 ? [1] : [1, -1]) {
+      const azimuth = normAzimuth(antenna.azimuthDeg + sign * k);
+      const turned = { ...antenna, azimuthDeg: azimuth };
+      const shifted = new Map<PairResult, number>();
+      for (const p of mine) {
+        const target = sensorOf(p.rxId);
+        if (!target || !valid(p)) continue;
+        const el = Number.isFinite(p.pattern.txElevDeg) ? p.pattern.txElevDeg : 0;
+        shifted.set(p, p.result.receivedPowerDbm + p.pattern.txDb - patternLossDb(turned, bearingDeg(tx, target), el));
+      }
+      const victimNow = interferenceAt(rx, shifted);
+      if (!(victimNow <= limit)) continue;
+      let ok = true;
+      for (const [p, power] of shifted) {
+        const target = sensorOf(p.rxId)!;
+        if (p.rxId === rx.id) continue;
+        const old = p.result.receivedPowerDbm;
+        if (p.intended) {
+          if (power >= old - EPS) continue;
+          const others = interferenceAt(target, new Map());
+          if (power < target.sensitivityDbm + target.fadeMarginTargetDb || power - others < target.requiredCiDb) { ok = false; break; }
+        } else if (power > old) {
+          const after = interferenceAt(target, shifted);
+          if (after > Math.max(target.interferenceThresholdDbm - effectiveMarginDb(map, target), interferenceAt(target, new Map()))) { ok = false; break; }
+        }
+      }
+      if (ok) return { changeDeg: sign * k, azimuthDeg: azimuth, interferenceDbm: victimNow };
+    }
+  }
+  return null;
 }
 
 /** Receiver-local advice, holding all other powers and settings fixed. No confident advice from incomplete paths. */
@@ -172,6 +224,18 @@ export function mitigations(map: MapScenario, assessment: ReceiverAssessment, pa
     kind: 'power', txId: tx.id, deltaDb: reduction, estimate: false,
     text: `Reduce ${tx.name} power by ${formatNumber(displayedReduction, 2)} dB (to ${formatNumber(displayedPower, 2)} dBm) for ${rx.name}'s ${reason}.${note}`,
   }];
+  const rotations = assessment.contributors.flatMap((c) => {
+    const t = map.sensors.find(s => s.id === c.txId && s.role === 'tx');
+    const r = t && rotateSuggestion(map, t, rx, pairs, limit);
+    return t && r ? [{ t, r }] : [];
+  }).sort((a, b) => Math.abs(a.r.changeDeg) - Math.abs(b.r.changeDeg));
+  for (const { t, r } of rotations) {
+    const dir = r.changeDeg > 0 ? 'clockwise' : 'anticlockwise';
+    suggestions.push({
+      kind: 'rotate', txId: t.id, deltaDb: assessment.interferenceDbm - r.interferenceDbm, estimate: false, azimuthDeg: r.azimuthDeg,
+      text: `Rotate ${t.name}'s antenna ${Math.abs(r.changeDeg)}\u00B0 ${dir} (to ${formatNumber(r.azimuthDeg, 0)}\u00B0) for ${rx.name}'s ${reason}.`,
+    });
+  }
   const path = relevant.find(p => p.txId === tx.id && !p.intended);
   const newDistance = path ? path.distanceM * 10 ** (reduction / 20) : NaN;
   if (path && path.distanceM > 0 && Number.isFinite(newDistance)) {
