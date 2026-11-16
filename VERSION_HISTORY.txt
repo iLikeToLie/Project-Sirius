@@ -627,9 +627,9 @@ Key changes:
   owns the gain.
 - Scenario schema 8. Older files migrate with every sensor on Omni, so their
   results are unchanged. The Version 3 Friis engine (src/lib/rf.ts) is unchanged.
-- 400 unit tests pass across 35 files. The browser script
-  scripts/e2e/directional-antennas.mjs is added; it has not been run for this
-  entry.
+- 400 unit tests pass across 35 files. The new browser script
+  scripts/e2e/directional-antennas.mjs passes (a sector back lobe lowers the
+  victim by 25.00 dB), as do the seven existing browser scripts.
 
 Calculation scope and limitations:
 Patterns are one horizontal cut and one vertical cut per antenna, with no side

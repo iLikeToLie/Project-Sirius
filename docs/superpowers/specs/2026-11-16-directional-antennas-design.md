@@ -142,4 +142,4 @@ On branch `claude/practical-turing-nywbaj` (web 1.12.0), not yet merged. Commits
 - `154a0df` WIP: Antennas tab and drag-to-rotate (superseded by the next commit).
 - `ea76be5` Antennas tab (model library, polar plot, sensor pointing), card link and drag-to-rotate handle.
 
-Verified: 400 unit tests pass across 35 files. `scripts/e2e/directional-antennas.mjs` has not been run.
+Verified: 400 unit tests pass across 35 files. All eight browser scripts pass against the 1.12.0 build, including `scripts/e2e/directional-antennas.mjs` (back-lobe drop 25.00 dB). Terrain sweep cost (720 radials, 15 km): 49 ms omni, 68 ms one Sector end, 89 ms both.

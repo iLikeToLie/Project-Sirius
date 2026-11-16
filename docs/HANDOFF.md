@@ -9,7 +9,7 @@ Last updated 16 November 2026. Everything needed to continue this work on anothe
 | Repository | `github.com/iLikeToLie/Project-Sirius` (renamed from `friis-rf-calculator`; GitHub forwards the old repo URL). |
 | Live site | **https://iliketolie.github.io/Project-Sirius/**. Web **1.9.0** went live on 3 November (PR #9), with fixes in PRs #10–#11 (recorded as 1.9.1). Web **1.10.0** (building heights, PR #12) and UI fixes (PR #13) are merged to `main` and live (Pages run #23 succeeded on 9 November). Web **1.11.0** (polish) is merged to `main` via PR #14 and live. Web **1.12.0** (directional antennas) is on branch `claude/practical-turing-nywbaj`, not merged. |
 | Branch to work from | **`main`** (head `4d347ec`, 12 November, merge of PR #14). Feature branches `feature/interference-avoidance` and `claude/dreamy-bell-a3obkr` are merged. |
-| Tests | 400 unit tests across 35 files on the 1.12.0 branch (`corepack pnpm test`, 16 November). Browser scripts workspace-layout, link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer, placement-layer and buildings pass against the 1.11.0 build; `scripts/e2e/directional-antennas.mjs` has not been run. |
+| Tests | 400 unit tests across 35 files on the 1.12.0 branch (`corepack pnpm test`, 16 November). Browser scripts workspace-layout, link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer, placement-layer, buildings and the new directional-antennas pass against the 1.12.0 build (16 November; the sector back lobe lowers the victim by 25.00 dB, matching front-to-back). |
 
 ### Release history (newest first)
 
@@ -137,7 +137,7 @@ Last updated 16 November 2026. Everything needed to continue this work on anothe
 
 - **Old URL redirect:** create a public repo `iLikeToLie/friis-rf-calculator` with a redirect page to `/Project-Sirius/` (keep path and hash) and enable Pages. **First** run `git remote set-url origin https://github.com/iLikeToLie/Project-Sirius.git` in every clone, because creating that repo ends GitHub's forwarding of the old repo URL. This step was blocked by a permission prompt and is not done.
 - **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) is open; item 5 (drawer Rx meter) is done in 1.11.0. Item 8 (directional antennas) is done on branch `claude/practical-turing-nywbaj` (web 1.12.0), pending review and merge. See `docs/BACKLOG.md`.
-- **Browser check:** `scripts/e2e/directional-antennas.mjs` has not been run against 1.12.0.
+- **Coverage cost:** with the vertical pattern, a 720-radial terrain sweep over 15 km takes about 49 ms omni, 68 ms with one Sector end and 89 ms with both (measured 16 Nov, in the worker).
 - **OneMap API terms:** confirm tile use from a public site (registration may be required).
 - **Buildings:** join data.gov.sg HDB Property Information (`max_floor_lvl`) for post-2019 blocks (the host is blocked in cloud sessions; run `scripts/buildings/build_buildings.py` locally); multi-edge diffraction; a light-theme check of the footprint layer.
 - **Final review (1.9.0):** Task 16 completed all eleven Review Focus cases and independent code review. Three Important findings were reproduced and fixed; the two Minor findings (protected-limit equality colour and unnecessary field recomputation) are fixed in 1.11.0 on the branch. In the twelve-sensor terrain fixture, p95 input-to-frame delay was 7.1 ms and worker requests peaked at 374.7 ms. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for measurement limits and screenshots.
