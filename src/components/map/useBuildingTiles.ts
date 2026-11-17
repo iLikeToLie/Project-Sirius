@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDING_BOUNDS, BUILDING_TILE_URL, BUILDING_ZOOM, createBuildingSampler, type BuildingLookup, type BuildingTile } from '../../lib/buildings';
-import { tilePixel } from '../../lib/elevation';
+import { elevationRetryDelayMs, tilePixel } from '../../lib/elevation';
 import type { LatLon } from '../../lib/geo';
 
 export type BuildingStatus = 'idle' | 'loading' | 'ready' | 'offline';
@@ -35,10 +35,45 @@ export function useBuildingTiles() {
   const inFlight = useRef(0);
   const [version, setVersion] = useState(0);
   const [status, setStatus] = useState<BuildingStatus>('idle');
+  const failures = useRef(new Set<string>());
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const pending = timers.current;
+    return () => { pending.forEach(clearTimeout); pending.clear(); };
+  }, []);
 
   const lookup: BuildingLookup = useCallback((z, x, y) => {
     const entry = cache.current.get(`${z}/${x}/${y}`);
     return entry === 'pending' ? undefined : entry;
+  }, []);
+
+  const fetchWithRetry = useCallback((z: number, x: number, y: number, key: string, attempt: number) => {
+    const settle = () => {
+      inFlight.current -= 1;
+      setStatus(failures.current.size ? 'offline' : inFlight.current ? 'loading' : 'ready');
+    };
+    fetchTile(z, x, y)
+      .then((tile) => {
+        cache.current.set(key, tile);
+        failures.current.delete(key);
+        if (tile !== 'empty') setVersion((v) => v + 1);
+        settle();
+      })
+      .catch(() => {
+        const delay = elevationRetryDelayMs(attempt + 1);
+        if (delay !== null) {
+          // Keep the cache pending and count the tile in flight during backoff.
+          const timer = setTimeout(() => {
+            timers.current.delete(timer);
+            fetchWithRetry(z, x, y, key, attempt + 1);
+          }, delay);
+          timers.current.add(timer);
+          return;
+        }
+        cache.current.delete(key);
+        failures.current.add(key);
+        settle();
+      });
   }, []);
 
   const load = useCallback((tiles: Iterable<string>) => {
@@ -48,17 +83,10 @@ export function useBuildingTiles() {
       if (!insideBounds(z, x, y)) { cache.current.set(key, 'empty'); continue; }
       cache.current.set(key, 'pending');
       inFlight.current += 1;
-      setStatus((current) => (current === 'offline' ? current : 'loading'));
-      fetchTile(z, x, y)
-        .then((tile) => { cache.current.set(key, tile); if (tile !== 'empty') setVersion((v) => v + 1); })
-        // A failed tile is retried on the next request rather than read as empty for the session.
-        .catch(() => { cache.current.delete(key); setStatus('offline'); })
-        .finally(() => {
-          inFlight.current -= 1;
-          if (inFlight.current === 0) setStatus((current) => (current === 'offline' ? current : 'ready'));
-        });
+      setStatus(failures.current.size ? 'offline' : 'loading');
+      fetchWithRetry(z, x, y, key, 0);
     }
-  }, []);
+  }, [fetchWithRetry]);
 
   /** Tiles along each segment (and under single points), at the source zoom. */
   const ensurePaths = useCallback((segments: [LatLon, LatLon][]) => {
