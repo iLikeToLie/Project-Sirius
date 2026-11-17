@@ -54,8 +54,8 @@ export function computeCoverage(req: CoverageRequest): CoverageResult {
     // The horizontal term is constant along a radial (the cell's antenna looks back along the same line);
     // the vertical term depends on the elevation angle and is evaluated per step. Omni ends cost nothing.
     const bearing = r * 360 / req.radials;
-    const srcPat = req.patterns?.source?.kind === 'sector' ? req.patterns.source : undefined;
-    const cellPat = req.patterns?.cell?.kind === 'sector' ? req.patterns.cell : undefined;
+    const srcPat = req.patterns?.source && req.patterns.source.kind !== 'omni' ? req.patterns.source : undefined;
+    const cellPat = req.patterns?.cell && req.patterns.cell.kind !== 'omni' ? req.patterns.cell : undefined;
     const srcAh = srcPat ? horizontalTermDb(srcPat, bearing) : 0, cellAh = cellPat ? horizontalTermDb(cellPat, bearing + 180) : 0;
     let horizon = -Infinity, edgeD = 0, edgeGround = 0;
     // A street-level transmitter's own building does not block its rays: skip the run at its height.

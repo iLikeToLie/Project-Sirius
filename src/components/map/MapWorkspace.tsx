@@ -8,7 +8,7 @@ import { signalRange } from '../../lib/signalColour';
 import { sampleGrid, type ScalarGrid } from '../../lib/contours';
 import type { GroundAt } from '../../lib/elevation';
 import { type LatLon, SG_REFERENCE, offsetLatLon, toLatLon, toLocalM } from '../../lib/geo';
-import { applyAimTracking, effectiveGainDbi, resolveAntenna, trackMap } from '../../lib/antenna';
+import { applyAimTracking, effectiveGainDbi, patternKey, resolveAntenna, trackMap } from '../../lib/antenna';
 import { addSensor, changeRole, createSensor, evaluatePairs, effectiveObjective, groundOf, pairLinkInputs, receiverSummary, removeSensor } from '../../lib/sensors';
 import { assessAll, pairVerdict, usesAggregate, worstAssessedLink } from '../../lib/interference';
 import { interferenceSources, interferenceZones, placementPlan, placementZones, referenceReceiver, streetBuildingM } from '../../lib/interferenceLayer';
@@ -220,7 +220,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
           interferenceM: thresholdSlantRangeM(inputs, zone.rx.interferenceThresholdDbm),
         },
       },
-      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, effectiveGainDbi(map, zoneTx), zoneTx.cableLossDb, txPattern.kind, txPattern.azimuthDeg, txPattern.beamwidthDeg, txPattern.frontToBackDb, txPattern.verticalBeamwidthDeg, txPattern.downtiltDeg, zone.rx.id, zone.rx.aglM, effectiveGainDbi(map, zone.rx), zone.rx.cableLossDb,
+      key: [zoneTx.id, zoneTx.lat, zoneTx.lon, zoneTx.aglM, zoneTx.powerDbm, effectiveGainDbi(map, zoneTx), zoneTx.cableLossDb, patternKey(txPattern), zone.rx.id, zone.rx.aglM, effectiveGainDbi(map, zone.rx), zone.rx.cableLossDb,
         zone.rx.sensitivityDbm, zone.rx.fadeMarginTargetDb, zone.rx.interferenceThresholdDbm, state.inputs.frequencyGhz, state.inputs.polarizationLossDb, state.inputs.obstructionLossDb,
         state.inputs.otherLossDb, inputs.frequencyGhz, inputs.otherLossDb, view.southWest.lat, view.southWest.lon, view.northEast.lat, view.northEast.lon, cols, rows, map.useTerrainElevation, elevation.version, withBuildingsOn, withBuildingsOn && buildings.version, zoneTx.mount, zone.rx.mount].join('|'),
     };

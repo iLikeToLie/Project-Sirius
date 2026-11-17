@@ -143,7 +143,9 @@ function readMap(value: unknown): MapScenario | undefined {
   const antennaModels: AntennaModel[] = [];
   for (const m of (value.antennaModels as unknown[] | undefined) ?? []) {
     if (!isAntennaModel(m) || m.id === OMNI_MODEL_ID || antennaModels.some((x) => x.id === m.id)) return undefined;
-    antennaModels.push({ id: m.id, name: m.name, kind: m.kind, gainDbi: m.gainDbi, beamwidthDeg: m.beamwidthDeg, verticalBeamwidthDeg: m.verticalBeamwidthDeg, frontToBackDb: m.frontToBackDb });
+    antennaModels.push({ id: m.id, name: m.name, kind: m.kind, gainDbi: m.gainDbi, beamwidthDeg: m.beamwidthDeg, verticalBeamwidthDeg: m.verticalBeamwidthDeg, frontToBackDb: m.frontToBackDb,
+      ...(m.pattern ? { pattern: { horizontal: m.pattern.horizontal.map(([a, l]): [number, number] => [a, l]).sort((a, b) => a[0] - b[0]),
+        vertical: m.pattern.vertical.map(([a, l]): [number, number] => [a, l]).sort((a, b) => a[0] - b[0]) } } : {}) });
   }
   const sensors = value.sensors.map((s) => readSensor(s, antennaModels));
   if (sensors.some((s) => !s)) return undefined;
@@ -183,7 +185,7 @@ export function normalizeState(saved?: unknown): AppState {
   const inputs = { ...defaults.inputs, ...s.inputs };
   const map = 'map' in s ? readMap(s.map) ?? defaults.map : migrateWorkspace(readWorkspace(s.workspace, inputs.distanceM), inputs);
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     linkObjective: s.linkObjective === 'avoidance' ? 'avoidance' : 'desired',
     inputs,
     distanceSweep: { ...defaults.distanceSweep, ...s.distanceSweep },

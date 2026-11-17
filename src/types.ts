@@ -82,7 +82,10 @@ export interface RejectionStep { offsetMhz: number; rejectionDb: number }
 /** A placed antenna. Both role's fields are kept so toggling TX/RX never loses values. */
 /** Antenna pattern: horizontal sector plus a vertical beam. */
 export interface AntennaPattern {
-  kind: 'omni' | 'sector'; azimuthDeg: number; beamwidthDeg: number; frontToBackDb: number;
+  kind: 'omni' | 'sector' | 'custom';
+  /** Resolved custom samples: H 0..359, V -90..90. */
+  hLossDb?: number[]; vLossDb?: number[]; patternKey?: string;
+  azimuthDeg: number; beamwidthDeg: number; frontToBackDb: number;
   /** Vertical 3 dB beamwidth, 1–90. */
   verticalBeamwidthDeg: number;
   /** Downtilt, −20..45; positive points below the horizon. */
@@ -91,8 +94,10 @@ export interface AntennaPattern {
 
 /** A library antenna: shape and gain. Pointing lives on the sensor. */
 export interface AntennaModel {
-  id: string; name: string; kind: 'omni' | 'sector'; gainDbi: number;
+  id: string; name: string; kind: 'omni' | 'sector' | 'custom'; gainDbi: number;
   beamwidthDeg: number; verticalBeamwidthDeg: number; frontToBackDb: number;
+  /** Sorted [angle degrees, loss dB] cuts, retained when switching kind. */
+  pattern?: { horizontal: [number, number][]; vertical: [number, number][] };
 }
 
 /** A sensor's use of the library: which model, and where it points. `modelId` 'omni' is the built-in omni using the sensor's Gain. */
@@ -147,7 +152,7 @@ export interface MapScenario {
 }
 
 export interface AppState {
-  schemaVersion: 8;
+  schemaVersion: 9;
   linkObjective: LinkObjective;
   inputs: LinkInputs;
   distanceSweep: DistanceSweepSettings;

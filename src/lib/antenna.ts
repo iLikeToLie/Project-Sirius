@@ -7,6 +7,103 @@ export const VERTICAL_CAP_DB = 20;
 /** Built-in model id: omni using the sensor's own Gain field. Never stored in the library. */
 export const OMNI_MODEL_ID = 'omni';
 export const MAX_ANTENNA_MODELS = 24;
+export const MAX_PATTERN_POINTS = 721;
+type Cut = [number, number][];
+
+/** Linear interpolation of a sorted point table; horizontal cuts wrap at 360, vertical cuts clamp. */
+export function interpolateLossDb(cut: Cut, angleDeg: number, wrap: boolean): number {
+  if (!cut.length) return 0;
+  const a = wrap ? normAzimuth(angleDeg) : angleDeg;
+  let lo = 0, hi = cut.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (cut[mid][0] < a) lo = mid + 1; else hi = mid;
+  }
+  if (lo < cut.length && cut[lo][0] === a) return cut[lo][1];
+  if (!wrap && lo === 0) return cut[0][1];
+  if (!wrap && lo === cut.length) return cut[cut.length - 1][1];
+  const left = lo === 0 ? [cut[cut.length - 1][0] - 360, cut[cut.length - 1][1]] : cut[lo - 1];
+  const right = lo === cut.length ? [cut[0][0] + 360, cut[0][1]] : cut[lo];
+  return left[1] + (right[1] - left[1]) * (a - left[0]) / (right[0] - left[0]);
+}
+
+/** Interpolate the precomputed one-degree arrays without allocating in field loops. */
+function sampleLoss(samples: number[], angle: number, wrap: boolean): number {
+  const i = Math.floor(angle), fraction = angle - i;
+  const next = wrap ? (i + 1) % samples.length : Math.min(i + 1, samples.length - 1);
+  return samples[i] + fraction * (samples[next] - samples[i]);
+}
+
+/** First absolute 3 dB crossings around boresight. Known-axis callers supply wrap explicitly. */
+export function derivedBeamwidthDeg(cut: Cut, wrap = !cut.some(([a]) => a < 0)): number {
+  if (!cut.length) return 0;
+  const vertical = !wrap, limit = vertical ? 90 : 180;
+  const centre = interpolateLossDb(cut, 0, wrap);
+  if (centre >= 3) return 0;
+  const side = (sign: number) => {
+    const angles = cut.map(([a]) => vertical ? sign * a : normAzimuth(sign * a))
+      .filter(a => a > 0 && a < limit).concat(limit).sort((a, b) => a - b);
+    let prevAngle = 0, prevLoss = centre;
+    for (const a of angles) {
+      const loss = interpolateLossDb(cut, sign * a, wrap);
+      if (loss >= 3) return prevAngle + (a - prevAngle) * (3 - prevLoss) / (loss - prevLoss);
+      prevAngle = a; prevLoss = loss;
+    }
+    return limit;
+  };
+  return side(1) + side(-1);
+}
+
+/** Seed editable cuts from the capped 3GPP terms, independent of pointing. */
+export function sectorToPoints(model: AntennaModel): NonNullable<AntennaModel['pattern']> {
+  const p: AntennaPattern = { ...model, kind: 'sector', azimuthDeg: 0, downtiltDeg: 0 };
+  return {
+    horizontal: Array.from({ length: 37 }, (_, i) => [i * 10, Math.min(horizontalTermDb(p, i * 10), model.frontToBackDb)]),
+    vertical: Array.from({ length: 37 }, (_, i) => [i * 5 - 90, Math.min(verticalTermDb(p, i * 5 - 90), model.frontToBackDb)]),
+  };
+}
+
+function validCut(value: unknown, min: number, max: number): value is Cut {
+  return Array.isArray(value) && value.length >= 2 && value.length <= MAX_PATTERN_POINTS
+    && value.every(p => Array.isArray(p) && p.length === 2 && finite(p[0]) && p[0] >= min && p[0] <= max && finite(p[1]) && p[1] >= 0 && p[1] <= 60)
+    && new Set(value.map(p => p[0])).size === value.length;
+}
+
+function validPattern(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const p = value as Record<string, unknown>;
+  return validCut(p.horizontal, 0, 360) && validCut(p.vertical, -90, 90);
+}
+
+function contentHash(text: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+  return (hash >>> 0).toString(16);
+}
+
+type CustomShape = { hLossDb: number[]; vLossDb: number[]; patternKey: string; beamwidthDeg: number; verticalBeamwidthDeg: number };
+const customShapes = new WeakMap<AntennaModel, CustomShape>();
+function customShape(model: AntennaModel): CustomShape {
+  const cached = customShapes.get(model);
+  if (cached) return cached;
+  const horizontal = [...model.pattern!.horizontal].sort((a, b) => a[0] - b[0]);
+  const vertical = [...model.pattern!.vertical].sort((a, b) => a[0] - b[0]);
+  const shape = {
+    hLossDb: Array.from({ length: 360 }, (_, i) => interpolateLossDb(horizontal, i, true)),
+    vLossDb: Array.from({ length: 181 }, (_, i) => interpolateLossDb(vertical, i - 90, false)),
+    beamwidthDeg: derivedBeamwidthDeg(horizontal, true), verticalBeamwidthDeg: derivedBeamwidthDeg(vertical, false),
+    patternKey: `${model.id}:${contentHash(JSON.stringify([horizontal, vertical]))}`,
+  };
+  customShapes.set(model, shape);
+  return shape;
+}
+
+/** All pattern inputs read by the maths, including pointing and the original custom table hash. */
+export function patternKey(p: AntennaPattern): string {
+  if (p.kind === 'omni') return 'omni';
+  return JSON.stringify([p.kind, p.azimuthDeg, p.downtiltDeg, p.frontToBackDb,
+    p.kind === 'custom' ? p.patternKey : [p.beamwidthDeg, p.verticalBeamwidthDeg]]);
+}
 
 /** A fresh sensor antenna: built-in omni, pointing north, no tilt, not tracking. */
 export const defaultSensorAntenna = (): SensorAntenna => ({ modelId: OMNI_MODEL_ID, azimuthDeg: 0, downtiltDeg: 0, aimAtId: null });
@@ -39,11 +136,13 @@ export const typicalGainDbi = (hDeg: number, vDeg: number): number => 10 * Math.
 
 /** Horizontal term Ah = 12 (φ/θh)², not yet capped. */
 export const horizontalTermDb = (antenna: AntennaPattern, bearing: number): number =>
-  12 * (offAxisDeg(antenna.azimuthDeg, bearing) / antenna.beamwidthDeg) ** 2;
+  antenna.kind === 'custom' ? sampleLoss(antenna.hLossDb!, normAzimuth(bearing - antenna.azimuthDeg), true)
+    : 12 * (offAxisDeg(antenna.azimuthDeg, bearing) / antenna.beamwidthDeg) ** 2;
 
 /** Vertical term Av = min(12 ((e + tilt)/θv)², 20) for a far end `elevDeg` above the horizon. */
 export const verticalTermDb = (antenna: AntennaPattern, elevDeg: number): number =>
-  Math.min(12 * ((elevDeg + antenna.downtiltDeg) / antenna.verticalBeamwidthDeg) ** 2, VERTICAL_CAP_DB);
+  antenna.kind === 'custom' ? sampleLoss(antenna.vLossDb!, Math.max(-90, Math.min(90, elevDeg + antenna.downtiltDeg)) + 90, false)
+    : Math.min(12 * ((elevDeg + antenna.downtiltDeg) / antenna.verticalBeamwidthDeg) ** 2, VERTICAL_CAP_DB);
 
 /** Combined loss of a Sector from its two terms: min(Ah + Av, FBR). */
 export const combineLossDb = (antenna: AntennaPattern, horizontalDb: number, verticalDb: number): number =>
@@ -96,6 +195,10 @@ export function resolveAntenna(map: Models, sensor: Sensor): AntennaPattern {
   const a = sensor.antenna;
   const model = a.modelId === OMNI_MODEL_ID ? undefined : findModel(map, a.modelId);
   if (!model || model.kind === 'omni') return { ...OMNI_PATTERN, azimuthDeg: a.azimuthDeg, downtiltDeg: a.downtiltDeg };
+  if (model.kind === 'custom') {
+    const shape = customShape(model);
+    return { ...shape, kind: 'custom', frontToBackDb: model.frontToBackDb, azimuthDeg: a.azimuthDeg, downtiltDeg: a.downtiltDeg };
+  }
   return { kind: 'sector', azimuthDeg: a.azimuthDeg, beamwidthDeg: model.beamwidthDeg, frontToBackDb: model.frontToBackDb,
     verticalBeamwidthDeg: model.verticalBeamwidthDeg, downtiltDeg: a.downtiltDeg };
 }
@@ -178,12 +281,14 @@ export function pairPatternLoss(map: Models, tx: Sensor, rx: Sensor, txElevM?: n
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** id and name non-empty strings, kind omni/sector, gain finite, beamwidth 1–180, vertical beamwidth 1–90, front-to-back 0–60. */
+/** id and name non-empty strings, kind omni/sector/custom, gain finite, beamwidth 1–180, vertical beamwidth 1–90, front-to-back 0–60. */
 export function isAntennaModel(value: unknown): value is AntennaModel {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  return typeof v.id === 'string' && v.id !== '' && typeof v.name === 'string'
-    && (v.kind === 'omni' || v.kind === 'sector') && finite(v.gainDbi)
+  return typeof v.id === 'string' && v.id !== '' && typeof v.name === 'string' && v.name.trim() !== ''
+    && (v.kind === 'omni' || v.kind === 'sector' || v.kind === 'custom') && finite(v.gainDbi)
+    && (v.kind !== 'custom' || v.pattern !== undefined)
+    && (v.pattern === undefined || validPattern(v.pattern))
     && finite(v.beamwidthDeg) && v.beamwidthDeg >= 1 && v.beamwidthDeg <= 180
     && finite(v.verticalBeamwidthDeg) && v.verticalBeamwidthDeg >= 1 && v.verticalBeamwidthDeg <= 90
     && finite(v.frontToBackDb) && v.frontToBackDb >= 0 && v.frontToBackDb <= 60;
