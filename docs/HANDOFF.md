@@ -1,21 +1,22 @@
 # Handoff — Friis RF calculator / Link workspace
 
-Last updated 12 November 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
+Last updated 16 November 2026. Everything needed to continue this work on another machine is in this repo, except the items under "Not in git".
 
 ## Where things stand
 
 | Item | State |
 |---|---|
 | Repository | `github.com/iLikeToLie/Project-Sirius` (renamed from `friis-rf-calculator`; GitHub forwards the old repo URL). |
-| Live site | **https://iliketolie.github.io/Project-Sirius/**. Web **1.9.0** went live on 3 November (PR #9), with fixes in PRs #10–#11 (recorded as 1.9.1). Web **1.10.0** (building heights, PR #12) and UI fixes (PR #13) are merged to `main` and live (Pages run #23 succeeded on 9 November). Web **1.11.0** (polish) is on branch `claude/hub-housekeeping-app-polish-vxhtc8`, not merged. |
-| Branch to work from | **`main`** (head `56b80b0`, 9 November). Feature branches `feature/interference-avoidance` and `claude/dreamy-bell-a3obkr` are merged. |
-| Tests | 331 unit tests across 32 files on the 1.11.0 branch (`corepack pnpm test`, 12 November); 319 on `main`. Browser scripts workspace-layout, link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer, placement-layer and buildings pass against the 1.11.0 build. |
+| Live site | **https://iliketolie.github.io/Project-Sirius/**. Web **1.9.0** went live on 3 November (PR #9), with fixes in PRs #10–#11 (recorded as 1.9.1). Web **1.10.0** (building heights, PR #12) and UI fixes (PR #13) are merged to `main` and live (Pages run #23 succeeded on 9 November). Web **1.11.0** (polish) is merged to `main` via PR #14 and live. Web **1.12.0** (directional antennas) is on branch `claude/practical-turing-nywbaj`, not merged. |
+| Branch to work from | **`main`** (head `4d347ec`, 12 November, merge of PR #14). Feature branches `feature/interference-avoidance` and `claude/dreamy-bell-a3obkr` are merged. |
+| Tests | 400 unit tests across 35 files on the 1.12.0 branch (`corepack pnpm test`, 16 November). Browser scripts workspace-layout, link-budget-drawer, multi-link-receivers, twelve-sensors, interference-layer, placement-layer, buildings and the new directional-antennas pass against the 1.12.0 build (16 November; the sector back lobe lowers the victim by 25.00 dB, matching front-to-back). |
 
 ### Release history (newest first)
 
 | Version | PR | What it added |
 |---|---|---|
-| 1.11.0 | branch | Polish (hub decision D1): responsive nav with accessible names, compact phone header, favicon; toolbar More menu; readable sensor list that keeps the selection in view; legend tabs, Channel fieldset and card heights fixed; collision-aware marker labels; drawer chevron, metric tiles and Rx power meter (backlog item 5); Interference layer protected-limit equality safe; field key ignores names/selection/thresholds; zone grid memoised; elevation retry; frame-paced drawer resize; Guide text current. |
+| 1.12.0 | branch | Directional antennas: Antennas tab with a model library (up to 24 models; built-in Omni uses each sensor's gain; sector models own their gain, with horizontal and vertical beamwidths and front-to-back) and a polar plot; per-sensor model, azimuth, downtilt and Aim at with tracking; 3GPP TR 36.814 combined pattern loss on every Tx-Rx pair (both ends), the coverage map, free-space zones, and the Interference and Placement layers; beam wedge and drag/keyboard rotate on the map; "Rotate antenna" fix suggestion; drawer "Antenna pattern loss" metric; schema 8 (migrates, all sensors start on Omni). `src/lib/rf.ts` unchanged. |
+| 1.11.0 | #14 | Polish (hub decision D1): responsive nav with accessible names, compact phone header, favicon; toolbar More menu; readable sensor list that keeps the selection in view; legend tabs, Channel fieldset and card heights fixed; collision-aware marker labels; drawer chevron, metric tiles and Rx power meter (backlog item 5); Interference layer protected-limit equality safe; field key ignores names/selection/thresholds; zone grid memoised; elevation retry; frame-paced drawer resize; Guide text current. |
 | 1.10.0 | #12, #13 | Building heights block paths and coverage under terrain diffraction: Buildings switch (off by default), per-sensor roof or street mount, footprint layer, buildings in the path profile; tiles from Overture Maps and the NUS HDB model; schema 7. PR #13 fixed the link-budget bar, full screen button and sensor list/legend overlap. |
 | 1.9.1 | #10, #11 | Stuck zone-image layer fix, band outlines on all layers, map speed-ups, Fit all sensors on narrow maps. Docs-only version entry; package.json not bumped. |
 | 1.9.0 | #9 | Twelve sensors, aggregate interference and protection margin, desired-link C/I, power limits and fixes, Tx × Rx matrix, frequency/bandwidth and polarization isolation, noise-floor helper, total Interference and transmitter Placement layers; schema 6. Whole-branch review complete; live 3 November. |
@@ -31,8 +32,9 @@ Last updated 12 November 2026. Everything needed to continue this work on anothe
 
 ## Branches
 
-- `main`: released baseline; contains web 1.10.0.
-- Merged and kept for reference: `feature/v2-ui` (#1), `worktree-coverage-aesthetic` (#2), `integrate/consolidation` (#3), `feature/workspace-layout` (#4), `feature/suggestions` (#5), `fix/elevation-offline` (#6), `feature/multi-link-receivers` (via #3), `feature/interference-avoidance` (#9), `feature/ui-tweaks-bands-outline` (#10), `feature/map-performance` (#11), `claude/dreamy-bell-a3obkr` (#12), `feature/ui-fixes` (#13), `fix/e2e-stale-scripts`.
+- `main`: released baseline; contains web 1.11.0 (PR #14).
+- `claude/practical-turing-nywbaj`: web 1.12.0 (directional antennas), pending review; not merged.
+- Merged and kept for reference: `feature/v2-ui` (#1), `worktree-coverage-aesthetic` (#2), `integrate/consolidation` (#3), `feature/workspace-layout` (#4), `feature/suggestions` (#5), `fix/elevation-offline` (#6), `feature/multi-link-receivers` (via #3), `feature/interference-avoidance` (#9), `feature/ui-tweaks-bands-outline` (#10), `feature/map-performance` (#11), `claude/dreamy-bell-a3obkr` (#12), `feature/ui-fixes` (#13), `fix/e2e-stale-scripts`, `claude/hub-housekeeping-app-polish-vxhtc8` (#14).
 - `feature/link-workspace-terrain` (`609b284`): **do not merge.** Despite being a late commit, most of its files are older copies of v2-ui or multi-link files, and it lacks the drawer and PR #2. Its one new change (hide rings in terrain mode) and its docs were ported by hand into #3.
 - Merged branches can be deleted on GitHub once you no longer need them (the user chose to delete `feature/link-workspace-terrain` and the merged ones, decision D5; not yet done).
 - `.claude/` (including local worktrees) is git-ignored; re-create worktrees with `git worktree add` if needed.
@@ -40,6 +42,7 @@ Last updated 12 November 2026. Everything needed to continue this work on anothe
 ## Read in this order
 
 1. This file, then `docs/BACKLOG.md` (open ideas, with done items marked).
+   For directional antennas (web 1.12.0, on branch `claude/practical-turing-nywbaj`), read `docs/superpowers/specs/2026-11-16-directional-antennas-design.md` (sections 9 and 10 supersede earlier sections; section 11 records what was built) and `docs/superpowers/plans/2026-11-16-directional-antennas.md`.
    For building heights (web 1.10.0, merged in PR #12), read `docs/superpowers/specs/2026-11-08-building-heights-design.md`; its section 7 records what was built.
    For interference avoidance, read `docs/superpowers/plans/2026-11-02-interference-avoidance.md` and `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` next.
 2. `REPOSITORY_BRIEF.md`: the original repo review (pre-1.4.0 baseline and the calculation rules to preserve). Its URLs predate the rename.
@@ -59,8 +62,10 @@ Last updated 12 November 2026. Everything needed to continue this work on anothe
 - `src/lib/multiField.ts`: independent per-source power rasters for free-space and terrain paths, dispatched through `fieldWorker.ts` and `useMultiField.ts`.
 - `src/lib/interferenceLayer.ts`: receiver/source selection, field combination and categorical rendering for Interference and Placement layers.
 - `src/lib/sensors.ts`: pair evaluation, `resolveDesiredTxs`, `receiverSummary`, `worstLink`, `meterScale`.
+- `src/lib/antenna.ts`: antenna models and per-sensor pointing: the 3GPP TR 36.814 pattern (`patternLossDb`, `pairPatternLoss`), `resolveAntenna` and `effectiveGainDbi` (the only readers of antennas), aim tracking, and model validation.
+- `src/components/AntennasTab.tsx` and `AntennaPolar.tsx`: the Antennas tab (model library, model editor, sensor pointing table) and its polar plot.
 - `src/lib/activeLink.ts`: the active pair the Calculator, sweeps and drawer show, with the optional `LinkPin`.
-- `src/lib/state.ts`: load, validation and migration (schema 2 → 7). New fields default when absent; saved key in `localStorage` is unchanged.
+- `src/lib/state.ts`: load, validation and migration (schema 2 → 8). New fields default when absent; saved key in `localStorage` is unchanged.
 - `src/lib/signalColour.ts`: gradient colours and ranges.
 - `src/components/map/MapWorkspace.tsx`: workspace state (prefs, full screen, drawer size, coverage style, basemap) and wiring.
 - `src/components/map/SensorMap.tsx`: MapLibre map, zones, rings, link lines, distance labels, basemap visibility, `PAD` pan margin.
@@ -79,6 +84,7 @@ Last updated 12 November 2026. Everything needed to continue this work on anothe
 - **Releases:** the user reviews on the live site, so changes go out as PRs merged to `main` (which deploys). Ask before merging unless told to merge.
 - **Shared settings:** sensors default to the shared operating frequency; web 1.9.0 permits per-sensor overrides and bandwidths.
 - **Interference (2 Nov):** default aggregation applies to avoidance receivers only; default protection margin is 3 dB with receiver overrides. Desired links require 10 dB C/I by default. Both receiver rejection models retain values when toggled; XPD is a fixed adjustable input (15 dB default).
+- **Directional antennas (16 Nov, hub D10 and chat):** the antenna library lives in its own Antennas tab. The model owns the gain; pointing (azimuth, downtilt, Aim at) is per sensor, on the map card and in the tab. The vertical pattern and downtilt are included, with a "Rotate antenna" fix suggestion, aim tracking and drag to rotate on the map.
 - **Calculator scope:** `src/lib/rf.ts` is unchanged from `main`. The Calculator retains raw single-link statuses without a protection margin; its version chips and guide still say 1.8.0. Earlier branch work changed pair-pin integration in `src/App.tsx`; Task 15 leaves that file untouched. The package and release documentation identify the workspace release as 1.9.0.
 - **Map:** a terrain map of **Singapore**, not satellite, using MapLibre + OneMap Grey (Plain terrain is an option). Layout **B**: full-bleed map with floating cards, desktop-first.
 - **Zones:** range zones use the **linked receiver's** settings.
@@ -111,6 +117,14 @@ Last updated 12 November 2026. Everything needed to continue this work on anothe
 - Plain terrain hides the OneMap layer; its attribution stays.
 - Version numbers: 1.7.0 consolidation, 1.7.1 layout, 1.8.0 suggestions.
 
+## Calls made by the assistant (directional antennas, 16 Nov)
+
+- The coverage map assumes the receiver is aimed at the Tx (no Rx pattern loss). Interference and Placement layers use both real azimuths.
+- Downtilt is per sensor.
+- Calculator gain edits for a sensor on a library model are refused; the model owns the gain.
+- Aim at is disabled for Omni sensors in the Antennas tab.
+- The polar plot shows the model without tilt.
+
 ## Known minor issues (deferred)
 
 - Selecting a receiver can draw zones with another linked receiver's settings (the card names it).
@@ -122,7 +136,8 @@ Last updated 12 November 2026. Everything needed to continue this work on anothe
 ## Open items
 
 - **Old URL redirect:** create a public repo `iLikeToLie/friis-rf-calculator` with a redirect page to `/Project-Sirius/` (keep path and hash) and enable Pages. **First** run `git remote set-url origin https://github.com/iLikeToLie/Project-Sirius.git` in every clone, because creating that repo ends GitHub's forwarding of the old repo URL. This step was blocked by a permission prompt and is not done.
-- **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) is open; item 5 (drawer Rx meter) is done in 1.11.0 on the branch. Item 8 (directional antennas) is the recommended next feature. See `docs/BACKLOG.md`.
+- **Backlog:** item 1 (label-free street basemap, Protomaps or a OneMap style) is open; item 5 (drawer Rx meter) is done in 1.11.0. Item 8 (directional antennas) is done on branch `claude/practical-turing-nywbaj` (web 1.12.0), pending review and merge. See `docs/BACKLOG.md`.
+- **Coverage cost:** with the vertical pattern, a 720-radial terrain sweep over 15 km takes about 49 ms omni, 68 ms with one Sector end and 89 ms with both (measured 16 Nov, in the worker).
 - **OneMap API terms:** confirm tile use from a public site (registration may be required).
 - **Buildings:** join data.gov.sg HDB Property Information (`max_floor_lvl`) for post-2019 blocks (the host is blocked in cloud sessions; run `scripts/buildings/build_buildings.py` locally); multi-edge diffraction; a light-theme check of the footprint layer.
 - **Final review (1.9.0):** Task 16 completed all eleven Review Focus cases and independent code review. Three Important findings were reproduced and fixed; the two Minor findings (protected-limit equality colour and unnecessary field recomputation) are fixed in 1.11.0 on the branch. In the twelve-sensor terrain fixture, p95 input-to-frame delay was 7.1 ms and worker requests peaked at 374.7 ms. See `docs/INTERFERENCE_AVOIDANCE_REVIEW.md` for measurement limits and screenshots.

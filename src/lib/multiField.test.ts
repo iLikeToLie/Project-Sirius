@@ -8,6 +8,7 @@ import { interferenceSources } from './interferenceLayer';
 import { calculateLink } from './rf';
 import { thresholdSlantRangeM } from './thresholds';
 import { computeZones } from './zones';
+import { patternLossDb } from './antenna';
 
 const request = (): MultiFieldRequest => ({
   jobId: 42, origin: SG_REFERENCE, mode: 'free-space', rxAglM: 5, radials: 360,
@@ -135,5 +136,59 @@ describe('multiFieldKey', () => {
     expect(keyFor(louder, inputs)).not.toBe(before);
     expect(keyFor(map, { ...inputs, frequencyGhz: inputs.frequencyGhz + 1 })).not.toBe(before);
     expect(keyFor(map, { ...inputs, obstructionLossDb: inputs.obstructionLossDb + 2 })).not.toBe(before);
+  });
+});
+
+describe('antenna patterns in multi-source fields', () => {
+  const sector = { kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
+  const src = (req: MultiFieldRequest, patterns: NonNullable<MultiFieldRequest['sources'][number]['patterns']>) => ({ ...req, sources: [{ ...req.sources[0], patterns }] });
+  it('lowers a free-space field behind a sector source by the front-to-back ratio', () => {
+    const base = request(), s = base.sources[0], tx = toLocalM(s, base.origin);
+    const omni = computeMultiField(base).powers[0], dir = computeMultiField(src(base, { source: sector })).powers[0];
+    let behind = 0, ahead = 0;
+    for (let k = 0; k < omni.length; k++) {
+      const x = base.raster.x0 + k % (base.raster.cols + 1) * base.raster.dx, y = base.raster.y0 + Math.floor(k / (base.raster.cols + 1)) * base.raster.dy;
+      if (x === tx.xM && y === tx.yM) continue;
+      const bearing = Math.atan2(x - tx.xM, y - tx.yM) * 180 / Math.PI, off = Math.abs(bearing);
+      if (off > 120) { behind++; expect(omni[k] - dir[k]).toBeCloseTo(25, 3); }
+      if (off < 1) { ahead++; expect(dir[k]).toBeCloseTo(omni[k], 3); }
+    }
+    expect(behind + ahead).toBeGreaterThan(0);
+  });
+  it('changes the key when an azimuth changes, and not for Omni', () => {
+    const base = request();
+    const key = (p: NonNullable<MultiFieldRequest['sources'][number]['patterns']>) => multiFieldKey({ layer: 'x', sources: src(base, p).sources, mode: 'free-space', rxAglM: 5, rxOnRoof: true, radials: 360, view: null, dragging: false, elevationVersion: 0, buildingsVersion: false, terrain: false });
+    expect(key({ source: sector })).not.toBe(key({ source: { ...sector, azimuthDeg: 90 } }));
+    expect(key({ source: sector })).not.toBe(key({ source: sector, cell: { ...sector, azimuthDeg: 10 } }));
+    expect(key({ source: { ...sector, kind: 'omni', azimuthDeg: 5 } })).toBe(key({}));
+  });
+});
+
+describe('vertical pattern in free-space fields', () => {
+  const sector = { kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 180, frontToBackDb: 60, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
+  const flatRequest = (elevationM: number): MultiFieldRequest => ({ ...request(), raster: sampleGrid({ minX: -100, maxX: 100, minY: -100, maxY: 100 }, 4, 4, () => 0), sources: [{ ...request().sources[0], elevationM }] });
+  it('matches the omni field at equal heights and applies 12 (e/θv)² for a source above the cell', () => {
+    const level = flatRequest(5);
+    const omni = computeMultiField(level).powers[0];
+    const wide = computeMultiField({ ...level, sources: [{ ...level.sources[0], patterns: { source: { ...sector, verticalBeamwidthDeg: 90 } } }] }).powers[0];
+    const dir = computeMultiField({ ...level, sources: [{ ...level.sources[0], patterns: { source: sector } }] }).powers[0];
+    expect(Array.from(dir)).toEqual(Array.from(wide));
+    expect(omni[0] - dir[0]).toBeGreaterThanOrEqual(0);
+    const high = flatRequest(25), tx = toLocalM(high.sources[0], high.origin);
+    const o = computeMultiField(high).powers[0];
+    const d = computeMultiField({ ...high, sources: [{ ...high.sources[0], patterns: { source: sector, cell: { ...sector, downtiltDeg: 10 } } }] }).powers[0];
+    for (let k = 0; k < o.length; k++) {
+      const x = high.raster.x0 + k % (high.raster.cols + 1) * high.raster.dx, y = high.raster.y0 + Math.floor(k / (high.raster.cols + 1)) * high.raster.dy;
+      const e = Math.atan2(5 - 25, Math.hypot(x - tx.xM, y - tx.yM)) * 180 / Math.PI;
+      const bearing = Math.atan2(x - tx.xM, y - tx.yM) * 180 / Math.PI;
+      const expected = patternLossDb(sector, bearing, e) + patternLossDb({ ...sector, downtiltDeg: 10 }, bearing + 180, -e);
+      expect(o[k] - d[k]).toBeCloseTo(expected, 3);
+    }
+  });
+  it('changes the key when the vertical beamwidth or downtilt changes', () => {
+    const base = flatRequest(5);
+    const key = (p: NonNullable<MultiFieldRequest['sources'][number]['patterns']>) => multiFieldKey({ layer: 'x', sources: [{ ...base.sources[0], patterns: p }], mode: 'free-space', rxAglM: 5, rxOnRoof: true, radials: 360, view: null, dragging: false, elevationVersion: 0, buildingsVersion: false, terrain: false });
+    expect(key({ source: sector })).not.toBe(key({ source: { ...sector, downtiltDeg: 3 } }));
+    expect(key({ source: sector })).not.toBe(key({ source: { ...sector, verticalBeamwidthDeg: 20 } }));
   });
 });

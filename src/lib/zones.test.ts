@@ -73,3 +73,32 @@ describe('sameZoneResult', () => {
     expect(sameZoneResult(null, null)).toBe(true);
   });
 });
+
+describe('Tx pattern in free-space zones', () => {
+  it('shrinks the zones behind a sector transmitter and leaves boresight alone', () => {
+    const plain = computeZones(request());
+    const z = computeZones({ ...request(), txPattern: { kind: 'sector', azimuthDeg: 0, beamwidthDeg: 65, frontToBackDb: 25, verticalBeamwidthDeg: 10, downtiltDeg: 0 } });
+    expect(z.classes[node(0, 3000)]).toBe(plain.classes[node(0, 3000)]);
+    expect(plain.classes[node(0, -3000)]).toBe(ZONE.acceptable);
+    expect(z.classes[node(0, -3000)]).not.toBe(ZONE.acceptable);
+    expect(sameZoneResult(plain, z)).toBe(false);
+  });
+});
+
+describe('Tx vertical pattern in free-space zones', () => {
+  const sector = { kind: 'sector' as const, azimuthDeg: 0, beamwidthDeg: 180, frontToBackDb: 40, verticalBeamwidthDeg: 10, downtiltDeg: 0, aimAtId: null };
+  it('does nothing at equal heights with no tilt, whatever the vertical beamwidth', () => {
+    const a = computeZones({ ...request(), txPattern: { ...sector, verticalBeamwidthDeg: 5 } });
+    const b = computeZones({ ...request(), txPattern: { ...sector, verticalBeamwidthDeg: 90 } });
+    expect(sameZoneResult(a, b)).toBe(true);
+  });
+  it('stretches the range under a tall mast, and a downtilt that aims at the cell undoes it', () => {
+    const range = { sensitivityM: 2000, requiredM: 2000, interferenceM: 2000 };
+    const tall = { ...request(undefined, range), tx: { xM: 0, yM: 0, elevationM: 510 }, rxAglM: 10 };
+    const k = node(0, 1600);
+    expect(computeZones(tall).classes[k]).toBe(ZONE.acceptable);
+    // 500 m below at 1.6 km: 17 degrees under the horizon, capped at 20 dB: out of range.
+    expect(computeZones({ ...tall, txPattern: sector }).classes[k]).toBe(ZONE.none);
+    expect(computeZones({ ...tall, txPattern: { ...sector, downtiltDeg: 15 } }).classes[k]).toBe(ZONE.acceptable);
+  });
+});

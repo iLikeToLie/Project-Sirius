@@ -979,3 +979,60 @@ tbody tr:hover { background: var(--surface-elevated); }
 .sensor-row { min-height: 38px; padding: 4px 10px; }
 .sensor-list-card .sensor-rows { position: relative; }
 .sensor-list-card .sensor-rows[data-overflow] { scrollbar-width: thin; mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); }
+
+/* Directional antennas */
+.antenna-sector { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
+.antenna-sector .field small { font-size: 10px; }
+.sensor-marker .antenna-wedge { position: absolute; left: 50%; top: 50%; width: 72px; height: 72px; margin: -36px 0 0 -36px; z-index: -1; pointer-events: none; overflow: visible; transform-origin: 50% 50%; }
+.sensor-marker .antenna-wedge path { fill: currentColor; fill-opacity: 0.22; stroke: currentColor; stroke-opacity: 0.6; stroke-width: 1; }
+
+/* Rotate handle at the wedge tip of the selected Sector sensor (a separate map Marker). */
+.rotate-handle { width: 14px; height: 14px; border-radius: 50%; background: var(--yellow); border: 2px solid var(--canvas); box-shadow: 0 0 0 1px var(--yellow); cursor: grab; touch-action: none; z-index: 2; }
+.rotate-handle.active { cursor: grabbing; transform-origin: center; }
+.rotate-handle:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.link-button { justify-self: start; padding: 0; background: none; border: 0; color: var(--blue); font-size: 11px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.link-button:hover { color: var(--ink); }
+
+/* Antennas tab */
+.antennas-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+.antennas-grid > .panel { padding: 20px; min-width: 0; }
+.antenna-sensors { grid-column: 1 / -1; }
+.antenna-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.model-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.model-list button { width: 100%; text-align: left; display: grid; gap: 2px; padding: 10px 12px; color: var(--body); background: var(--surface-elevated); border: 1px solid var(--hairline); border-radius: 8px; cursor: pointer; font: inherit; }
+.model-list button:hover { border-color: var(--hairline-strong); }
+.model-list button.active { border-color: var(--yellow); color: var(--ink); }
+.model-list b { color: var(--ink); font-size: 14px; }
+.model-list span { font-size: 12px; color: var(--body); }
+.model-list small { font-size: 11px; color: var(--mute); }
+.antenna-editor-body { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; margin-top: 16px; }
+.antenna-editor-body > .antenna-editor, .antenna-editor-body > p { flex: 1 1 280px; min-width: 0; }
+.antenna-editor.form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.antenna-polar { margin: 0; flex: 0 0 auto; max-width: 100%; display: grid; gap: 6px; justify-items: center; }
+.antenna-polar svg { max-width: 100%; height: auto; }
+.antenna-polar .ring { fill: none; stroke: var(--hairline-strong); stroke-width: 1; }
+.antenna-polar .ring-outer { stroke: var(--ash); }
+.antenna-polar .plot-label { fill: var(--mute); font-size: 9px; }
+.antenna-polar .trace { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.antenna-polar .trace-h { stroke: var(--yellow); fill: var(--yellow); fill-opacity: .12; }
+.antenna-polar .trace-v { stroke: var(--blue); }
+.antenna-polar figcaption { font-size: 12px; color: var(--body); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; justify-content: center; }
+.antenna-polar figcaption small { flex-basis: 100%; text-align: center; color: var(--mute); }
+.antenna-polar .key { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 4px; }
+.antenna-polar .key-h { background: var(--yellow); }
+.antenna-polar .key-v { background: var(--blue); }
+.antenna-table tbody th { background: none; text-transform: none; color: var(--ink); }
+.antenna-table th, .antenna-table td { white-space: nowrap; vertical-align: top; }
+.antenna-table td select { height: 34px; min-width: 120px; color: var(--ink); background: var(--surface-elevated); border: 1px solid var(--hairline); border-radius: 6px; padding: 0 8px; }
+.antenna-table td select:disabled { opacity: .5; }
+.antenna-table .field { min-width: 96px; }
+.antenna-table .field > span { display: none; }
+.antenna-table .field input { height: 34px; }
+.antenna-table .tracking-note { display: block; margin-top: 4px; color: var(--mute); font-size: 11px; }
+@media (max-width: 900px) {
+  .antennas-grid { grid-template-columns: minmax(0, 1fr); }
+  .antennas-grid > .panel { padding: 16px; }
+}
+@media (max-width: 520px) {
+  .antenna-editor.form-grid.two { grid-template-columns: minmax(0, 1fr); }
+}

@@ -6,7 +6,8 @@ import { type LatLon, SG_REFERENCE } from '../../lib/geo';
 import { signalColour } from '../../lib/signalColour';
 import { PLACEMENT } from '../../lib/interference';
 import { ZONE, type ZoneResult } from '../../lib/zones';
-import type { Sensor } from '../../types';
+import type { AntennaModel, Sensor } from '../../types';
+import { azimuthFromPointer, normAzimuth, resolveAntenna } from '../../lib/antenna';
 import { lightStyle, lightSourceIds, installLightBasemap, showBasemap, type Basemap } from './lightBasemap';
 export type { Basemap } from './lightBasemap';
 import { SignalOverlay } from './SignalOverlay';
@@ -38,6 +39,19 @@ export interface MapView { southWest: LatLon; northEast: LatLon; center: LatLon;
 export interface SensorMapHandle { fitSensors(): void; zoomBy(delta: number): void }
 
 const RADIO_TOWER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9M7.8 4.7a6.14 6.14 0 0 0-.8 7.5M16.2 4.8c2 2 2.26 5.11.8 7.47M19.1 1.9a9.96 9.96 0 0 1 0 14.1M9.5 18h5m-6.5 4 4-11 4 11"/><circle cx="12" cy="9" r="2"/></svg>';
+
+const WEDGE_R = 34;
+/** Distance of the rotate handle from the sensor, px (the wedge tip). */
+const HANDLE_R = WEDGE_R;
+/** SVG wedge pointing up (north) spanning the 3 dB beamwidth; rotated by CSS to the azimuth. */
+export function wedgePath(beamwidthDeg: number, r = WEDGE_R): string {
+  const half = Math.min(180, Math.max(1, beamwidthDeg)) / 2 * Math.PI / 180;
+  const c = r + 2;
+  const x = (a: number) => (c + r * Math.sin(a)).toFixed(2);
+  const y = (a: number) => (c - r * Math.cos(a)).toFixed(2);
+  if (half >= Math.PI - 1e-6) return `M${c} ${c - r}A${r} ${r} 0 1 1 ${c} ${c + r}A${r} ${r} 0 1 1 ${c} ${c - r}Z`;
+  return `M${c} ${c}L${x(-half)} ${y(-half)}A${r} ${r} 0 ${half * 2 > Math.PI ? 1 : 0} 1 ${x(half)} ${y(half)}Z`;
+}
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const rgb = (hex: string) => { const n = parseInt(hex.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
@@ -116,8 +130,21 @@ function paintZones(result: ZoneResult, objective: LinkObjective = 'desired', sh
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : canvas.toDataURL())));
 }
 
-export function SensorMap({ sensors, selectedId, tones, links, zones, rings, basemap, buildings = false, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onView }: {
+/** A ring belongs to the transmitter nearest its centre; its label says "boresight" when that transmitter is a Sector. */
+export function ringIsSector(points: LatLon[], sensors: Sensor[], antennaModels: AntennaModel[]): boolean {
+  if (!points.length) return false;
+  const lat = points.reduce((a, p) => a + p.lat, 0) / points.length;
+  const lon = points.reduce((a, p) => a + p.lon, 0) / points.length;
+  let best: Sensor | null = null, bestD = Infinity;
+  for (const s of sensors) if (s.role === 'tx') { const d = (s.lat - lat) ** 2 + (s.lon - lon) ** 2; if (d < bestD) { best = s; bestD = d; } }
+  return !!best && resolveAntenna({ antennaModels }, best).kind === 'sector';
+}
+
+export function SensorMap({ sensors, antennaModels, selectedId, tones, links, zones, rings, basemap, buildings = false, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onRotate, onView }: {
+  /** Sets a sector antenna's azimuth (whole degrees) and stops it tracking. */
+  onRotate: (id: string, azimuthDeg: number) => void;
   sensors: Sensor[];
+  antennaModels: AntennaModel[];
   selectedId: string | null;
   tones: Record<string, string>;
   links: MapLink[];
@@ -139,10 +166,12 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
   const mapRef = useRef<MapLibreMap | null>(null);
   const markers = useRef(new Map<string, { marker: Marker; element: HTMLDivElement; baseClass: string }>());
   const dragging = useRef<string | null>(null);
-  const callbacks = useRef({ onSelect, onDrag, onDragEnd, onNudge, onView, onBasemapFallback });
-  callbacks.current = { onSelect, onDrag, onDragEnd, onNudge, onView, onBasemapFallback };
+  const callbacks = useRef({ onSelect, onDrag, onDragEnd, onNudge, onRotate, onView, onBasemapFallback });
+  callbacks.current = { onSelect, onDrag, onDragEnd, onNudge, onRotate, onView, onBasemapFallback };
   const sensorsRef = useRef(sensors);
   sensorsRef.current = sensors;
+  const modelsRef = useRef(antennaModels);
+  modelsRef.current = antennaModels;
   const [loaded, setLoaded] = useState(false);
   // MapLibre aborts (and logs) an image still loading when updateImage is called again,
   // so zone images are applied one at a time and only the newest waiting one is kept.
@@ -240,6 +269,8 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     return () => {
       for (const { marker } of markers.current.values()) marker.remove();
       markers.current.clear();
+      handleMarker.current?.marker.remove();
+      handleMarker.current = null;
       clearZoneImages(zoneImage.current);
       map.remove();
       mapRef.current = null;
@@ -283,8 +314,100 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
       entry.element.setAttribute('aria-label', `${sensor.role === 'tx' ? 'Transmitter' : 'Receiver'} ${sensor.name}. Arrow keys move 1 m, Shift with arrows 10 m.`);
       entry.element.setAttribute('aria-pressed', String(sensor.id === selectedId));
       entry.element.querySelector('.sensor-marker-label')!.textContent = sensor.name;
+      const antenna = resolveAntenna({ antennaModels }, sensor);
+      let wedge = entry.element.querySelector<SVGSVGElement>('.antenna-wedge');
+      if (antenna.kind === 'sector') {
+        if (!wedge) {
+          wedge = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          wedge.setAttribute('class', 'antenna-wedge');
+          wedge.setAttribute('aria-hidden', 'true');
+          const size = (WEDGE_R + 2) * 2;
+          wedge.setAttribute('width', String(size)); wedge.setAttribute('height', String(size)); wedge.setAttribute('viewBox', `0 0 ${size} ${size}`);
+          wedge.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'path'));
+          entry.element.prepend(wedge);
+        }
+        wedge.firstElementChild!.setAttribute('d', wedgePath(antenna.beamwidthDeg));
+        wedge.dataset.azimuth = String(antenna.azimuthDeg);
+        wedge.style.transform = `rotate(${antenna.azimuthDeg - map.getBearing()}deg)`;
+      } else wedge?.remove();
     }
-  }, [sensors, selectedId, tones, loaded]);
+  }, [sensors, antennaModels, selectedId, tones, loaded]);
+
+  // Rotate handle: a second, non-draggable Marker at the wedge tip of the selected Sector sensor. Being a separate element,
+  // it is never the target of the sensor marker's drag; its pointer events are also stopped before MapLibre's map-drag handlers.
+  const handleMarker = useRef<{ marker: Marker; element: HTMLDivElement; id: string } | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    const sensor = sensors.find((s) => s.id === selectedId);
+    const antenna = sensor ? resolveAntenna({ antennaModels }, sensor) : null;
+    if (!sensor || !antenna || antenna.kind !== 'sector') { handleMarker.current?.marker.remove(); handleMarker.current = null; return; }
+    let entry = handleMarker.current;
+    if (entry && entry.id !== sensor.id) { entry.marker.remove(); entry = null; }
+    if (!entry) {
+      const element = document.createElement('div');
+      element.className = 'rotate-handle';
+      element.tabIndex = 0;
+      element.setAttribute('role', 'slider');
+      element.setAttribute('aria-valuemin', '0');
+      element.setAttribute('aria-valuemax', '359');
+      element.setAttribute('aria-orientation', 'horizontal');
+      const id = sensor.id;
+      const current = () => sensorsRef.current.find((s) => s.id === id);
+      const stop = (event: Event) => event.stopPropagation();
+      for (const type of ['pointerdown', 'mousedown', 'touchstart', 'dblclick', 'click']) element.addEventListener(type, stop);
+      let active = false;
+      const rotateTo = (event: PointerEvent) => {
+        const s = current();
+        if (!s) return;
+        const rect = map.getContainer().getBoundingClientRect();
+        const p = map.project([s.lon, s.lat]);
+        callbacks.current.onRotate(id, azimuthFromPointer(event.clientX - rect.left - p.x, event.clientY - rect.top - p.y, map.getBearing(), event.shiftKey));
+      };
+      element.addEventListener('pointerdown', (event) => { active = true; element.setPointerCapture(event.pointerId); element.classList.add('active'); event.preventDefault(); element.focus({ preventScroll: true }); });
+      element.addEventListener('pointermove', (event) => { if (active) rotateTo(event); });
+      const end = (event: PointerEvent) => { if (!active) return; active = false; element.classList.remove('active'); if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId); };
+      element.addEventListener('pointerup', end);
+      element.addEventListener('pointercancel', end);
+      element.addEventListener('keydown', (event) => {
+        const s = current();
+        const dir = event.key === ']' ? 1 : event.key === '[' ? -1 : 0;
+        if (!s || !dir) return;
+        event.preventDefault(); event.stopPropagation();
+        callbacks.current.onRotate(id, normAzimuth(Math.round(s.antenna.azimuthDeg) + dir * (event.shiftKey ? 1 : 5)));
+      });
+      entry = { marker: new maplibregl.Marker({ element, anchor: 'center' }).setLngLat([sensor.lon, sensor.lat]).addTo(map), element, id };
+      handleMarker.current = entry;
+    }
+    const place = () => {
+      const s = sensorsRef.current.find((x) => x.id === entry!.id);
+      if (!s) return;
+      const a = (resolveAntenna({ antennaModels: modelsRef.current }, s).azimuthDeg - map.getBearing()) * Math.PI / 180;
+      entry!.marker.setOffset([HANDLE_R * Math.sin(a), -HANDLE_R * Math.cos(a)]);
+    };
+    entry.marker.setLngLat([sensor.lon, sensor.lat]);
+    place();
+    const az = Math.round(antenna.azimuthDeg);
+    entry.element.setAttribute('aria-valuenow', String(az));
+    entry.element.setAttribute('aria-valuetext', `${az}°`);
+    entry.element.setAttribute('aria-label', `Rotate antenna, azimuth ${az}°`);
+    map.on('rotate', place);
+    return () => { map.off('rotate', place); };
+  }, [sensors, antennaModels, selectedId, loaded]);
+
+  // A rotated map turns the wedges with it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded) return;
+    const turn = () => {
+      for (const entry of markers.current.values()) {
+        const wedge = entry.element.querySelector<SVGSVGElement>('.antenna-wedge');
+        if (wedge) wedge.style.transform = `rotate(${Number(wedge.dataset.azimuth) - map.getBearing()}deg)`;
+      }
+    };
+    map.on('rotate', turn);
+    return () => { map.off('rotate', turn); };
+  }, [loaded]);
 
   // Marker labels: each label sits on the side of its marker with the least collision against neighbours (markers do not move).
   useEffect(() => {
@@ -356,11 +479,11 @@ export function SensorMap({ sensors, selectedId, tones, links, zones, rings, bas
     if (!loaded || !map) return;
     (map.getSource('range-rings') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.map(r => outlineFeature([r.points], { id: r.id })) });
     const labels = rings.map(r => {
-      const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label;
+      const el = document.createElement('span'); el.className = `range-ring-label ring-${r.id}`; el.textContent = r.label + (ringIsSector(r.points, sensorsRef.current, modelsRef.current) ? ' (boresight)' : '');
       return new maplibregl.Marker({ element: el }).setLngLat([r.points[0].lon, r.points[0].lat]).addTo(map);
     });
     return () => labels.forEach(m => m.remove());
-  }, [rings, loaded]);
+  }, [rings, sensors, loaded]);
 
   // Distance labels at the midpoint of each labelled link; keyed on text and position so unrelated renders keep them.
   const linkLabels = links.filter((l) => l.label).map((l) => ({ text: l.label!, lon: (l.from.lon + l.to.lon) / 2, lat: (l.from.lat + l.to.lat) / 2, faint: !l.emphasis }));

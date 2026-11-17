@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { freshDefaultState } from '../data/defaults';
 import type { MapScenario, ScreeningStatus } from '../types';
+import { ZERO_PATTERN_LOSS } from './antenna';
+import { offsetLatLon, SG_REFERENCE } from './geo';
 import { calculateLink } from './rf';
 import { evaluatePairs, receiverSummary, type PairResult } from './sensors';
 import { assessAll, assessReceiver, effectiveMarginDb, mitigations, pairVerdict, sumDbm, transmitterPowerRange, usesAggregate, worstAssessedLink } from './interference';
@@ -9,7 +11,7 @@ const state = freshDefaultState();
 const rx = { ...state.map.sensors[1], objective: 'avoidance' as const };
 const pair = (txId: string, power: number, intended = false, status: ScreeningStatus = 'Acceptable link'): PairResult => ({
   txId, txName: txId, rxId: rx.id, intended, elevationKnown: true, distanceM: 100,
-  propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, clearance: 'unknown',
+  propagationLossDb: 0, rejectionDb: 0, polarizationDb: 0, pattern: ZERO_PATTERN_LOSS, clearance: 'unknown',
   result: { ...calculateLink(state.inputs, intended ? 'desired' : 'avoidance'), receivedPowerDbm: power, status },
 });
 
@@ -416,5 +418,73 @@ describe('receiver interference assessment', () => {
     expect(worstAssessedLink(a, pairs)?.txId).toBe('missing');
     expect(worstAssessedLink(a, pairs.slice(0, 2))?.txId).toBe('strong');
     expect(worstAssessedLink(a, [])).toBeUndefined();
+  });
+});
+
+describe('rotate suggestion', () => {
+  const model = { id: 'sec', name: 'Sector', kind: 'sector' as const, gainDbi: 15, beamwidthDeg: 65, verticalBeamwidthDeg: 90, frontToBackDb: 25 };
+  /** Sector Tx at the origin aimed north at the served receiver; the victim sits at (victimX, 0). */
+  const build = (victimX: number, opts: { omni?: boolean; strictServed?: boolean; thresholdCutDb?: number } = {}) => {
+    const base = state.map.sensors;
+    const tx = { ...base[0], id: 'tx', name: 'T2', ...offsetLatLon(SG_REFERENCE, 0, 0), antenna: { modelId: opts.omni ? 'omni' : 'sec', azimuthDeg: 0, downtiltDeg: 0, aimAtId: null } };
+    const served = { ...base[1], id: 'served', name: 'R2', ...offsetLatLon(SG_REFERENCE, 0, 500), objective: 'desired' as const };
+    const victim = { ...base[1], id: 'victim', name: 'R1', ...offsetLatLon(SG_REFERENCE, victimX, 0), objective: 'avoidance' as const, desiredTxIds: 'auto' as const };
+    const scenario = (s: typeof served, v: typeof victim): MapScenario => ({ ...state.map, sensors: [tx, s, v], antennaModels: [model], propagationModel: 'free-space', useTerrainElevation: false, aggregateInterference: 'never' });
+    let map = scenario(served, victim);
+    const before = evaluatePairs(map, state.inputs, () => 0);
+    const atVictim = before.find(p => p.rxId === 'victim')!.result.receivedPowerDbm;
+    const atServed = before.find(p => p.rxId === 'served')!.result.receivedPowerDbm;
+    const v2 = { ...victim, protectionMarginDb: 0, interferenceThresholdDbm: atVictim - (opts.thresholdCutDb ?? 1.5) };
+    const s2 = opts.strictServed ? { ...served, sensitivityDbm: atServed - served.fadeMarginTargetDb - 0.001 } : served;
+    map = scenario(s2, v2);
+    const pairs = evaluatePairs(map, state.inputs, () => 0);
+    const a = assessReceiver(map, v2, pairs);
+    return { map, pairs, a, list: mitigations(map, a, pairs) };
+  };
+
+  it('rotates a back-lobe sector away from the victim while the served link holds', () => {
+    const { map, pairs, a, list } = build(500);
+    expect(a.status).not.toBe('Below interference threshold');
+    const rot = list.find(s => s.kind === 'rotate')!;
+    expect(rot).toMatchObject({ txId: 'tx', estimate: false });
+    expect(rot.text).toMatch(/^Rotate T2's antenna \d+° anticlockwise \(to \d+°\)/);
+    expect(rot.deltaDb).toBeGreaterThan(0);
+    expect(list.indexOf(rot)).toBe(list.findIndex(s => s.kind === 'power') + 1);
+    // Applying the suggested azimuth really clears the victim and keeps the served link.
+    const turned = { ...map, sensors: map.sensors.map(s => s.id === 'tx' ? { ...s, antenna: { ...s.antenna, azimuthDeg: rot.azimuthDeg! } } : s) };
+    const after = evaluatePairs(turned, state.inputs, () => 0);
+    const victim = turned.sensors.find(s => s.id === 'victim')!;
+    expect(assessReceiver(turned, victim, after).interferenceDbm).toBeLessThanOrEqual(a.limitDbm + 1e-9);
+    expect(a.interferenceDbm - assessReceiver(turned, victim, after).interferenceDbm).toBeCloseTo(rot.deltaDb, 6);
+    const served = turned.sensors.find(s => s.id === 'served')!;
+    expect(after.find(p => p.rxId === 'served')!.result.receivedPowerDbm).toBeGreaterThanOrEqual(served.sensitivityDbm + served.fadeMarginTargetDb);
+    // One degree less would not have been enough.
+    const smaller = rot.azimuthDeg! > 180 ? rot.azimuthDeg! + 1 : rot.azimuthDeg! - 1;
+    const short = { ...map, sensors: map.sensors.map(s => s.id === 'tx' ? { ...s, antenna: { ...s.antenna, azimuthDeg: smaller % 360 } } : s) };
+    expect(assessReceiver(short, victim, evaluatePairs(short, state.inputs, () => 0)).interferenceDbm).toBeGreaterThan(a.limitDbm);
+    expect(pairs.length).toBe(2);
+  });
+
+  it('turns clockwise when the victim is on the other side', () => {
+    const rot = build(-500).list.find(s => s.kind === 'rotate')!;
+    expect(rot.text).toMatch(/^Rotate T2's antenna \d+° clockwise \(to \d+°\)/);
+    expect(rot.azimuthDeg).toBeGreaterThan(0);
+    expect(rot.azimuthDeg).toBeLessThan(180);
+  });
+
+  it('gives no rotate suggestion when every clearing azimuth breaks the served link', () => {
+    const { list } = build(500, { strictServed: true });
+    expect(list.some(s => s.kind === 'rotate')).toBe(false);
+    expect(list.some(s => s.kind === 'power')).toBe(true);
+  });
+
+  it('gives no rotate suggestion for an omni transmitter', () => {
+    const { a, list } = build(500, { omni: true });
+    expect(a.interferenceDbm).toBeGreaterThan(a.limitDbm);
+    expect(list.some(s => s.kind === 'rotate')).toBe(false);
+  });
+
+  it('gives no rotate suggestion when even the back lobe cannot clear the victim', () => {
+    expect(build(500, { thresholdCutDb: 40 }).list.some(s => s.kind === 'rotate')).toBe(false);
   });
 });

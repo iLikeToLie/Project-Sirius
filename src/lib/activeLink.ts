@@ -2,6 +2,7 @@ import type { LinkInputs, MapScenario, Sensor } from '../types';
 import type { GroundAt } from './elevation';
 import { toLatLon, toLocalM } from './geo';
 import { solveTxAlongBearing } from './linkGeometry';
+import { applyAimTracking, findModel, OMNI_MODEL_ID } from './antenna';
 import { evaluatePairs, groundOf, pairLinkInputs, pairPropagation, receiverSummary, resolveDesiredTxs, separationM } from './sensors';
 
 /** The part of the app state the active link reads and writes. */
@@ -91,7 +92,7 @@ const SENSOR_FIELDS: Partial<Record<keyof LinkInputs, ['tx' | 'rx', keyof Sensor
   interferenceThresholdDbm: ['rx', 'interferenceThresholdDbm'],
 };
 
-const replaceSensor = (map: MapScenario, next: Sensor): MapScenario => ({ ...map, sensors: map.sensors.map((s) => (s.id === next.id ? next : s)) });
+const replaceSensor = (map: MapScenario, next: Sensor): MapScenario => ({ ...map, sensors: applyAimTracking(map.sensors.map((s) => (s.id === next.id ? next : s))) });
 
 export function applyInputEdit<S extends LinkState, K extends keyof LinkInputs>(
   state: S, key: K, value: LinkInputs[K], groundAt: GroundAt, pin: LinkPin | null = null,
@@ -118,5 +119,9 @@ export function applyInputEdit<S extends LinkState, K extends keyof LinkInputs>(
   const field = SENSOR_FIELDS[key];
   if (!field) return { ok: true, state: { ...state, inputs: { ...state.inputs, [key]: value } } };
   const [role, sensorKey] = field;
+  const owner = pair[role];
+  if (sensorKey === 'gainDbi' && owner.antenna.modelId !== OMNI_MODEL_ID && findModel(state.map, owner.antenna.modelId)) {
+    return { ok: false, reason: `${owner.name}'s gain comes from its antenna model; edit the model instead.` };
+  }
   return { ok: true, state: { ...state, map: replaceSensor(state.map, { ...pair[role], [sensorKey]: value }) } };
 }

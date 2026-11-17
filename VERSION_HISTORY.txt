@@ -540,7 +540,7 @@ Key changes:
 Web Version 1.11.0 (based on workbook Version 3)
 Target deployment: https://iliketolie.github.io/Project-Sirius/
 Date: 2026-11-12
-Status: on branch claude/hub-housekeeping-app-polish-vxhtc8; not merged.
+Status: merged to main as PR #14 on 12 November 2026 (branch claude/hub-housekeeping-app-polish-vxhtc8).
 
 Function:
 Polish release (project hub decision D1 "Polish first", with the deferred
@@ -590,3 +590,48 @@ Calculation scope and limitations:
 The Version 3 Friis engine is unchanged. Below 1001 px the cards still stack
 under the map. With seven or more sensors clustered tightly, marker and
 distance labels can still overlap.
+
+-------------------------------------------------------------------------------
+Web Version 1.12.0 (based on workbook Version 3)
+Target deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-11-16
+Status: on branch claude/practical-turing-nywbaj; not merged.
+
+Function:
+Directional antennas in the Singapore Link workspace: sector antennas with a
+3GPP TR 36.814 pattern, an antenna model library and per-sensor pointing. Every
+sensor starts on the built-in Omni model, so existing results are unchanged.
+
+Key changes:
+- Antennas tab, next to the Link workspace: a library of up to 24 models. The
+  built-in Omni model uses each sensor's own Gain. Sector models own their gain
+  and have horizontal and vertical 3 dB beamwidths and a front-to-back ratio,
+  shown on a live polar plot. Sector models can be duplicated and deleted.
+- Sensor pointing table: model, azimuth, downtilt and Aim at for each sensor.
+  Aim at tracks the target's bearing as either sensor moves.
+- Pattern loss: min(Ah + Av, front-to-back), with Av capped at 20 dB. It applies
+  to every Tx-Rx pair at both ends, using the bearing and elevation at each end.
+  It also applies to the coverage map (the receiver is assumed aimed at the
+  transmitter), free-space zones, and the Interference and Placement layers
+  (both use the real azimuths).
+- Map: a Sector sensor shows a beam wedge on its marker and a handle to rotate
+  it by dragging, or with [ and ] (5 degree steps). The selected sensor card
+  has Model, Azimuth and Aim at, with a link to the Antennas tab.
+- Link budget drawer: "Antenna pattern loss" metric with the off-axis angle at
+  each end.
+- Fix suggestion: "Rotate antenna" for an interfered receiver, the smallest
+  azimuth change of a Sector transmitter that clears the receiver without
+  pushing its other receivers below their required level. Omni transmitters
+  get no rotation suggestion.
+- Calculator gain fields are locked for a sensor on a library model; the model
+  owns the gain.
+- Scenario schema 8. Older files migrate with every sensor on Omni, so their
+  results are unchanged. The Version 3 Friis engine (src/lib/rf.ts) is unchanged.
+- 400 unit tests pass across 35 files. The new browser script
+  scripts/e2e/directional-antennas.mjs passes (a sector back lobe lowers the
+  victim by 25.00 dB), as do the seven existing browser scripts.
+
+Calculation scope and limitations:
+Patterns are one horizontal cut and one vertical cut per antenna, with no side
+lobes and no imported pattern files (the workbook Version 4 patterns are not
+included). Downtilt is set per sensor.

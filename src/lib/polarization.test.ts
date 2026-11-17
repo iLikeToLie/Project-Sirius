@@ -63,7 +63,7 @@ describe('polarization state and pair integration', () => {
     rx.desiredTxIds = [tx.id];
     for (const pair of evaluatePairs(state.map, state.inputs, flat)) {
       const transmitter = state.map.sensors.find(s => s.id === pair.txId)!;
-      const before = pairInputs(state.inputs, transmitter, rx, pair.distanceM);
+      const before = pairInputs(state.map, state.inputs, transmitter, rx, pair.distanceM);
       expect(pair.polarizationDb).toBe(0);
       expect(pair.result).toEqual(calculateLink(before, pair.intended ? 'desired' : 'avoidance'));
     }
