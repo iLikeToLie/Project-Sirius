@@ -1,5 +1,5 @@
 import type { AntennaPattern, LinkInputs } from '../types';
-import { combineLossDb, horizontalTermDb, verticalTermDb } from './antenna';
+import { combineLossDb, horizontalTermDb, patternKey, verticalTermDb } from './antenna';
 import type { ScalarGrid } from './contours';
 import { computeCoverage, coverageStepM, reprojectPowers } from './coverage';
 import { toLocalM, type LatLon } from './geo';
@@ -30,7 +30,7 @@ export interface MultiFieldResult { jobId: number; powers: Float32Array[] }
  * for terrain diffraction. Names, ids, thresholds and sensitivities only affect classification,
  * so a change to them must not look like a new request.
  */
-const patternSig = (a?: AntennaPattern) => !a || a.kind === 'omni' ? 0 : [a.azimuthDeg, a.beamwidthDeg, a.frontToBackDb, a.verticalBeamwidthDeg, a.downtiltDeg];
+const patternSig = (a?: AntennaPattern) => !a || a.kind === 'omni' ? 0 : patternKey(a);
 const sourceSignature = (s: MultiFieldRequest['sources'][number]) =>
   [s.lat, s.lon, s.elevationM, s.ownBuildingM ?? 0, calculateLink({ ...s.inputs, distanceM: 1 }).receivedPowerDbm, s.inputs.frequencyGhz, patternSig(s.patterns?.source), patternSig(s.patterns?.cell)];
 
@@ -60,7 +60,7 @@ export function computeMultiField(req: MultiFieldRequest): MultiFieldResult {
     }
     const basePower = calculateLink({ ...source.inputs, distanceM: 1 }).receivedPowerDbm;
     const { source: srcPat, cell: cellPat } = source.patterns ?? {};
-    const src = srcPat?.kind === 'sector' ? srcPat : undefined, cell = cellPat?.kind === 'sector' ? cellPat : undefined;
+    const src = srcPat && srcPat.kind !== 'omni' ? srcPat : undefined, cell = cellPat && cellPat.kind !== 'omni' ? cellPat : undefined;
     for (let k = 0; k < field.length; k++) {
       const x = raster.x0 + k % (raster.cols + 1) * raster.dx;
       const y = raster.y0 + Math.floor(k / (raster.cols + 1)) * raster.dy;

@@ -635,3 +635,34 @@ Calculation scope and limitations:
 Patterns are one horizontal cut and one vertical cut per antenna, with no side
 lobes and no imported pattern files (the workbook Version 4 patterns are not
 included). Downtilt is set per sensor.
+
+-------------------------------------------------------------------------------
+Web Version 1.13.0 (based on workbook Version 3)
+Target deployment: https://iliketolie.github.io/Project-Sirius/
+Date: 2026-11-17
+Status: antenna library layer on feature/antenna-patterns-lib; not released.
+
+Function:
+Custom antenna point tables, portable model files and illustrative presets.
+
+Key changes:
+- Added custom horizontal (0–360 degrees) and vertical (-90–90 degrees) cuts,
+  with 2–721 unique points per cut and losses from 0–60 dB. Tables survive
+  switching back to a parametric model. Scenario schema 9 retains custom cuts;
+  older scenarios migrate without changing their antenna models or results.
+- Resolved custom models use cached one-degree samples, signed horizontal
+  angles and clamped vertical elevations with sensor downtilt. Combined loss
+  remains min(horizontal + vertical, front-to-back), without the sector-only
+  20 dB vertical cap. Field and zone cache keys include custom table content.
+- Added JSON model/library import and export, unique imported ids and names,
+  atomic validation and reporting of the 24-model library limit.
+- Added MSI/Planet import, dBd-to-dBi conversion (including a note when dBd is
+  assumed), front-half vertical elevation mapping and horizontal rear-loss cap.
+- Added eight editable presets: 65/90/120-degree sectors, panel, Yagi, patch,
+  grid/parabolic and collinear omni. Presets load through the JSON importer.
+
+Calculation scope and limitations:
+Presets are illustrative: replace with manufacturer data. Two pattern cuts
+and their combined-loss cap approximate a 3D radiation pattern. Custom cuts
+use linear interpolation; resolved field calculations use one-degree samples.
+UI editing and file controls are integrated separately in the UI worktree.

@@ -91,7 +91,7 @@ const DEFAULT_INPUTS: LinkInputs = {
 const defaultPlacements = workspaceForDistance(500);
 
 export const DEFAULT_STATE: AppState = {
-  schemaVersion: 8,
+  schemaVersion: 9,
   linkObjective: 'desired',
   inputs: DEFAULT_INPUTS,
   distanceSweep: { minDistanceM: 10, maxDistanceM: 2000, stepM: 10 },
