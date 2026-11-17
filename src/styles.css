@@ -1033,6 +1033,23 @@ tbody tr:hover { background: var(--surface-elevated); }
   .antennas-grid { grid-template-columns: minmax(0, 1fr); }
   .antennas-grid > .panel { padding: 16px; }
 }
+.antenna-polar .handle { fill: var(--yellow); stroke: var(--canvas); stroke-width: 1.5; cursor: grab; touch-action: none; }
+.antenna-polar .handle-v { fill: var(--blue); }
+.antenna-polar .handle:hover { stroke: var(--ink); }
+.antenna-polar .handle:focus-visible { outline: none; stroke: var(--ink); stroke-width: 2.5; }
+.menu-wrap { position: relative; }
+.menu-list { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 220px; margin: 0; padding: 4px; list-style: none; display: grid; gap: 2px; background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+.menu-list button { width: 100%; text-align: left; padding: 8px 10px; color: var(--body); background: transparent; border: 0; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
+.menu-list button:hover, .menu-list button:focus-visible { background: var(--surface-card); color: var(--ink); }
+.pattern-editor { margin-top: 16px; display: grid; gap: 10px; }
+.pattern-toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.pattern-toolbar .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--body); }
+.point-table { max-height: 280px; margin-top: 0; }
+.point-table table { width: 100%; border-collapse: collapse; }
+.point-table th, .point-table td { padding: 4px 8px; text-align: left; }
+.point-table .field > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.paste-values textarea { width: 100%; box-sizing: border-box; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); background: var(--canvas); border: 1px solid var(--hairline); border-radius: 8px; padding: 8px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 520px) {
   .antenna-editor.form-grid.two { grid-template-columns: minmax(0, 1fr); }
 }

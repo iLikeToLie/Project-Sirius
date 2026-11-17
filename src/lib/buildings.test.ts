@@ -106,7 +106,7 @@ describe('schema 7', () => {
     delete saved.map.buildings;
     for (const s of saved.map.sensors) delete s.mount;
     const loaded = normalizeState(saved);
-    expect(loaded.schemaVersion).toBe(8);
+    expect(loaded.schemaVersion).toBe(9);
     expect(loaded.map.buildings).toBe(false);
     expect(loaded.map.sensors.every((s) => s.mount === 'roof')).toBe(true);
   });

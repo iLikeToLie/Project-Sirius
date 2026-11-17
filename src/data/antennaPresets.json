@@ -1,0 +1,504 @@
+{
+  "format": "lbw-antenna-models",
+  "version": 1,
+  "models": [
+    {
+      "presetId": "sector-65",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "3GPP sector 65\u00b0",
+      "kind": "sector",
+      "gainDbi": 18.0,
+      "beamwidthDeg": 65,
+      "verticalBeamwidthDeg": 10,
+      "frontToBackDb": 25
+    },
+    {
+      "presetId": "sector-90",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "Sector 90\u00b0",
+      "kind": "sector",
+      "gainDbi": 16.5,
+      "beamwidthDeg": 90,
+      "verticalBeamwidthDeg": 10,
+      "frontToBackDb": 25
+    },
+    {
+      "presetId": "sector-120",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "Sector 120\u00b0",
+      "kind": "sector",
+      "gainDbi": 15.5,
+      "beamwidthDeg": 120,
+      "verticalBeamwidthDeg": 10,
+      "frontToBackDb": 25
+    },
+    {
+      "presetId": "panel-30",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "Panel 30\u00b0",
+      "kind": "custom",
+      "gainDbi": 18,
+      "beamwidthDeg": 30,
+      "verticalBeamwidthDeg": 12,
+      "frontToBackDb": 30,
+      "pattern": {
+        "horizontal": [
+          [
+            0,
+            0
+          ],
+          [
+            15,
+            3
+          ],
+          [
+            30,
+            18
+          ],
+          [
+            45,
+            12
+          ],
+          [
+            60,
+            25
+          ],
+          [
+            90,
+            30
+          ],
+          [
+            180,
+            30
+          ],
+          [
+            270,
+            30
+          ],
+          [
+            300,
+            25
+          ],
+          [
+            315,
+            12
+          ],
+          [
+            330,
+            18
+          ],
+          [
+            345,
+            3
+          ]
+        ],
+        "vertical": [
+          [
+            -90,
+            35
+          ],
+          [
+            -45,
+            30
+          ],
+          [
+            -15,
+            20
+          ],
+          [
+            -6,
+            3
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            6,
+            3
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            45,
+            30
+          ],
+          [
+            90,
+            35
+          ]
+        ]
+      }
+    },
+    {
+      "presetId": "yagi-12",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "Yagi 12 dBi",
+      "kind": "custom",
+      "gainDbi": 12,
+      "beamwidthDeg": 50,
+      "verticalBeamwidthDeg": 45,
+      "frontToBackDb": 22,
+      "pattern": {
+        "horizontal": [
+          [
+            0,
+            0
+          ],
+          [
+            25,
+            3
+          ],
+          [
+            50,
+            15
+          ],
+          [
+            70,
+            10
+          ],
+          [
+            100,
+            25
+          ],
+          [
+            140,
+            30
+          ],
+          [
+            180,
+            22
+          ],
+          [
+            220,
+            30
+          ],
+          [
+            260,
+            25
+          ],
+          [
+            290,
+            10
+          ],
+          [
+            310,
+            15
+          ],
+          [
+            335,
+            3
+          ]
+        ],
+        "vertical": [
+          [
+            -90,
+            30
+          ],
+          [
+            -70,
+            25
+          ],
+          [
+            -45,
+            15
+          ],
+          [
+            -22.5,
+            3
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            22.5,
+            3
+          ],
+          [
+            45,
+            15
+          ],
+          [
+            70,
+            25
+          ],
+          [
+            90,
+            30
+          ]
+        ]
+      }
+    },
+    {
+      "presetId": "patch-8",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "Patch 8 dBi 70\u00b0",
+      "kind": "custom",
+      "gainDbi": 8,
+      "beamwidthDeg": 70,
+      "verticalBeamwidthDeg": 70,
+      "frontToBackDb": 25,
+      "pattern": {
+        "horizontal": [
+          [
+            0,
+            0
+          ],
+          [
+            35,
+            3
+          ],
+          [
+            70,
+            12
+          ],
+          [
+            90,
+            20
+          ],
+          [
+            140,
+            30
+          ],
+          [
+            180,
+            25
+          ],
+          [
+            220,
+            30
+          ],
+          [
+            270,
+            20
+          ],
+          [
+            290,
+            12
+          ],
+          [
+            325,
+            3
+          ]
+        ],
+        "vertical": [
+          [
+            -90,
+            25
+          ],
+          [
+            -60,
+            12
+          ],
+          [
+            -35,
+            3
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            35,
+            3
+          ],
+          [
+            60,
+            12
+          ],
+          [
+            90,
+            25
+          ]
+        ]
+      }
+    },
+    {
+      "presetId": "grid-24",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "Grid/parabolic 24 dBi",
+      "kind": "custom",
+      "gainDbi": 24,
+      "beamwidthDeg": 8,
+      "verticalBeamwidthDeg": 8,
+      "frontToBackDb": 40,
+      "pattern": {
+        "horizontal": [
+          [
+            0,
+            0
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            8,
+            25
+          ],
+          [
+            12,
+            18
+          ],
+          [
+            20,
+            35
+          ],
+          [
+            90,
+            40
+          ],
+          [
+            180,
+            40
+          ],
+          [
+            270,
+            40
+          ],
+          [
+            340,
+            35
+          ],
+          [
+            348,
+            18
+          ],
+          [
+            352,
+            25
+          ],
+          [
+            356,
+            3
+          ]
+        ],
+        "vertical": [
+          [
+            -90,
+            40
+          ],
+          [
+            -20,
+            35
+          ],
+          [
+            -12,
+            18
+          ],
+          [
+            -8,
+            25
+          ],
+          [
+            -4,
+            3
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            4,
+            3
+          ],
+          [
+            8,
+            25
+          ],
+          [
+            12,
+            18
+          ],
+          [
+            20,
+            35
+          ],
+          [
+            90,
+            40
+          ]
+        ]
+      }
+    },
+    {
+      "presetId": "collinear-15",
+      "description": "Illustrative: replace with manufacturer data. Generic shape for preliminary screening.",
+      "name": "Collinear omni 15\u00b0 vertical",
+      "kind": "custom",
+      "gainDbi": 8,
+      "beamwidthDeg": 180,
+      "verticalBeamwidthDeg": 15,
+      "frontToBackDb": 35,
+      "pattern": {
+        "horizontal": [
+          [
+            0,
+            0
+          ],
+          [
+            90,
+            0
+          ],
+          [
+            180,
+            0
+          ],
+          [
+            270,
+            0
+          ]
+        ],
+        "vertical": [
+          [
+            -90,
+            35
+          ],
+          [
+            -45,
+            25
+          ],
+          [
+            -25,
+            10
+          ],
+          [
+            -15,
+            15
+          ],
+          [
+            -7.5,
+            3
+          ],
+          [
+            0,
+            0
+          ],
+          [
+            7.5,
+            3
+          ],
+          [
+            15,
+            15
+          ],
+          [
+            25,
+            10
+          ],
+          [
+            45,
+            25
+          ],
+          [
+            90,
+            35
+          ]
+        ]
+      }
+    }
+  ]
+}

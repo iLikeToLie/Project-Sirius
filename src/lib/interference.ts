@@ -144,7 +144,7 @@ export function placementAllowance(map: MapScenario, rx: Sensor, txId: string, p
  */
 function rotateSuggestion(map: MapScenario, tx: Sensor, rx: Sensor, pairs: PairResult[], limit: number): { changeDeg: number; azimuthDeg: number; interferenceDbm: number } | null {
   const antenna = resolveAntenna(map, tx);
-  if (antenna.kind !== 'sector') return null;
+  if (antenna.kind === 'omni') return null;
   const mine = pairs.filter(p => p.txId === tx.id);
   const sensorOf = (id: string) => map.sensors.find(s => s.id === id);
   const valid = (p: PairResult) => p.elevationKnown && p.result.valid && Number.isFinite(p.result.receivedPowerDbm);
