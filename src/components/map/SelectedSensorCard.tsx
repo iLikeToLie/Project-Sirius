@@ -114,7 +114,7 @@ export function SelectedSensorCard({ sensor, map, pairs, assessments, groundAt, 
         </>}
       </div>
 
-      {resolved.kind === 'sector' && <div className="form-grid two antenna-sector" aria-label="Sector antenna">
+      {resolved.kind !== 'omni' && <div className="form-grid two antenna-sector" aria-label="Sector antenna">
         <CommitField ariaLabel="Antenna azimuth" label="Azimuth" unit="°" value={antenna.azimuthDeg} help="From north, clockwise" onCommit={v => { setAntenna({ azimuthDeg: normAzimuth(v), aimAtId: null }); return undefined; }} />
         <label className="field"><span>Aim at</span><select aria-label="Aim antenna at" value={antenna.aimAtId ?? ''} onChange={e => { if (e.target.value) aimAt(e.target.value); else setAntenna({ aimAtId: null }); }}>
           <option value="">{antenna.aimAtId ? 'Not tracking' : 'Choose a sensor…'}</option>

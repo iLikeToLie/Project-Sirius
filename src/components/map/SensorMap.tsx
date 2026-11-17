@@ -137,7 +137,7 @@ export function ringIsSector(points: LatLon[], sensors: Sensor[], antennaModels:
   const lon = points.reduce((a, p) => a + p.lon, 0) / points.length;
   let best: Sensor | null = null, bestD = Infinity;
   for (const s of sensors) if (s.role === 'tx') { const d = (s.lat - lat) ** 2 + (s.lon - lon) ** 2; if (d < bestD) { best = s; bestD = d; } }
-  return !!best && resolveAntenna({ antennaModels }, best).kind === 'sector';
+  return !!best && resolveAntenna({ antennaModels }, best).kind !== 'omni';
 }
 
 export function SensorMap({ sensors, antennaModels, selectedId, tones, links, zones, rings, basemap, buildings = false, onBasemapFallback, frequencyGhz, handleRef, onSelect, onDrag, onDragEnd, onNudge, onRotate, onView }: {
@@ -316,7 +316,7 @@ export function SensorMap({ sensors, antennaModels, selectedId, tones, links, zo
       entry.element.querySelector('.sensor-marker-label')!.textContent = sensor.name;
       const antenna = resolveAntenna({ antennaModels }, sensor);
       let wedge = entry.element.querySelector<SVGSVGElement>('.antenna-wedge');
-      if (antenna.kind === 'sector') {
+      if (antenna.kind !== 'omni') {
         if (!wedge) {
           wedge = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
           wedge.setAttribute('class', 'antenna-wedge');
@@ -341,7 +341,7 @@ export function SensorMap({ sensors, antennaModels, selectedId, tones, links, zo
     if (!map || !loaded) return;
     const sensor = sensors.find((s) => s.id === selectedId);
     const antenna = sensor ? resolveAntenna({ antennaModels }, sensor) : null;
-    if (!sensor || !antenna || antenna.kind !== 'sector') { handleMarker.current?.marker.remove(); handleMarker.current = null; return; }
+    if (!sensor || !antenna || antenna.kind === 'omni') { handleMarker.current?.marker.remove(); handleMarker.current = null; return; }
     let entry = handleMarker.current;
     if (entry && entry.id !== sensor.id) { entry.marker.remove(); entry = null; }
     if (!entry) {
