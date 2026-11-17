@@ -4,7 +4,9 @@ import { formatNumber } from '../lib/rf';
 import {
   findModel, MAX_ANTENNA_MODELS, newSectorModel, OMNI_MODEL_ID, resolveAntenna, trackMap, typicalGainDbi, updateMapSensors, deleteModel, normAzimuth,
 } from '../lib/antenna';
-import { addPreset, ANTENNA_PRESETS, derivedBeamwidthDeg, exportModelsJson, importAntennaFile, sectorToPoints } from '../lib/__ui_stubs__';
+import { derivedBeamwidthDeg, sectorToPoints } from '../lib/antenna';
+import { exportModelsJson, importAntennaFile } from '../lib/antennaFiles';
+import { addPreset, ANTENNA_PRESETS } from '../lib/antennaPresets';
 import type { AntennaModel, MapScenario, Sensor } from '../types';
 import { CommitField } from './ui';
 import { AntennaPolar, isSymmetric, MAX_LOSS_DB, MAX_POINTS, withAngle, withLoss, withoutPoint, withPoint, interpLoss, type Cut } from './AntennaPolar';
@@ -250,7 +252,6 @@ export function AntennasTab({ map, setMap, onOpenWorkspace }: { map: MapScenario
   const addFromPreset = (presetId: string) => {
     setMenuOpen(false);
     const model = addPreset(models, presetId);
-    if (!model) return;
     setMap((m) => m.antennaModels.length >= MAX_ANTENNA_MODELS ? m : { ...m, antennaModels: [...m.antennaModels, model] });
     pick(model.id, [...models, model]);
   };
@@ -287,7 +288,7 @@ export function AntennasTab({ map, setMap, onOpenWorkspace }: { map: MapScenario
             <button type="button" className="ghost" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} disabled={full}><Plus size={15} aria-hidden="true" />New model<ChevronDown size={14} aria-hidden="true" /></button>
             {menuOpen && <ul className="menu-list" role="menu" aria-label="New model">
               <li role="none"><button type="button" role="menuitem" onClick={() => { setMenuOpen(false); add(); }}>Blank sector</button></li>
-              {ANTENNA_PRESETS.map((preset) => <li role="none" key={preset.id}><button type="button" role="menuitem" onClick={() => addFromPreset(preset.id)}>{preset.name}</button></li>)}
+              {ANTENNA_PRESETS.map((preset) => <li role="none" key={preset.id}><button type="button" role="menuitem" onClick={() => addFromPreset(preset.id)}>{preset.label}</button></li>)}
             </ul>}
           </div>
           <button type="button" className="ghost" onClick={duplicate} disabled={!picked || full}><Copy size={15} aria-hidden="true" />Duplicate</button>

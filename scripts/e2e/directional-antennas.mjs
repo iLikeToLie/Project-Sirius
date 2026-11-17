@@ -148,11 +148,12 @@ try {
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export library' }).click()]);
   const exported = await (await import('node:fs/promises')).readFile(await download.path(), 'utf8');
   assert.equal(JSON.parse(exported).format, 'lbw-antenna-models', 'the library exports in the lbw-antenna-models format');
+  await page.locator('.model-list button').filter({ hasText: modelName }).click();
   await page.getByRole('button', { name: /^Delete$/ }).click();
   const confirm = page.getByRole('alertdialog', { name: 'Confirm delete' });
   if (await confirm.count()) await confirm.getByRole('button', { name: /^Delete / }).click();
   await page.locator('input[aria-label="Import antenna file"]').setInputFiles({ name: 'library.json', mimeType: 'application/json', buffer: Buffer.from(exported) });
-  await page.getByRole('status').filter({ hasText: /Added 1 model/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /Added 2 models/ }).waitFor();
   await page.getByLabel(`Model for ${TX_NAME}`, { exact: true }).selectOption({ label: modelName });
   const reimported = await readPairLoss();
   assert.equal(reimported, withCustom, `Rx B power is identical after export, delete and re-import (${withCustom} dBm)`);
