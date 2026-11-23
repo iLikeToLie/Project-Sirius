@@ -640,7 +640,8 @@ included). Downtilt is set per sensor.
 Web Version 1.13.0 (based on workbook Version 3)
 Target deployment: https://iliketolie.github.io/Project-Sirius/
 Date: 2026-11-17
-Status: antenna library layer on feature/antenna-patterns-lib; not released.
+Status: antenna library, Antennas tab, 23 templates and a performance pass;
+branch feature/antenna-templates-perf (2026-11-23); not merged or released.
 
 Function:
 Custom antenna point tables, portable model files and illustrative presets.
@@ -661,6 +662,21 @@ Key changes:
 - Added eight editable presets: 65/90/120-degree sectors, panel, Yagi, patch,
   grid/parabolic and collinear omni. Presets load through the JSON importer.
 
+- Extended the presets to 23 in four families: omni (dipole, collinear 6 and 9
+  dBi, ceiling), sectors and panels (adds 33, 45 and 60-degree high-gain),
+  directional (Yagi 7 and 16 dBi, log-periodic, helical, horn 15 and 20 dBi)
+  and dishes (30 and 34 dBi). Tables come from scripts/gen-antenna-presets.mjs;
+  the original eight are unchanged. The loader now fails if the 24-model
+  limit would drop a preset.
+- The New model menu groups presets by family, scrolls to fit, and shows a
+  small polar preview on hover or keyboard focus.
+- Performance: Calculator initial JavaScript 497,976 -> 280,851 bytes (the
+  chart library and the Antennas tab load on first use). The scenario save
+  is debounced by 400 ms and flushed on page hide, hidden tab and unmount.
+  While dragging, only pairs whose endpoint moved (or whose desired status
+  flipped) are re-evaluated. Tile updates and map rotation are handled once
+  per frame. Measurements: docs/diagnostics/perf-2026-11-23.md.
+- 475 unit tests pass across 38 files.
 Calculation scope and limitations:
 Presets are illustrative: replace with manufacturer data. Two pattern cuts
 and their combined-loss cap approximate a 3D radiation pattern. Custom cuts
