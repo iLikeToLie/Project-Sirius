@@ -16,7 +16,10 @@ export interface LinkResult {
 
 const finite = (values: number[]) => values.every(Number.isFinite);
 
-export function isValidLinkInput(input: LinkInputs): boolean {
+type LinkBudgetInputs = Omit<LinkInputs, 'scenarioName' | 'txId' | 'rxId'>;
+type SweepInputs = Omit<LinkBudgetInputs, 'distanceM'>;
+
+export function isValidLinkInput(input: LinkBudgetInputs): boolean {
   return finite([
     input.transmitPowerDbm, input.txGainDbi, input.rxGainDbi, input.frequencyGhz, input.distanceM,
     input.txLossDb, input.rxLossDb, input.polarizationLossDb, input.obstructionLossDb, input.otherLossDb,
@@ -48,7 +51,7 @@ export function screeningStatus(receivedPowerDbm: number, sensitivityDbm: number
   return 'Below interference threshold';
 }
 
-export function calculateLink(input: LinkInputs, objective: LinkObjective = 'avoidance'): LinkResult {
+export function calculateLink(input: LinkBudgetInputs, objective: LinkObjective = 'avoidance'): LinkResult {
   if (!isValidLinkInput(input)) {
     return { valid: false, wavelengthM: NaN, fsplDb: NaN, totalLossDb: NaN, receivedPowerDbm: NaN, receivedPowerMw: NaN, linkMarginDb: NaN, interferenceMarginDb: NaN, status: 'Invalid input' };
   }
@@ -74,14 +77,14 @@ function steppedValues(min: number, max: number, step: number, maxPoints: number
   return Array.from({ length: count }, (_, index) => min + index * step);
 }
 
-export function distanceSweep(input: LinkInputs, settings: DistanceSweepSettings) {
+export function distanceSweep(input: SweepInputs, settings: DistanceSweepSettings) {
   return steppedValues(settings.minDistanceM, settings.maxDistanceM, settings.stepM, 1000).map((distanceM) => {
     const result = calculateLink({ ...input, distanceM });
     return { distanceM, receivedPowerDbm: result.receivedPowerDbm };
   });
 }
 
-export function gainSweep(input: LinkInputs, settings: GainSweepSettings) {
+export function gainSweep(input: SweepInputs, settings: GainSweepSettings) {
   return steppedValues(settings.minGainDbi, settings.maxGainDbi, settings.stepDb, 301).map((gainDbi) => ({
     gainDbi,
     receivedPowerDbm: settings.distancesM.map((distanceM) => calculateLink({

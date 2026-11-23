@@ -1,4 +1,5 @@
 // Production preview check; accepts PLAYWRIGHT_MODULE, CHROMIUM_EXECUTABLE and E2E_URL.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
@@ -43,7 +44,7 @@ try {
     await page.getByRole('button', { name: 'Link workspace', exact: true }).click();
   };
   await open();
-  const base = await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
+  const base = await readSavedScenario(page);
   base.map.propagationModel = 'free-space'; base.map.useTerrainElevation = false;
   const tx = base.map.sensors.find(s => s.role === 'tx'), served = base.map.sensors.find(s => s.role === 'rx');
   tx.name = 'T1'; tx.aglM = 13;

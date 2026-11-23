@@ -16,6 +16,7 @@ try {
   page.on('response', r => { if (r.url().includes('/buildings/')) tiles.add(`${r.status()} ${r.url().split('/buildings/')[1]}`); });
   const url = process.env.E2E_URL ?? 'http://127.0.0.1:5199/friis-rf-calculator/';
   await page.goto(url);
+  await page.waitForFunction(key => localStorage.getItem(key) !== null, KEY);
   // Seed: T1 on the Marina Bay Sands hotel roof, R1 at street level 1.1 km west among the CBD towers.
   await page.evaluate((key) => {
     const s = JSON.parse(localStorage.getItem(key));

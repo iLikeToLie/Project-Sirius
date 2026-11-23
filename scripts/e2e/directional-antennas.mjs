@@ -2,6 +2,7 @@
 // Seeds one sector-antenna transmitter with two receivers (Rx A east, Rx B west, both 1 km away)
 // and checks the sector wedge, the antenna controls, and the ~25 dB back-lobe drop at Rx B against omni,
 // then the Antennas tab: a custom model from a preset, handle editing, library export/import and an MSI import.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
@@ -39,7 +40,7 @@ try {
 
   await page.goto(url);
   await page.getByRole('button', { name: 'Link workspace', exact: true }).click();
-  const base = await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
+  const base = await readSavedScenario(page);
 
   // Seed: schema 8 with an antenna library, one sector Tx, Rx A desired from it (east), Rx B avoiding it (west).
   base.schemaVersion = 8;

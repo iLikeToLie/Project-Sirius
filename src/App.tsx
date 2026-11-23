@@ -1,20 +1,16 @@
 import pkg from '../package.json';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, Antenna, BookOpen, Calculator, ChartLine, Download, FileDown, Github,
   MapPinned, Radar, RadioTower, RotateCcw, Save, Signal, Upload,
 } from 'lucide-react';
-import {
-  CategoryScale, Chart as ChartJS, Filler, Legend, LinearScale, LineElement, PointElement, Title, Tooltip,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
 import { freshDefaultState } from './data/defaults';
 import { calculateLink, calculatePlacements, distanceSweep, formatNumber, gainSweep } from './lib/rf';
 import { normalizeState, validateImport } from './lib/state';
 import { CommitField, Metric, NumberField, StatusBadge, statusTone } from './components/ui';
 import { activeElevationKnown, activeInputs, activePair, applyInputEdit, type LinkPin } from './lib/activeLink';
 import { resolveDesiredTxs } from './lib/sensors';
-import { AntennasTab } from './components/AntennasTab';
+import { debouncedSave } from './lib/debouncedSave';
 import { useBuildingTiles } from './components/map/useBuildingTiles';
 import { buildingsActive, sensorPaths, withBuildings } from './lib/buildings';
 import { useElevationTiles } from './components/map/useElevationTiles';
@@ -23,7 +19,8 @@ import type { AppState, LinkInputs, LinkObjective, PlacementScenario, ScreeningS
 // MapLibre is large; load the map only when the Link workspace opens.
 const MapWorkspace = lazy(() => import('./components/map/MapWorkspace').then((m) => ({ default: m.MapWorkspace })));
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+const AntennasTab = lazy(() => import('./components/AntennasTab').then((m) => ({ default: m.AntennasTab })));
+const SweepChart = lazy(() => import('./components/SweepChart'));
 
 const STORAGE_KEY = 'friis-rf-planner-v3-state';
 const REPO_URL = 'https://github.com/iLikeToLie/Project-Sirius';
@@ -43,19 +40,11 @@ function TextField({ label, value, onChange }: { label: string; value: string; o
   return <label className="field"><span>{label}</span><input type="text" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
-const chartOptions = (xTitle: string) => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  interaction: { mode: 'index' as const, intersect: false },
-  scales: {
-    x: { title: { display: true, text: xTitle, color: '#8ea0bf' }, grid: { color: 'rgba(39, 52, 74, 0.55)' }, ticks: { color: '#8ea0bf', maxTicksLimit: 12 } },
-    y: { title: { display: true, text: 'Received power (dBm)', color: '#8ea0bf' }, grid: { color: 'rgba(39, 52, 74, 0.55)' }, ticks: { color: '#8ea0bf' } },
-  },
-  plugins: { legend: { labels: { color: '#d7ddee', usePointStyle: true, pointStyle: 'line' as const } } },
-});
-
 function App() {
   const [state, setState] = useState<AppState>(loadState);
+  const [scenarioSave] = useState(() => debouncedSave((value: AppState) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+  }));
   const [view, setView] = useState<View>('calculator');
   const [savedFlash, setSavedFlash] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
@@ -84,7 +73,17 @@ function App() {
   const elevationKnown = useMemo(() => activeElevationKnown(state, groundAt, pin), [state, groundAt, pin]);
   const result = useMemo(() => calculateLink(viewState.inputs, state.linkObjective), [viewState.inputs, state.linkObjective]);
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
+  useLayoutEffect(() => {
+    const onVisibilityChange = () => { if (document.visibilityState === 'hidden') scenarioSave.flush(); };
+    window.addEventListener('pagehide', scenarioSave.flush);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', scenarioSave.flush);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      scenarioSave.flush();
+    };
+  }, [scenarioSave]);
+  useLayoutEffect(() => { scenarioSave.schedule(state); }, [scenarioSave, state]);
 
   const editInput = <K extends keyof LinkInputs>(key: K, value: LinkInputs[K]): string | undefined => {
     const shown = activePair(state.map, groundAt, state.inputs, pin);
@@ -150,7 +149,7 @@ function App() {
         <div className="content">
           {view === 'calculator' && <CalculatorView state={viewState} setState={setState} setInput={setInput} editInput={editInput} result={result} elevationKnown={elevationKnown} />}
           {view === 'workspace' && <Suspense fallback={<p className="muted">Loading map…</p>}><MapWorkspace state={state} setState={setState} elevation={elevation} buildings={buildings} pin={pin} setPin={setPin} onOpenAntennas={() => setView('antennas')} /></Suspense>}
-          {view === 'antennas' && <AntennasTab map={state.map} setMap={(update) => setState((current) => ({ ...current, map: update(current.map) }))} onOpenWorkspace={() => setView('workspace')} />}
+          {view === 'antennas' && <Suspense fallback={<p className="muted">Loading antennas…</p>}><AntennasTab map={state.map} setMap={(update) => setState((current) => ({ ...current, map: update(current.map) }))} onOpenWorkspace={() => setView('workspace')} /></Suspense>}
           {view === 'distance' && <DistanceView state={viewState} setState={setState} />}
           {view === 'gain' && <GainView state={viewState} setState={setState} />}
           {view === 'placement' && <PlacementView state={viewState} setState={setState} />}
@@ -263,19 +262,37 @@ function LinkSchematic({ state, result }: { state: AppState; result: ReturnType<
   );
 }
 
+function useSweepInputs(inputs: LinkInputs, sweptGain?: 'tx' | 'rx') {
+  const {
+    transmitPowerDbm, frequencyGhz, txLossDb, rxLossDb, polarizationLossDb, obstructionLossDb, otherLossDb,
+    sensitivityDbm, interferenceThresholdDbm, fadeMarginTargetDb,
+  } = inputs;
+  const txGainDbi = sweptGain === 'tx' ? 0 : inputs.txGainDbi;
+  const rxGainDbi = sweptGain === 'rx' ? 0 : inputs.rxGainDbi;
+  return useMemo(() => ({
+    transmitPowerDbm, frequencyGhz, txGainDbi, rxGainDbi, txLossDb, rxLossDb, polarizationLossDb, obstructionLossDb,
+    otherLossDb, sensitivityDbm, interferenceThresholdDbm, fadeMarginTargetDb,
+  }), [transmitPowerDbm, frequencyGhz, txGainDbi, rxGainDbi, txLossDb, rxLossDb, polarizationLossDb, obstructionLossDb,
+    otherLossDb, sensitivityDbm, interferenceThresholdDbm, fadeMarginTargetDb]);
+}
+
 function DistanceView({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
-  const points = useMemo(() => distanceSweep(state.inputs, state.distanceSweep), [state.inputs, state.distanceSweep]);
+  const inputs = useSweepInputs(state.inputs);
+  const { distanceSweep: settings } = state;
+  const points = useMemo(() => distanceSweep(inputs, settings), [inputs, settings]);
   const setSetting = (key: keyof AppState['distanceSweep'], value: number) => setState((current) => ({ ...current, distanceSweep: { ...current.distanceSweep, [key]: value } }));
   const data = { labels: points.map((p) => p.distanceM), datasets: [
     { label: 'Received power', data: points.map((p) => p.receivedPowerDbm), borderColor: '#ffb347', backgroundColor: 'rgba(255,179,71,.10)', fill: true, tension: .2, pointRadius: 0, borderWidth: 2.5 },
     { label: 'Receiver sensitivity', data: points.map(() => state.inputs.sensitivityDbm), borderColor: '#72b7ff', borderDash: [7, 6], pointRadius: 0, borderWidth: 1.5 },
     { label: 'Interference threshold', data: points.map(() => state.inputs.interferenceThresholdDbm), borderColor: '#ff6b6b', borderDash: [7, 6], pointRadius: 0, borderWidth: 1.5 },
   ] };
-  return <SweepLayout title={`${state.inputs.scenarioName} · Power vs distance`} description="Sweep Tx-to-Rx separation while all other calculator inputs remain fixed." controls={<><NumberField label="Minimum distance" unit="m" min={0.000001} value={state.distanceSweep.minDistanceM} onChange={(v) => setSetting('minDistanceM', v)} /><NumberField label="Maximum distance" unit="m" min={0.000001} value={state.distanceSweep.maxDistanceM} onChange={(v) => setSetting('maxDistanceM', v)} /><NumberField label="Distance step" unit="m" min={0.000001} value={state.distanceSweep.stepM} onChange={(v) => setSetting('stepM', v)} /><div className="point-count"><span>Calculated points</span><strong>{points.length}</strong><small>Maximum 1,000</small></div></>} chart={<Line data={data} options={chartOptions('Distance (m)')} />} table={<SimpleSweepTable headers={['Distance (m)', 'Received power (dBm)', 'Sensitivity (dBm)', 'Interference threshold (dBm)']} rows={points.slice(0, 20).map((p) => [formatNumber(p.distanceM), formatNumber(p.receivedPowerDbm), formatNumber(state.inputs.sensitivityDbm), formatNumber(state.inputs.interferenceThresholdDbm)])} total={points.length} />} />;
+  return <SweepLayout title={`${state.inputs.scenarioName} · Power vs distance`} description="Sweep Tx-to-Rx separation while all other calculator inputs remain fixed." controls={<><NumberField label="Minimum distance" unit="m" min={0.000001} value={state.distanceSweep.minDistanceM} onChange={(v) => setSetting('minDistanceM', v)} /><NumberField label="Maximum distance" unit="m" min={0.000001} value={state.distanceSweep.maxDistanceM} onChange={(v) => setSetting('maxDistanceM', v)} /><NumberField label="Distance step" unit="m" min={0.000001} value={state.distanceSweep.stepM} onChange={(v) => setSetting('stepM', v)} /><div className="point-count"><span>Calculated points</span><strong>{points.length}</strong><small>Maximum 1,000</small></div></>} chart={<SweepChart data={data} xTitle="Distance (m)" />} table={<SimpleSweepTable headers={['Distance (m)', 'Received power (dBm)', 'Sensitivity (dBm)', 'Interference threshold (dBm)']} rows={points.slice(0, 20).map((p) => [formatNumber(p.distanceM), formatNumber(p.receivedPowerDbm), formatNumber(state.inputs.sensitivityDbm), formatNumber(state.inputs.interferenceThresholdDbm)])} total={points.length} />} />;
 }
 
 function GainView({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
-  const points = useMemo(() => gainSweep(state.inputs, state.gainSweep), [state.inputs, state.gainSweep]);
+  const { gainSweep: settings } = state;
+  const inputs = useSweepInputs(state.inputs, settings.gainToSweep);
+  const points = useMemo(() => gainSweep(inputs, settings), [inputs, settings]);
   const setSetting = <K extends keyof AppState['gainSweep']>(key: K, value: AppState['gainSweep'][K]) => setState((current) => ({ ...current, gainSweep: { ...current.gainSweep, [key]: value } }));
   const colors = ['#ffb347', '#72b7ff', '#34d399'];
   const data = { labels: points.map((p) => p.gainDbi), datasets: [
@@ -283,11 +300,11 @@ function GainView({ state, setState }: { state: AppState; setState: React.Dispat
     { label: 'Receiver sensitivity', data: points.map(() => state.inputs.sensitivityDbm), borderColor: '#72b7ff', borderDash: [7, 6], pointRadius: 0, borderWidth: 1.5 },
     { label: 'Interference threshold', data: points.map(() => state.inputs.interferenceThresholdDbm), borderColor: '#ff6b6b', borderDash: [7, 6], pointRadius: 0, borderWidth: 1.5 },
   ] };
-  return <SweepLayout title={`Power vs ${state.gainSweep.gainToSweep === 'tx' ? 'Tx' : 'Rx'} antenna gain`} description="Compare three distances while sweeping either transmit or receive antenna gain." controls={<><label className="field"><span>Gain to sweep</span><select value={state.gainSweep.gainToSweep} onChange={(e) => setSetting('gainToSweep', e.target.value as 'tx' | 'rx')}><option value="tx">Tx antenna gain</option><option value="rx">Rx antenna gain</option></select></label><NumberField label="Minimum gain" unit="dBi" value={state.gainSweep.minGainDbi} onChange={(v) => setSetting('minGainDbi', v)} /><NumberField label="Maximum gain" unit="dBi" value={state.gainSweep.maxGainDbi} onChange={(v) => setSetting('maxGainDbi', v)} /><NumberField label="Gain step" unit="dB" min={0.000001} value={state.gainSweep.stepDb} onChange={(v) => setSetting('stepDb', v)} /><div className="distance-controls"><span>Comparison distances</span>{state.gainSweep.distancesM.map((distance, index) => <NumberField key={index} label={`Curve ${index + 1}`} unit="m" min={0.000001} value={distance} onChange={(value) => { const distances = [...state.gainSweep.distancesM] as [number, number, number]; distances[index] = value; setSetting('distancesM', distances); }} />)}</div><div className="point-count"><span>Calculated points</span><strong>{points.length}</strong><small>Maximum 301</small></div></>} chart={<Line data={data} options={chartOptions('Swept gain (dBi)')} />} table={<SimpleSweepTable headers={['Gain (dBi)', ...state.gainSweep.distancesM.map((d, i) => `Curve ${i + 1} · ${d} m`)]} rows={points.slice(0, 20).map((p) => [formatNumber(p.gainDbi), ...p.receivedPowerDbm.map((v) => formatNumber(v))])} total={points.length} />} />;
+  return <SweepLayout title={`Power vs ${state.gainSweep.gainToSweep === 'tx' ? 'Tx' : 'Rx'} antenna gain`} description="Compare three distances while sweeping either transmit or receive antenna gain." controls={<><label className="field"><span>Gain to sweep</span><select value={state.gainSweep.gainToSweep} onChange={(e) => setSetting('gainToSweep', e.target.value as 'tx' | 'rx')}><option value="tx">Tx antenna gain</option><option value="rx">Rx antenna gain</option></select></label><NumberField label="Minimum gain" unit="dBi" value={state.gainSweep.minGainDbi} onChange={(v) => setSetting('minGainDbi', v)} /><NumberField label="Maximum gain" unit="dBi" value={state.gainSweep.maxGainDbi} onChange={(v) => setSetting('maxGainDbi', v)} /><NumberField label="Gain step" unit="dB" min={0.000001} value={state.gainSweep.stepDb} onChange={(v) => setSetting('stepDb', v)} /><div className="distance-controls"><span>Comparison distances</span>{state.gainSweep.distancesM.map((distance, index) => <NumberField key={index} label={`Curve ${index + 1}`} unit="m" min={0.000001} value={distance} onChange={(value) => { const distances = [...state.gainSweep.distancesM] as [number, number, number]; distances[index] = value; setSetting('distancesM', distances); }} />)}</div><div className="point-count"><span>Calculated points</span><strong>{points.length}</strong><small>Maximum 301</small></div></>} chart={<SweepChart data={data} xTitle="Swept gain (dBi)" />} table={<SimpleSweepTable headers={['Gain (dBi)', ...state.gainSweep.distancesM.map((d, i) => `Curve ${i + 1} · ${d} m`)]} rows={points.slice(0, 20).map((p) => [formatNumber(p.gainDbi), ...p.receivedPowerDbm.map((v) => formatNumber(v))])} total={points.length} />} />;
 }
 
 function SweepLayout({ title, description, controls, chart, table }: { title: string; description: string; controls: React.ReactNode; chart: React.ReactNode; table: React.ReactNode }) {
-  return <div className="sweep-grid"><section className="panel sweep-controls"><p className="eyebrow">SWEEP SETTINGS</p><h2>{title}</h2><p className="muted">{description}</p><div className="control-stack">{controls}</div></section><section className="panel chart-panel"><div className="chart-wrap">{chart}</div></section><section className="panel table-panel">{table}</section></div>;
+  return <div className="sweep-grid"><section className="panel sweep-controls"><p className="eyebrow">SWEEP SETTINGS</p><h2>{title}</h2><p className="muted">{description}</p><div className="control-stack">{controls}</div></section><section className="panel chart-panel"><div className="chart-wrap"><Suspense fallback={<p className="muted">Loading chart…</p>}>{chart}</Suspense></div></section><section className="panel table-panel">{table}</section></div>;
 }
 
 function SimpleSweepTable({ headers, rows, total }: { headers: string[]; rows: string[][]; total: number }) {

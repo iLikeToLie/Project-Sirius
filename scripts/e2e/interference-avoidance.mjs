@@ -1,5 +1,6 @@
 // Whole-branch review against production preview. Standard PLAYWRIGHT_MODULE,
 // CHROMIUM_EXECUTABLE and E2E_URL overrides; artifacts default to ignored .superpowers.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -144,7 +145,7 @@ async function open(s, unknown = false) {
   if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
   return { page, card, drawer };
 }
-const saved = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), key);
+const saved = readSavedScenario;
 const shot = (page, name) => page.screenshot({ path: resolve(artifacts, name), fullPage: true });
 try {
   const legacy = structuredClone(fixture); legacy.schemaVersion = 5;

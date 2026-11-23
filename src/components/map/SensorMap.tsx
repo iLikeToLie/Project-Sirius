@@ -391,22 +391,30 @@ export function SensorMap({ sensors, antennaModels, selectedId, tones, links, zo
     entry.element.setAttribute('aria-valuenow', String(az));
     entry.element.setAttribute('aria-valuetext', `${az}°`);
     entry.element.setAttribute('aria-label', `Rotate antenna, azimuth ${az}°`);
-    map.on('rotate', place);
-    return () => { map.off('rotate', place); };
+    let frame = 0;
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; place(); });
+    };
+    map.on('rotate', schedule);
+    return () => { map.off('rotate', schedule); if (frame) cancelAnimationFrame(frame); };
   }, [sensors, antennaModels, selectedId, loaded]);
 
   // A rotated map turns the wedges with it.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loaded) return;
+    let frame = 0;
     const turn = () => {
+      frame = 0;
+      const bearing = map.getBearing();
       for (const entry of markers.current.values()) {
         const wedge = entry.element.querySelector<SVGSVGElement>('.antenna-wedge');
-        if (wedge) wedge.style.transform = `rotate(${Number(wedge.dataset.azimuth) - map.getBearing()}deg)`;
+        if (wedge) wedge.style.transform = `rotate(${Number(wedge.dataset.azimuth) - bearing}deg)`;
       }
     };
-    map.on('rotate', turn);
-    return () => { map.off('rotate', turn); };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(turn); };
+    map.on('rotate', schedule);
+    return () => { map.off('rotate', schedule); if (frame) cancelAnimationFrame(frame); };
   }, [loaded]);
 
   // Marker labels: each label sits on the side of its marker with the least collision against neighbours (markers do not move).

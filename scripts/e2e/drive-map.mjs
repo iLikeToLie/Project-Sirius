@@ -2,7 +2,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-c
 import zlib from 'node:zlib';
 
 const OUT = process.argv[2];
-const URL = 'http://localhost:5199/friis-rf-calculator/';
+const URL = process.env.E2E_URL ?? 'http://localhost:5199/friis-rf-calculator/';
 
 // Minimal PNG encoder for solid 256×256 tiles.
 const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });

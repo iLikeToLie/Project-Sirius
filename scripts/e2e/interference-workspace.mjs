@@ -1,4 +1,5 @@
 // Run against the production preview; accepts the standard PLAYWRIGHT_MODULE and CHROMIUM_EXECUTABLE overrides.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PNG } from 'pngjs';
@@ -155,7 +156,7 @@ try {
   assert.equal(await drawer.getByRole('tab', { name: 'Link budget', exact: true }).getAttribute('aria-selected'), 'true');
   assert.equal(await drawer.getByLabel('Tx location / identifier').inputValue(), 'T2');
   assert.equal(await drawer.getByLabel('Rx location / identifier').inputValue(), secondRx.name);
-  const selectedId = await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')).map.selectedId);
+  const selectedId = (await readSavedScenario(page)).map.selectedId;
   assert.equal(selectedId, secondRx.id);
   const originalTxPower = matrixScenario.map.sensors[0].powerDbm;
   await drawer.getByLabel('Transmit power', { exact: false }).fill('12');

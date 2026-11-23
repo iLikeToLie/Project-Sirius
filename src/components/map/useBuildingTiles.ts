@@ -1,3 +1,4 @@
+import { useTileVersion } from './useTileVersion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDING_BOUNDS, BUILDING_TILE_URL, BUILDING_ZOOM, createBuildingSampler, type BuildingLookup, type BuildingTile } from '../../lib/buildings';
 import { elevationRetryDelayMs, tilePixel } from '../../lib/elevation';
@@ -33,7 +34,7 @@ async function fetchTile(z: number, x: number, y: number): Promise<BuildingTile 
 export function useBuildingTiles() {
   const cache = useRef(new Map<string, BuildingTile | 'empty' | 'pending'>());
   const inFlight = useRef(0);
-  const [version, setVersion] = useState(0);
+  const { version, tileArrived } = useTileVersion();
   const [status, setStatus] = useState<BuildingStatus>('idle');
   const failures = useRef(new Set<string>());
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
@@ -56,7 +57,7 @@ export function useBuildingTiles() {
       .then((tile) => {
         cache.current.set(key, tile);
         failures.current.delete(key);
-        if (tile !== 'empty') setVersion((v) => v + 1);
+        if (tile !== 'empty') tileArrived();
         settle();
       })
       .catch(() => {
@@ -74,7 +75,7 @@ export function useBuildingTiles() {
         failures.current.add(key);
         settle();
       });
-  }, []);
+  }, [tileArrived]);
 
   const load = useCallback((tiles: Iterable<string>) => {
     for (const key of tiles) {

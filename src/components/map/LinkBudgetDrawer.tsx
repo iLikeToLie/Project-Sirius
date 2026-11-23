@@ -57,7 +57,7 @@ export const LinkBudgetDrawer = memo(function LinkBudgetDrawer({ state, pairs, a
 }) {
   const { map } = state;
   const [view, setView] = usePref<'budget' | 'matrix'>('drawerView', 'budget', oneOf('budget', 'matrix'));
-  const pair = useMemo(() => activePair(map, groundAt, state.inputs, pin), [map, groundAt, state.inputs, pin]);
+  const pair = useMemo(() => activePair(map, groundAt, state.inputs, pin, pairs), [map, groundAt, state.inputs, pin, pairs]);
   const model = useMemo(() => {
     if (!pair) return null;
     const distanceM = separationM(pair.tx, pair.rx, groundAt, map.useTerrainElevation);

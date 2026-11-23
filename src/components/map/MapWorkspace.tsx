@@ -108,7 +108,10 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
   const dragging = Object.keys(draft).length > 0;
 
   // Aim tracking also runs on the dragged positions, so a tracking wedge follows the marker.
-  const sensors = useMemo(() => applyAimTracking(map.sensors.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s))), [map.sensors, draft]);
+  const settledMap = useMemo(() => ({ ...map, sensors: applyAimTracking(map.sensors) }), [map]);
+  const sensors = useMemo(() => dragging
+    ? applyAimTracking(settledMap.sensors.map((s) => (draft[s.id] ? { ...s, ...draft[s.id] } : s)))
+    : settledMap.sensors, [settledMap.sensors, draft, dragging]);
   useEffect(() => { if (withBuildingsOn) buildings.ensurePaths(sensorPaths(sensors)); }, [sensors, withBuildingsOn, buildings.ensurePaths]);
   /** Loads the building tiles a ray grid reads (in effects: loading sets state). */
   const ensureBuildingsFor = (g: ScalarGrid | undefined) => {
@@ -122,7 +125,19 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
     return sampleGrid({ minX: g.x0, maxX: g.x0 + g.cols * g.dx, minY: g.y0, maxY: g.y0 + g.rows * g.dy }, g.cols, g.rows, (xM, yM) => sample(toLatLon({ xM, yM })));
   };
   const liveMap: MapScenario = useMemo(() => ({ ...map, sensors }), [map, sensors]);
-  const pairs = useMemo(() => evaluatePairs(liveMap, state.inputs, groundAt), [liveMap, state.inputs, groundAt]);
+  // Sampler identity changes on tile version bumps, which invalidates the settled results.
+  const settledPairs = useMemo(() => evaluatePairs(settledMap, state.inputs, groundAt), [settledMap, state.inputs, groundAt]);
+  const pairs = useMemo(() => {
+    if (!dragging) return settledPairs;
+    const changedSensorIds = new Set<string>();
+    sensors.forEach((sensor, index) => {
+      const settled = settledMap.sensors[index];
+      if (sensor.lat !== settled.lat || sensor.lon !== settled.lon || sensor.antenna.azimuthDeg !== settled.antenna.azimuthDeg) {
+        changedSensorIds.add(sensor.id);
+      }
+    });
+    return evaluatePairs(liveMap, state.inputs, groundAt, { pairs: settledPairs, changedSensorIds });
+  }, [dragging, sensors, settledMap, settledPairs, liveMap, state.inputs, groundAt]);
   const assessments = useMemo(() => assessAll(liveMap, pairs), [liveMap, pairs]);
   const selected = sensors.find((s) => s.id === map.selectedId) ?? null;
 
@@ -172,7 +187,7 @@ export function MapWorkspace({ state, setState, elevation, buildings, pin, setPi
   });
 
   // Zones belong to the selected transmitter, or the selected receiver's strongest desired transmitter.
-  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? activePair(liveMap, groundAt, state.inputs, pin)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt, state.inputs, pin]);
+  const zoneTx = useMemo(() => (selected?.role === 'tx' ? selected : selected ? activePair(liveMap, groundAt, state.inputs, pin, pairs)?.tx : sensors.find(s => s.role === 'tx') ?? null), [selected, liveMap, groundAt, state.inputs, pin, pairs]);
   const zone = useMemo(() => (zoneTx ? zoneReceiver(liveMap, zoneTx.id, groundAt) : null), [zoneTx, liveMap, groundAt]);
   const referenceRx = referenceReceiver(liveMap, selected, zone?.rx ?? null);
   const placement = useMemo(() => selected?.role === 'tx' ? placementPlan(liveMap, state.inputs, selected, groundAt, pairs) : null,
