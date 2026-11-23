@@ -23,6 +23,18 @@ const pairsWithPowers = (rxId: string, powers: [string, number][]): PairResult[]
 }));
 
 describe('desired transmitter sets', () => {
+  it('reuses stationary pairs during a drag unless auto desired selection changes', () => {
+    const settled = scenario([T1, T2, T3, R1]);
+    const pairs = evaluatePairs(settled, defaults, flat);
+    const moved = { ...settled, sensors: [{ ...T1, ...offsetLatLon(SG_REFERENCE, -3000, 0) }, T2, T3, R1] };
+    const live = evaluatePairs(moved, defaults, flat, { pairs, changedSensorIds: new Set([T1.id]) });
+    expect(live).toEqual(evaluatePairs(moved, defaults, flat));
+    expect(live[0]).not.toBe(pairs[0]);
+    expect(live[1].intended).toBe(true);
+    expect(live[1]).not.toBe(pairs[1]);
+    expect(live[2]).toBe(pairs[2]);
+  });
+
   it('defaults the meter scale to -95..-55 dBm when everything fits', () => {
     const scale = meterScale(pairsWithPowers(R1.id, [['T1', -90], ['T2', -60]]), { ...defaults, sensitivityDbm: -85, interferenceThresholdDbm: -65, fadeMarginTargetDb: 10 });
     expect(scale).toEqual({ scaleMin: -95, scaleMax: -55 });

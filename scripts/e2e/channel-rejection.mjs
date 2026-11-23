@@ -1,4 +1,5 @@
 // Production preview check; standard PLAYWRIGHT_MODULE / CHROMIUM_EXECUTABLE / E2E_URL overrides.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PNG } from 'pngjs';
@@ -30,7 +31,7 @@ try {
   };
   await open();
   await page.locator('input[type=file]').setInputFiles({ name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });
-  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
+  const saved = () => readSavedScenario(page);
   const commit = async (field, value) => { await field.fill(String(value)); await field.press('Enter'); };
   const card = page.locator('.selected-sensor-card');
   const drawer = page.locator('.link-budget-drawer');

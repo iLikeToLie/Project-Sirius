@@ -1,4 +1,5 @@
 // Run against production preview; accepts PLAYWRIGHT_MODULE, CHROMIUM_EXECUTABLE and E2E_URL.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PNG } from 'pngjs';
@@ -18,7 +19,7 @@ try {
     await page.goto(process.env.E2E_URL ?? 'http://127.0.0.1:5199/friis-rf-calculator/');
     await page.getByRole('button', { name: 'Link workspace', exact: true }).click();
   };
-  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
+  const saved = () => readSavedScenario(page);
   const commit = async (field, value) => { await field.fill(String(value)); await field.press('Enter'); };
   await open();
   await page.locator('input[type=file]').setInputFiles({ name: 'receiver.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });

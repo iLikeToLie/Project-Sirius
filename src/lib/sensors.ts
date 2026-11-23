@@ -186,15 +186,29 @@ export function pairPropagation(map: MapScenario, tx: Sensor, rx: Sensor, freque
   return bullingtonLossDb(profile, profile.groundM[0] + tx.aglM, profile.groundM[profile.groundM.length - 1] + rx.aglM, frequencyGhz);
 }
 
+interface PairReuse {
+  /** Results in pair order for the same scenario settings, shared inputs and ground sampler version. */
+  pairs: readonly PairResult[];
+  changedSensorIds: ReadonlySet<string>;
+}
+
 /** Every Tx→Rx pair: the receiver's desired set as communication, the rest as interference. */
-export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundAt: GroundAt): PairResult[] {
+export function evaluatePairs(scenario: MapScenario, shared: LinkInputs, groundAt: GroundAt, reuse?: PairReuse): PairResult[] {
   const known = (s: Sensor) => groundOf(s, groundAt, scenario.useTerrainElevation) !== null;
   const pairs: PairResult[] = [];
+  const transmitters = scenario.sensors.filter((s) => s.role === 'tx');
   for (const rx of scenario.sensors.filter((s) => s.role === 'rx')) {
     const desired = resolveDesiredTxs(scenario, rx, groundAt);
-    for (const tx of scenario.sensors.filter((s) => s.role === 'tx')) {
-      const distanceM = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
+    for (const tx of transmitters) {
       const intended = desired.some((d) => d.id === tx.id);
+      const cached = reuse?.pairs[pairs.length];
+      // Auto desired selection can change even when neither endpoint of this pair moved.
+      if (reuse && cached?.txId === tx.id && cached.rxId === rx.id && cached.intended === intended
+        && !reuse.changedSensorIds.has(tx.id) && !reuse.changedSensorIds.has(rx.id)) {
+        pairs.push(cached);
+        continue;
+      }
+      const distanceM = separationM(tx, rx, groundAt, scenario.useTerrainElevation);
       const { inputs, rejectionDb, polarizationDb, pattern } = pairLinkInputs(scenario, shared, tx, rx, distanceM, { elevationsM: pairElevationsM(tx, rx, groundAt, scenario.useTerrainElevation) });
       const propagation = pairPropagation(scenario, tx, rx, inputs.frequencyGhz, groundAt);
       inputs.otherLossDb += propagation.lossDb;

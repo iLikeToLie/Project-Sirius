@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { exportModelsJson, importAntennaFile } from './antennaFiles';
-import { ANTENNA_PRESETS, addPreset } from './antennaPresets';
-import { isAntennaModel, newSectorModel, resolveAntenna, verticalTermDb } from './antenna';
+import { ANTENNA_PRESETS, addPreset, loadAntennaPresets } from './antennaPresets';
+import { isAntennaModel, MAX_ANTENNA_MODELS, MAX_PATTERN_POINTS, newSectorModel, resolveAntenna, verticalTermDb } from './antenna';
+import presetData from '../data/antennaPresets.json';
 import { DEFAULT_STATE } from '../data/defaults';
 import type { AntennaModel } from '../types';
 
@@ -95,10 +96,37 @@ describe('MSI/Planet files', () => {
 });
 
 describe('illustrative presets', () => {
-  it('loads all eight presets through the importer and makes editable copies', () => {
-    expect(ANTENNA_PRESETS).toHaveLength(8);
+  it('loads all 23 presets with unique IDs and valid model and table bounds', () => {
+    expect(ANTENNA_PRESETS).toHaveLength(23);
+    expect(ANTENNA_PRESETS.length).toBeLessThanOrEqual(MAX_ANTENNA_MODELS);
+    expect(new Set(ANTENNA_PRESETS.map(({ id }) => id)).size).toBe(ANTENNA_PRESETS.length);
+    for (const { id, description, family, model } of ANTENNA_PRESETS) {
+      expect(description).toBe('Illustrative: replace with manufacturer data. Generic shape for preliminary screening.');
+      expect(isAntennaModel({ ...model, id }), id).toBe(true);
+      if (family === 'Omni') expect(model.kind).toBe('custom');
+      if (model.kind === 'custom') {
+        expect(model.pattern!.horizontal.length).toBeLessThanOrEqual(MAX_PATTERN_POINTS);
+        expect(model.pattern!.vertical.length).toBeLessThanOrEqual(MAX_PATTERN_POINTS);
+      }
+    }
+  });
+
+  it('keeps directional gains within 2 dB of the beamwidth estimate', () => {
+    for (const { id, family, model } of ANTENNA_PRESETS) {
+      // The original grid keeps its published illustrative gain and widths.
+      if (family === 'Omni' || id === 'grid-24') continue;
+      const estimate = 10 * Math.log10(32400 / (model.beamwidthDeg * model.verticalBeamwidthDeg));
+      expect(Math.abs(estimate - model.gainDbi), id).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('throws when the importer truncates the built-in catalog', () => {
+    const models = Array.from({ length: MAX_ANTENNA_MODELS + 1 }, () => presetData.models[0]);
+    expect(() => loadAntennaPresets({ ...presetData, models })).toThrow(/truncated/i);
+  });
+
+  it('makes independent editable copies of every preset', () => {
     for (const preset of ANTENNA_PRESETS) {
-      expect(preset.description).toMatch(/illustrative.*manufacturer/i);
       const a = addPreset([], preset.id), b = addPreset([a], preset.id);
       expect(isAntennaModel(a)).toBe(true); expect(a.id).not.toBe(b.id); expect(a.name).not.toBe(b.name);
       if (a.pattern) {

@@ -3,7 +3,7 @@ import type { GroundAt } from './elevation';
 import { toLatLon, toLocalM } from './geo';
 import { solveTxAlongBearing } from './linkGeometry';
 import { applyAimTracking, findModel, OMNI_MODEL_ID } from './antenna';
-import { evaluatePairs, groundOf, pairLinkInputs, pairPropagation, receiverSummary, resolveDesiredTxs, separationM } from './sensors';
+import { evaluatePairs, groundOf, pairLinkInputs, pairPropagation, receiverSummary, resolveDesiredTxs, separationM, type PairResult } from './sensors';
 
 /** The part of the app state the active link reads and writes. */
 export interface LinkState { inputs: LinkInputs; map: MapScenario }
@@ -22,14 +22,15 @@ const servedBy = (map: MapScenario, txId: string, groundAt: GroundAt) => receive
  * The link the Calculator, sweeps and placements show: the selected receiver's strongest desired pair,
  * else the selected transmitter's nearest served (or comparison) receiver, else the first receiver's pair.
  */
-export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs, pin: LinkPin | null = null): Pair | null {
+export function activePair(map: MapScenario, groundAt: GroundAt, shared: LinkInputs, pin: LinkPin | null = null, pairs?: PairResult[]): Pair | null {
   const strongestTx = (rx: Sensor) => {
     // Matrix pins can inspect any pair; legacy link-selector pins remain in the desired set.
     const candidates = pin?.scope === 'pair' ? map.sensors.filter(s => s.role === 'tx') : resolveDesiredTxs(map, rx, groundAt);
     const pinned = pin?.rxId === rx.id ? candidates.find((s) => s.id === pin.txId) : undefined;
     if (pinned) return pinned;
-    const own = { ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === rx.id) };
-    const links = receiverSummary(evaluatePairs(own, shared, groundAt), rx.id).links;
+    const links = receiverSummary(pairs ?? evaluatePairs({
+      ...map, sensors: map.sensors.filter((s) => s.role === 'tx' || s.id === rx.id),
+    }, shared, groundAt), rx.id).links;
     const best = links.find((l) => l.elevationKnown) ?? links[0];
     return map.sensors.find((s) => s.id === best?.txId);
   };

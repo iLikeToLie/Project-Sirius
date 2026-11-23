@@ -1,4 +1,5 @@
 // Run against the production preview on port 5199. Uses the same browser overrides as link-budget-drawer.mjs.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PNG } from 'pngjs';
@@ -32,7 +33,7 @@ async function open(state, missingX = null) {
   await drawer.getByRole('button', { name: /^Link budget/ }).click();
   return { page, card, drawer };
 }
-const saved = page => page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
+const saved = page => readSavedScenario(page);
 const waitRows = (page, count) => page.waitForFunction(n => document.querySelectorAll('.link-budget-drawer .power-meter').length === n, count);
 try {
   // This schema 4 fixture comes from a04bc24 defaults; its old RF engine gives -51.18795995798126 dBm.

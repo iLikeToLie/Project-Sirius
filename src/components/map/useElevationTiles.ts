@@ -1,3 +1,4 @@
+import { useTileVersion } from './useTileVersion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createGroundSampler, elevationRetryDelayMs, ELEVATION_TILE_URL, ELEVATION_ZOOM, tilePixel, type ElevationTile, type GroundAt, type TileLookup } from '../../lib/elevation';
 import type { LatLon } from '../../lib/geo';
@@ -37,7 +38,7 @@ async function fetchTile(z: number, x: number, y: number): Promise<ElevationTile
 export function useElevationTiles() {
   const cache = useRef(new Map<string, ElevationTile | 'pending' | 'failed'>());
   const inFlight = useRef(0);
-  const [version, setVersion] = useState(0);
+  const { version, tileArrived } = useTileVersion();
   const [status, setStatus] = useState<ElevationStatus>('idle');
 
   const lookup: TileLookup = useCallback((z, x, y) => {
@@ -57,7 +58,7 @@ export function useElevationTiles() {
 
   const fetchWithRetry = useCallback((z: number, x: number, y: number, key: string, failures: number) => {
     fetchTile(z, x, y)
-      .then((tile) => { cache.current.set(key, tile); networkFailures.current.delete(key); setVersion((v) => v + 1); settle(); })
+      .then((tile) => { cache.current.set(key, tile); networkFailures.current.delete(key); tileArrived(); settle(); })
       .catch((error) => {
         const delay = error instanceof MissingTile ? null : elevationRetryDelayMs(failures + 1);
         if (delay === null) {
@@ -70,7 +71,7 @@ export function useElevationTiles() {
         const timer = setTimeout(() => { timers.current.delete(timer); fetchWithRetry(z, x, y, key, failures + 1); }, delay);
         timers.current.add(timer);
       });
-  }, [settle]);
+  }, [settle, tileArrived]);
 
   const load = useCallback((tiles: [number, number, number][]) => {
     for (const [z, x, y] of tiles) {

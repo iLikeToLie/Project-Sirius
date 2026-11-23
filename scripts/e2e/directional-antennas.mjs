@@ -2,6 +2,7 @@
 // Seeds one sector-antenna transmitter with two receivers (Rx A east, Rx B west, both 1 km away)
 // and checks the sector wedge, the antenna controls, and the ~25 dB back-lobe drop at Rx B against omni,
 // then the Antennas tab: a custom model from a preset, handle editing, library export/import and an MSI import.
+import { readSavedScenario } from './fixtures/saved-scenario.mjs';
 import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
@@ -39,7 +40,7 @@ try {
 
   await page.goto(url);
   await page.getByRole('button', { name: 'Link workspace', exact: true }).click();
-  const base = await page.evaluate(() => JSON.parse(localStorage.getItem('friis-rf-planner-v3-state')));
+  const base = await readSavedScenario(page);
 
   // Seed: schema 8 with an antenna library, one sector Tx, Rx A desired from it (east), Rx B avoiding it (west).
   base.schemaVersion = 8;
@@ -167,6 +168,47 @@ try {
   await page.getByRole('status').filter({ hasText: /Added 1 model/ }).waitFor();
   assert.ok(await page.getByRole('button', { name: /Test MSI/ }).count() >= 1, 'the MSI model is listed');
   console.log('PASS 8: an MSI sample imports as a model');
+
+  // Check 9: hover and keyboard focus show the same compact plot that the editor uses.
+  const newModel = page.getByRole('button', { name: 'New model', exact: true });
+  const preview = page.locator('.preset-preview .antenna-polar.compact');
+  const dish = page.getByRole('menuitem', { name: 'Dish 30 dBi', exact: true });
+  await newModel.click();
+  await dish.hover();
+  await preview.locator('svg').waitFor({ state: 'visible' });
+  assert.equal(await preview.count(), 1);
+  const dishTrace = await preview.locator('.trace-h').getAttribute('d');
+  await page.mouse.move(0, 0);
+  await preview.waitFor({ state: 'detached' });
+  await dish.hover();
+  await dish.click();
+  await page.locator('.model-list').getByRole('button', { name: /^Dish 30 dBi/ }).waitFor();
+  assert.equal(await polar.locator('.trace-h').getAttribute('d'), dishTrace);
+
+  await newModel.press('ArrowDown');
+  const blank = page.getByRole('menuitem', { name: 'Blank sector', exact: true });
+  const firstOmni = page.getByRole('menuitem', { name: /^Collinear omni 15/ });
+  await blank.press('ArrowDown');
+  await firstOmni.press('ArrowDown');
+  const dipole = page.getByRole('menuitem', { name: 'Dipole omni 2 dBi', exact: true });
+  assert.equal(await dipole.evaluate((item) => item === document.activeElement), true, 'ArrowDown moves focus to the dipole');
+  await preview.locator('svg').waitFor({ state: 'visible' });
+  assert.equal(await preview.count(), 1);
+  assert.notEqual(await preview.locator('.trace-h').getAttribute('d'), dishTrace);
+  const dipoleTrace = await preview.locator('.trace-v').getAttribute('d');
+  await dipole.press('ArrowDown');
+  assert.notEqual(await preview.locator('.trace-v').getAttribute('d'), dipoleTrace);
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Escape');
+  await preview.waitFor({ state: 'detached' });
+  assert.equal(await newModel.evaluate((button) => button === document.activeElement), true, 'Escape restores focus to New model');
+  await newModel.press('ArrowDown');
+  await blank.press('ArrowDown');
+  await firstOmni.press('ArrowDown');
+  await dipole.press('Enter');
+  await page.locator('.model-list').getByRole('button', { name: /^Dipole omni 2 dBi/ }).waitFor();
+  assert.equal(await polar.locator('.trace-v').getAttribute('d'), dipoleTrace);
+  console.log('PASS 9: dish hover and dipole keyboard previews match the added models');
 
   assert.deepEqual(errors, [], 'no browser errors at the end of the run');
   if (process.env.E2E_SCREENSHOT) await page.screenshot({ path: process.env.E2E_SCREENSHOT });

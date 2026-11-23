@@ -105,7 +105,9 @@ const vXY = (e: number, r: number): [number, number] => { const t = e * Math.PI 
 export interface PolarEdit { cut: 'h' | 'v'; symmetric: boolean; onChange: (points: Cut) => void }
 
 /** Horizontal trace (0° up, clockwise) and vertical trace (0° = horizon at right, up is positive), relative gain in dB. With `edit`, the active cut shows draggable loss handles. */
-export function AntennaPolar({ model, edit }: { model: AntennaModel; edit?: PolarEdit }) {
+export function AntennaPolar({ model, edit: requestedEdit, compact = false }: { model: AntennaModel; edit?: PolarEdit; compact?: boolean }) {
+  const edit = compact ? undefined : requestedEdit;
+  const displaySize = compact ? 140 : SIZE;
   const svgRef = useRef<SVGSVGElement>(null);
   const dragAngle = useRef<number | null>(null);
   const draftRef = useRef<Cut | null>(null);
@@ -115,7 +117,7 @@ export function AntennaPolar({ model, edit }: { model: AntennaModel; edit?: Pola
   const key = edit?.cut === 'v' ? 'vertical' : 'horizontal';
   const committed = edit && model.pattern ? model.pattern[key] : undefined;
   const points = draft ?? committed;
-  const shown: AntennaModel = draft && model.pattern ? { ...model, pattern: { ...model.pattern, [key]: draft } } : model;
+  const shown: AntennaModel = edit && draft && model.pattern ? { ...model, pattern: { ...model.pattern, [key]: draft } } : model;
   const tableMax = model.pattern ? Math.max(0, ...model.pattern.horizontal.map((p) => p[1]), ...model.pattern.vertical.map((p) => p[1])) : 0;
   const range = plotRangeDb(model.kind === 'custom' ? Math.max(model.frontToBackDb, tableMax) : model.frontToBackDb);
   const rings: number[] = [];
@@ -172,16 +174,18 @@ export function AntennaPolar({ model, edit }: { model: AntennaModel; edit?: Pola
   };
 
   return (
-    <figure className="antenna-polar">
-      <svg ref={svgRef} role="img" aria-label={label} viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} onDoubleClick={edit ? onDouble : undefined}>
+    <figure className={compact ? 'antenna-polar compact' : 'antenna-polar'}>
+      <svg ref={svgRef} role="img" aria-label={label} viewBox={`0 0 ${SIZE} ${SIZE}`} width={displaySize} height={displaySize} onDoubleClick={edit ? onDouble : undefined}>
         {rings.map((d) => <circle key={d} cx={C} cy={C} r={radius(d, range)} className={d === 0 ? 'ring ring-outer' : 'ring'} />)}
         <line x1={C} y1={C - R} x2={C} y2={C + R} className="ring" />
         <line x1={C - R} y1={C} x2={C + R} y2={C} className="ring" />
-        {rings.map((d) => <text key={d} x={C + 3} y={C - radius(d, range) + 10} className="plot-label">{d === 0 ? '0 dB' : `−${d}`}</text>)}
+        {!compact && rings.map((d) => <text key={d} x={C + 3} y={C - radius(d, range) + 10} className="plot-label">{d === 0 ? '0 dB' : `−${d}`}</text>)}
         <path d={path(horizontal, true)} className="trace trace-h" />
         <path d={path(vertical, false)} className="trace trace-v" />
-        <text x={C} y={11} textAnchor="middle" className="plot-label">N 0°</text>
-        <text x={SIZE - 3} y={C - 4} textAnchor="end" className="plot-label">0° horizon</text>
+        {!compact && <>
+          <text x={C} y={11} textAnchor="middle" className="plot-label">N 0°</text>
+          <text x={SIZE - 3} y={C - 4} textAnchor="end" className="plot-label">0° horizon</text>
+        </>}
         {edit && points && points.map(([angle, loss]) => {
           const [x, y] = (key === 'horizontal' ? hXY : vXY)(angle, radius(loss, range));
           return <circle key={angle} cx={x} cy={y} r={5} tabIndex={0} role="slider" className={`handle handle-${key === 'horizontal' ? 'h' : 'v'}`}
@@ -189,10 +193,10 @@ export function AntennaPolar({ model, edit }: { model: AntennaModel; edit?: Pola
             onPointerDown={onDown(angle)} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onKeyDown={onKey(angle, loss)} />;
         })}
       </svg>
-      <figcaption>
+      {!compact && <figcaption>
         <span className="key key-h" aria-hidden="true" />Horizontal <span className="key key-v" aria-hidden="true" />Vertical <small>Relative gain, dB below boresight</small>
         {edit && <small>Drag a handle to change loss, or focus it and press ↑ / ↓ (Shift for 0.1 dB) or Delete. Double-click the plot to add a point.</small>}
-      </figcaption>
+      </figcaption>}
     </figure>
   );
 }
