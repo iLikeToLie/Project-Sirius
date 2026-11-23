@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { Fragment, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ChevronDown, Copy, Download, Plus, Trash2, Upload } from 'lucide-react';
 import { formatNumber } from '../lib/rf';
 import {
@@ -6,7 +6,7 @@ import {
 } from '../lib/antenna';
 import { derivedBeamwidthDeg, sectorToPoints } from '../lib/antenna';
 import { exportModelsJson, importAntennaFile } from '../lib/antennaFiles';
-import { addPreset, ANTENNA_PRESETS } from '../lib/antennaPresets';
+import { addPreset, ANTENNA_PRESETS, PRESET_FAMILIES } from '../lib/antennaPresets';
 import type { AntennaModel, MapScenario, Sensor } from '../types';
 import { CommitField } from './ui';
 import { AntennaPolar, isSymmetric, MAX_LOSS_DB, MAX_POINTS, withAngle, withLoss, withoutPoint, withPoint, interpLoss, type Cut } from './AntennaPolar';
@@ -226,18 +226,103 @@ function SensorRow({ sensor, map, commit }: { sensor: Sensor; map: MapScenario; 
   );
 }
 
+export function AntennaPresetMenu({ previewId, setPreviewId, onAddBlank, onAddPreset }: {
+  previewId: string | null;
+  setPreviewId: (id: string | null) => void;
+  onAddBlank: () => void;
+  onAddPreset: (id: string) => void;
+}) {
+  const descriptionId = useId();
+  const preview = ANTENNA_PRESETS.find((preset) => preset.id === previewId);
+  return (
+    <div className="preset-menu">
+      <ul className="menu-list" role="menu" aria-label="New model">
+        <li role="none"><button type="button" role="menuitem" tabIndex={-1} onClick={onAddBlank}>Blank sector</button></li>
+        {PRESET_FAMILIES.map((family) => (
+          <Fragment key={family}>
+            <li role="presentation" className="menu-heading">{family}</li>
+            {ANTENNA_PRESETS.filter((preset) => preset.family === family).map((preset) => (
+              <li role="none" key={preset.id}>
+                <button type="button" role="menuitem" tabIndex={-1} aria-describedby={`${descriptionId}-${preset.id}`}
+                  onMouseEnter={() => setPreviewId(preset.id)} onMouseLeave={() => setPreviewId(null)}
+                  onFocus={() => setPreviewId(preset.id)} onBlur={() => setPreviewId(null)}
+                  onClick={() => onAddPreset(preset.id)}>{preset.label}</button>
+                <span id={`${descriptionId}-${preset.id}`} hidden>{preset.description}</span>
+              </li>
+            ))}
+          </Fragment>
+        ))}
+      </ul>
+      {preview && <div className="preset-preview" aria-hidden="true"><AntennaPolar compact model={{ ...preview.model, id: preview.id }} /></div>}
+    </div>
+  );
+}
+
 export function AntennasTab({ map, setMap, onOpenWorkspace }: { map: MapScenario; setMap: SetMap; onOpenWorkspace?: () => void }) {
   const [pickedId, setPickedId] = useState(OMNI_MODEL_ID);
   const [confirming, setConfirming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [cut, setCut] = useState<'h' | 'v'>('h');
   const [symmetric, setSymmetric] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
+  const menuWrapRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const models = map.antennaModels;
   const picked = pickedId === OMNI_MODEL_ID ? undefined : findModel(map, pickedId);
   const full = models.length >= MAX_ANTENNA_MODELS;
   const pickedUse = picked ? usedBy(map, picked.id) : 0;
+  useLayoutEffect(() => {
+    const wrap = menuWrapRef.current;
+    if (!menuOpen || !wrap) return;
+    const fitMenu = () => {
+      const { top, bottom } = wrap.getBoundingClientRect();
+      const below = window.innerHeight - bottom;
+      const opensAbove = below < Math.min(416, window.innerHeight / 2) && top > below;
+      wrap.classList.toggle('menu-opens-above', opensAbove);
+      wrap.style.setProperty('--preset-menu-space', `${Math.max(0, (opensAbove ? top : below) - 12)}px`);
+    };
+    fitMenu();
+    wrap.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+    window.addEventListener('resize', fitMenu);
+    window.addEventListener('scroll', fitMenu);
+    return () => {
+      window.removeEventListener('resize', fitMenu);
+      window.removeEventListener('scroll', fitMenu);
+    };
+  }, [menuOpen]);
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+    setPreviewId(null);
+  };
+  const finishMenuSelection = () => {
+    menuButtonRef.current?.focus();
+    closeMenu();
+  };
+  const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && menuOpen) {
+      event.preventDefault();
+      finishMenuSelection();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    if (!menuOpen) {
+      if (event.key === 'ArrowDown' && !full) {
+        event.preventDefault();
+        setMenuOpen(true);
+      }
+      return;
+    }
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    const index = items.findIndex((item) => item === event.target);
+    const last = items.length - 1;
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? last
+      : event.key === 'ArrowDown' ? (index === last ? 0 : index + 1) : (index <= 0 ? last : index - 1);
+    event.preventDefault();
+    items[next]?.focus();
+  };
   const pick = (id: string, list: AntennaModel[] = models) => {
     setPickedId(id); setConfirming(false); setCut('h');
     const next = list.find((m) => m.id === id);
@@ -250,7 +335,7 @@ export function AntennasTab({ map, setMap, onOpenWorkspace }: { map: MapScenario
     pick(model.id);
   };
   const addFromPreset = (presetId: string) => {
-    setMenuOpen(false);
+    finishMenuSelection();
     const model = addPreset(models, presetId);
     setMap((m) => m.antennaModels.length >= MAX_ANTENNA_MODELS ? m : { ...m, antennaModels: [...m.antennaModels, model] });
     pick(model.id, [...models, model]);
@@ -284,12 +369,12 @@ export function AntennasTab({ map, setMap, onOpenWorkspace }: { map: MapScenario
       <section className="panel antenna-library" aria-label="Antenna library">
         <div className="panel-heading"><div><p className="eyebrow">ANTENNA LIBRARY</p><h2>Models</h2></div><span className="version-chip">{models.length} / {MAX_ANTENNA_MODELS}</span></div>
         <div className="antenna-actions">
-          <div className="menu-wrap">
-            <button type="button" className="ghost" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)} disabled={full}><Plus size={15} aria-hidden="true" />New model<ChevronDown size={14} aria-hidden="true" /></button>
-            {menuOpen && <ul className="menu-list" role="menu" aria-label="New model">
-              <li role="none"><button type="button" role="menuitem" onClick={() => { setMenuOpen(false); add(); }}>Blank sector</button></li>
-              {ANTENNA_PRESETS.map((preset) => <li role="none" key={preset.id}><button type="button" role="menuitem" onClick={() => addFromPreset(preset.id)}>{preset.label}</button></li>)}
-            </ul>}
+          <div className="menu-wrap" ref={menuWrapRef} onKeyDown={onMenuKeyDown}
+            onBlur={(event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) closeMenu(); }}>
+            <button type="button" ref={menuButtonRef} className="ghost" aria-haspopup="menu" aria-expanded={menuOpen}
+              onClick={() => menuOpen ? closeMenu() : setMenuOpen(true)} disabled={full}><Plus size={15} aria-hidden="true" />New model<ChevronDown size={14} aria-hidden="true" /></button>
+            {menuOpen && <AntennaPresetMenu previewId={previewId} setPreviewId={setPreviewId} onAddPreset={addFromPreset}
+              onAddBlank={() => { finishMenuSelection(); add(); }} />}
           </div>
           <button type="button" className="ghost" onClick={duplicate} disabled={!picked || full}><Copy size={15} aria-hidden="true" />Duplicate</button>
           <button type="button" className="ghost" onClick={() => pickedUse ? setConfirming(true) : remove()} disabled={!picked}><Trash2 size={15} aria-hidden="true" />Delete</button>

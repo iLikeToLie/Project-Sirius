@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { freshDefaultState } from '../data/defaults';
 import { azimuthFromPointer, bearingDeg, newSectorModel, updateMapSensors } from '../lib/antenna';
 import type { AntennaModel } from '../types';
-import { AntennasTab, describeImport, kindPatch, parsePastedPoints, PatternEditor, patternPatch } from './AntennasTab';
+import { ANTENNA_PRESETS, PRESET_FAMILIES } from '../lib/antennaPresets';
+import { AntennaPresetMenu, AntennasTab, describeImport, kindPatch, parsePastedPoints, PatternEditor, patternPatch } from './AntennasTab';
 import {
   AntennaPolar, horizontalCutDb, interpLoss, isSymmetric, lossFromRadius, mirrorAngle, nudgedLoss, plotRangeDb, verticalCutDb, withAngle, withLoss, withoutPoint, withPoint,
 } from './AntennaPolar';
@@ -13,8 +14,45 @@ import { evaluatePairs } from '../lib/sensors';
 
 const noop = () => undefined;
 const render = (map = freshDefaultState().map) => renderToStaticMarkup(<AntennasTab map={map} setMap={noop} />);
+const renderMenu = (previewId: string | null = null) => renderToStaticMarkup(
+  <AntennaPresetMenu previewId={previewId} setPreviewId={noop} onAddBlank={noop} onAddPreset={noop} />,
+);
 
 describe('AntennasTab', () => {
+  it('lists every preset under its family heading with its description linked', () => {
+    const html = renderMenu();
+    const groups = html.split(/<li role="presentation" class="menu-heading">/);
+    expect(groups).toHaveLength(PRESET_FAMILIES.length + 1);
+    expect(groups[0]).toContain('>Blank sector</button>');
+    PRESET_FAMILIES.forEach((family, i) => {
+      const group = groups[i + 1];
+      const presets = ANTENNA_PRESETS.filter((preset) => preset.family === family);
+      expect(group).toMatch(new RegExp(`^${family}</li>`));
+      expect(group.match(/role="menuitem"/g)).toHaveLength(presets.length);
+      for (const preset of presets) {
+        expect(group).toContain(`>${preset.label}</button>`);
+        const descriptionId = group.match(new RegExp(`aria-describedby="([^"]+-${preset.id})"`))?.[1];
+        expect(descriptionId).toBeDefined();
+        expect(group).toContain(`id="${descriptionId}" hidden="">${preset.description}</span>`);
+      }
+    });
+  });
+
+  it('renders a single compact, decorative plot for the hovered or focused preset', () => {
+    expect(renderMenu()).not.toContain('antenna-polar');
+    const horizontalPath = (id: string) => {
+      const html = renderMenu(id);
+      expect(html).toContain('class="preset-preview" aria-hidden="true"');
+      expect(html.match(/class="antenna-polar compact"/g)).toHaveLength(1);
+      expect(html).toContain('width="140" height="140"');
+      expect(html).not.toMatch(/<figcaption|<text|class="handle/);
+      const trace = html.match(/<path d="([^"]+)" class="trace trace-h"/)?.[1];
+      expect(trace).toBeDefined();
+      return trace;
+    };
+    expect(horizontalPath('dish-30')).not.toBe(horizontalPath('horn-15'));
+  });
+
   it('lists the read-only Omni row first and the sensors table', () => {
     const state = freshDefaultState();
     const html = render(state.map);
@@ -204,6 +242,7 @@ describe('custom model editing', () => {
     const vertical = renderToStaticMarkup(<AntennaPolar model={CUSTOM} edit={{ cut: 'v', symmetric: true, onChange: noop }} />);
     expect(vertical).toContain('aria-label="Vertical point at -10°"');
     expect(renderToStaticMarkup(<AntennaPolar model={CUSTOM} />)).not.toContain('class="handle');
+    expect(renderToStaticMarkup(<AntennaPolar compact model={CUSTOM} edit={{ cut: 'h', symmetric: true, onChange: noop }} />)).not.toContain('class="handle');
   });
 
   it('plots a custom table through the library maths', () => {

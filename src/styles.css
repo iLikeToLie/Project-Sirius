@@ -1038,9 +1038,13 @@ tbody tr:hover { background: var(--surface-elevated); }
 .antenna-polar .handle:hover { stroke: var(--ink); }
 .antenna-polar .handle:focus-visible { outline: none; stroke: var(--ink); stroke-width: 2.5; }
 .menu-wrap { position: relative; }
-.menu-list { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 220px; margin: 0; padding: 4px; list-style: none; display: grid; gap: 2px; background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+.preset-menu { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; display: flex; align-items: flex-start; gap: 6px; }
+.menu-opens-above .preset-menu { top: auto; bottom: calc(100% + 4px); }
+.menu-list { width: min(240px, calc(68vw - 64px)); max-height: min(26rem, 50dvh, var(--preset-menu-space, 50dvh)); overflow: auto; overscroll-behavior: contain; margin: 0; padding: 4px; list-style: none; display: grid; gap: 2px; background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+.menu-heading { padding: 7px 10px 3px; border-top: 1px solid var(--hairline); color: var(--mute); font-size: 12px; font-weight: 600; }
 .menu-list button { width: 100%; text-align: left; padding: 8px 10px; color: var(--body); background: transparent; border: 0; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
 .menu-list button:hover, .menu-list button:focus-visible { background: var(--surface-card); color: var(--ink); }
+.preset-preview { flex: 0 0 min(142px, 32vw, var(--preset-menu-space, 142px)); pointer-events: none; background: var(--surface-elevated); border: 1px solid var(--hairline-strong); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
 .pattern-editor { margin-top: 16px; display: grid; gap: 10px; }
 .pattern-toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
 .pattern-toolbar .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--body); }
